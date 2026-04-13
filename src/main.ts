@@ -1,0 +1,31 @@
+import { Command } from 'commander';
+import { registerSessionCommands } from './commands/session.js';
+import { registerNavCommands } from './commands/nav.js';
+import { registerInspectCommands } from './commands/inspect.js';
+import { registerInputCommands } from './commands/input.js';
+import { registerEvalCommand } from './commands/eval.js';
+import { registerEmulateCommand } from './commands/emulate.js';
+import { registerPerfCommands } from './commands/perf.js';
+import { registerMultiCommands } from './commands/multi.js';
+import { error } from './output/formatter.js';
+
+const program = new Command();
+
+program
+  .name('chromux')
+  .description('tmux-style Chrome DevTools Protocol CLI')
+  .version('0.1.0');
+
+registerSessionCommands(program);
+registerNavCommands(program);
+registerInspectCommands(program);
+registerInputCommands(program);
+registerEvalCommand(program);
+registerEmulateCommand(program);
+registerPerfCommands(program);
+registerMultiCommands(program);
+
+program.parseAsync(process.argv).catch(e => {
+  error((e as Error).message);
+  process.exit(1);
+});

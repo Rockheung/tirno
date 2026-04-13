@@ -1,0 +1,26 @@
+{
+  "name": "chromux",
+  "version": "0.1.0",
+  "description": "tmux-style Chrome DevTools Protocol CLI",
+  "type": "module",
+  "bin": {
+    "chromux": "./bin/chromux.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node bin/chromux.js"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0",
+    "puppeteer-core": "^24.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
+    "typescript": "^5.8.0"
+  }
+}
