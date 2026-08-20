@@ -3,8 +3,6 @@ import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
-import { connect } from '../core/chrome-connector.js';
-import { getActivePage } from '../cdp/page-resolver.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,23 +33,26 @@ export function registerSessionCommands(program: Command): void {
     .command('new')
     .description(NEW_DEFAULT_DESC)
     .argument('<name>', 'Session name')
+    .argument('[url]', 'Optional URL — chrome opens directly, skipping about:blank')
     .option('-p, --port <port>', 'DevTools port (auto-assign if omitted)', intArg)
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
     .option('--group <name>', 'Tag this session with a group label')
-    .option('--url <url>', 'Navigate to URL after creation (skips on failure)');
+    .option('--url <url>', 'Same as positional [url] — kept for backward compat');
 
   // Chrome flags come after "--": tirno new test -- --no-proxy-server
   newCmd.allowUnknownOption(true);
   newCmd.allowExcessArguments(true);
 
-  newCmd.action(async (name: string, opts) => {
+  newCmd.action(async (name: string, urlArg: string | undefined, opts) => {
     try {
       const rawArgs = process.argv;
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
+      // positional [url] takes precedence; --url stays as backward-compat alias.
+      const bootUrl: string | undefined = urlArg ?? opts.url;
 
       // wish A — same-name re-run handling
       let existing: store.SessionMetadata | null = null;
@@ -89,6 +90,7 @@ export function registerSessionCommands(program: Command): void {
         executablePath: opts.executablePath,
         headless: opts.headless,
         userDataDir: userDataDirOverride,
+        bootUrl,
       });
 
       // wish F — group tag
@@ -96,22 +98,7 @@ export function registerSessionCommands(program: Command): void {
         store.update(name, { group: opts.group });
       }
 
-      success(`Session '${name}' created (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${opts.ephemeral ? ', ephemeral' : ''})`);
-
-      // wish B — new + nav in one shot
-      if (opts.url) {
-        try {
-          const { browser } = await connect(name);
-          const page = await getActivePage(browser);
-          const response = await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-          browser.disconnect();
-          const status = response?.status() ?? 0;
-          success(`Navigated → ${opts.url} (${status})`);
-        } catch (e) {
-          error(`Nav failed: ${(e as Error).message}`);
-          // session is alive, just nav failed — don't exit non-zero
-        }
-      }
+      success(`Session '${name}' created (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${opts.ephemeral ? ', ephemeral' : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
     } catch (e) {
       error((e as Error).message);
       process.exit(1);
@@ -123,18 +110,20 @@ export function registerSessionCommands(program: Command): void {
     .command('restart')
     .description('Kill existing session (if any) and re-create with new chrome flags')
     .argument('<name>', 'Session name')
+    .argument('[url]', 'Optional URL — chrome opens directly, skipping about:blank')
     .option('-p, --port <port>', 'DevTools port', intArg)
     .option('--headless', 'Run headless')
     .option('--executable-path <path>', 'Chrome path')
     .option('--ephemeral', 'Use a temporary user-data-dir')
     .option('--group <name>', 'Group label')
-    .option('--url <url>', 'Navigate after restart')
+    .option('--url <url>', 'Same as positional [url] — kept for backward compat')
     .allowUnknownOption(true)
     .allowExcessArguments(true)
-    .action(async (name: string, opts) => {
+    .action(async (name: string, urlArg: string | undefined, opts) => {
       const rawArgs = process.argv;
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
+      const bootUrl: string | undefined = urlArg ?? opts.url;
       // delegate to `new --force` semantics inline (avoid extra subprocess)
       try {
         let existing: store.SessionMetadata | null = null;
@@ -158,21 +147,10 @@ export function registerSessionCommands(program: Command): void {
           executablePath: opts.executablePath,
           headless: opts.headless,
           userDataDir: userDataDirOverride,
+          bootUrl,
         });
         if (opts.group) store.update(name, { group: opts.group });
-        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''})`);
-
-        if (opts.url) {
-          try {
-            const { browser } = await connect(name);
-            const page = await getActivePage(browser);
-            const response = await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-            browser.disconnect();
-            success(`Navigated → ${opts.url} (${response?.status() ?? 0})`);
-          } catch (e) {
-            error(`Nav failed: ${(e as Error).message}`);
-          }
-        }
+        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
