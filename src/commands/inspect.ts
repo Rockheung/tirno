@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
@@ -22,7 +23,7 @@ export function registerInspectCommands(program: Command): void {
     .option('--out <path>', 'Output file path')
     .option('--full', 'Full page screenshot')
     .option('--format <type>', 'Image format (png|jpeg|webp)', 'png')
-    .option('--quality <n>', 'JPEG/WebP quality (0-100)', parseInt)
+    .option('--quality <n>', 'JPEG/WebP quality (0-100)', intArg)
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -59,9 +60,9 @@ export function registerInspectCommands(program: Command): void {
     .option('--no-cache', 'Skip visual-cache write')
     .option('--vision [backend]', 'Augment with OCR-discovered text in regions a11y missed (default backend: tesseract)')
     .option('--vision-lang <lang>', 'Language(s) for vision OCR (e.g. eng, kor+eng)', 'eng')
-    .option('--vision-min-confidence <n>', 'Drop OCR words below this confidence', parseInt, 50)
-    .option('--vision-iou <n>', 'IoU threshold for "covered by a11y" (0..1)', parseFloat, 0.3)
-    .option('--vision-contain <n>', 'Contained-in threshold (vision word inside a11y bbox)', parseFloat, 0.8)
+    .option('--vision-min-confidence <n>', 'Drop OCR words below this confidence', intArg, 50)
+    .option('--vision-iou <n>', 'IoU threshold for "covered by a11y" (0..1)', floatArg, 0.3)
+    .option('--vision-contain <n>', 'Contained-in threshold (vision word inside a11y bbox)', floatArg, 0.8)
     .action(async (opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -201,7 +202,7 @@ export function registerInspectCommands(program: Command): void {
     .description('List console messages (requires active CDP listener)')
     .option('-s, --session <name>', 'Session name')
     .option('--type <type>', 'Filter by type (log|error|warn|info)')
-    .option('--limit <n>', 'Max messages', parseInt, 50)
+    .option('--limit <n>', 'Max messages', intArg, 50)
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -241,7 +242,7 @@ export function registerInspectCommands(program: Command): void {
     .description('List recent network requests (captures for 2s)')
     .option('-s, --session <name>', 'Session name')
     .option('--type <type>', 'Filter by resource type')
-    .option('--limit <n>', 'Max requests', parseInt, 50)
+    .option('--limit <n>', 'Max requests', intArg, 50)
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);

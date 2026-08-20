@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
@@ -21,7 +22,7 @@ export function registerVisionCommands(program: Command): void {
     .option('--lang <lang>', 'Language(s) (tesseract uses + e.g. kor+eng; paddle/florence ignore)', 'eng')
     .option('--full', 'Full page screenshot (default: viewport only)')
     .option('--out <path>', 'Write JSON result to path')
-    .option('--min-confidence <n>', 'Filter words below this confidence (0-100)', parseInt, 0)
+    .option('--min-confidence <n>', 'Filter words below this confidence (0-100)', intArg, 0)
     .option('--paddle-models <dir>', 'Directory containing PaddleOCR det/rec/dict for non-default langs')
     .action(async (opts) => {
       try {

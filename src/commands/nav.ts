@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, listPages } from '../cdp/page-resolver.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
@@ -9,7 +10,7 @@ export function registerNavCommands(program: Command): void {
     .description('Navigate to a URL')
     .argument('<url>', 'Target URL')
     .option('-s, --session <name>', 'Session name')
-    .option('--timeout <ms>', 'Navigation timeout', parseInt, 30000)
+    .option('--timeout <ms>', 'Navigation timeout', intArg, 30000)
     .action(async (url: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -112,7 +113,7 @@ export function registerNavCommands(program: Command): void {
   program
     .command('select')
     .description('Select a page/tab by ID')
-    .argument('<pageId>', 'Page ID', parseInt)
+    .argument('<pageId>', 'Page ID', intArg)
     .option('-s, --session <name>', 'Session name')
     .action(async (pageId: number, opts) => {
       try {
@@ -153,7 +154,7 @@ export function registerNavCommands(program: Command): void {
   program
     .command('close-tab')
     .description('Close a tab by ID')
-    .argument('<pageId>', 'Page ID', parseInt)
+    .argument('<pageId>', 'Page ID', intArg)
     .option('-s, --session <name>', 'Session name')
     .action(async (pageId: number, opts) => {
       try {

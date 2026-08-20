@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
@@ -14,8 +15,8 @@ export function registerEmulateCommand(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--device <name>', 'Device preset (e.g. "iPhone 14")')
     .option('--network <profile>', 'Network preset (slow-3g|fast-3g|4g|offline)')
-    .option('--cpu <rate>', 'CPU throttle rate (e.g. 4 = 4x slowdown)', parseFloat)
-    .option('--dpr <n>', 'Device pixel ratio override', parseFloat)
+    .option('--cpu <rate>', 'CPU throttle rate (e.g. 4 = 4x slowdown)', floatArg)
+    .option('--dpr <n>', 'Device pixel ratio override', floatArg)
     .option('--reset', 'Clear all emulation overrides')
     .option('--list-devices', 'List available device presets')
     .action(async (opts) => {

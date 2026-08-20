@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
@@ -12,7 +13,7 @@ export function registerMultiCommands(program: Command): void {
     .argument('<session1>', 'First session')
     .argument('<session2>', 'Second session')
     .option('--out <path>', 'Output diff image path')
-    .option('--threshold <n>', 'Color difference threshold (0-1)', parseFloat, 0.1)
+    .option('--threshold <n>', 'Color difference threshold (0-1)', floatArg, 0.1)
     .action(async (s1: string, s2: string, opts) => {
       try {
         // take screenshots from both sessions

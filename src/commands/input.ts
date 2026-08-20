@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
@@ -67,7 +68,7 @@ export function registerInputCommands(program: Command): void {
     .description('Type text (keyboard input)')
     .argument('<text>', 'Text to type')
     .option('-s, --session <name>', 'Session name')
-    .option('--delay <ms>', 'Delay between keystrokes', parseInt, 0)
+    .option('--delay <ms>', 'Delay between keystrokes', intArg, 0)
     .action(async (text: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -128,7 +129,7 @@ export function registerInputCommands(program: Command): void {
     .description('Scroll the page (up|down|<pixels>)')
     .argument('<direction>', 'up | down | a positive/negative pixel amount')
     .option('-s, --session <name>', 'Session name')
-    .option('--step <px>', 'Pixels per up/down (default 600)', parseInt, 600)
+    .option('--step <px>', 'Pixels per up/down (default 600)', intArg, 600)
     .action(async (direction: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -156,7 +157,7 @@ export function registerInputCommands(program: Command): void {
   program
     .command('wait')
     .description('Sleep for milliseconds')
-    .argument('<ms>', 'Milliseconds to wait', (v) => parseInt(v, 10))
+    .argument('<ms>', 'Milliseconds to wait', intArg)
     .action(async (ms: number) => {
       try {
         if (!Number.isFinite(ms) || ms < 0) throw new Error('Milliseconds must be a non-negative integer');
@@ -174,7 +175,7 @@ export function registerInputCommands(program: Command): void {
     .argument('[selector]', 'CSS selector to wait for')
     .option('-s, --session <name>', 'Session name')
     .option('--network-idle', 'Wait for network idle instead of a selector')
-    .option('--timeout <ms>', 'Max wait time', (v) => parseInt(v, 10), 30000)
+    .option('--timeout <ms>', 'Max wait time', intArg, 30000)
     .action(async (selector: string | undefined, opts) => {
       try {
         const { browser } = await connect(opts.session);

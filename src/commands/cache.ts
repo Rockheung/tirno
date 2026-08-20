@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import * as visualCache from '../core/visual-cache.js';
 import { formatTable, info, success, error } from '../output/formatter.js';
 
@@ -11,7 +12,7 @@ export function registerCacheCommands(program: Command): void {
     .command('list')
     .description('List cached entries')
     .option('--domain <d>', 'Filter by domain')
-    .option('--limit <n>', 'Max entries', parseInt, 50)
+    .option('--limit <n>', 'Max entries', intArg, 50)
     .action((opts) => {
       try {
         const entries = visualCache.list({ domain: opts.domain, limit: opts.limit });
@@ -72,7 +73,7 @@ export function registerCacheCommands(program: Command): void {
   cache
     .command('prune')
     .description('Remove old cache entries')
-    .option('--older-than <days>', 'Remove entries older than N days', parseInt)
+    .option('--older-than <days>', 'Remove entries older than N days', intArg)
     .option('--domain <d>', 'Limit to domain')
     .action((opts) => {
       try {

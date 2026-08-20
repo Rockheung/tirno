@@ -309,6 +309,63 @@ interface CacheEntry {
 
 ---
 
+### parseInt/parseFloat 직접 commander coercer 사용 버그 (PR #13)
+
+#### 발견
+
+사용자가 "완성된 거 맞냐? 네가 써봐라" 정정 — 가설 검증 미션을 처음부터 끝까지 다시 돌리던 중 발견.
+
+`tirno snapshot --vision tesseract --vision-lang kor+eng --vision-min-confidence 70`을 실행했는데도 **0%, 19%, 32% confidence 단어가 출력**. min-confidence 필터가 적용 안 됨.
+
+#### 원인
+
+```ts
+.option('--vision-min-confidence <n>', '...', parseInt, 50)
+//                                            ^^^^^^^^^^
+```
+
+commander는 coercer를 `(value, prev) => result`로 호출. `parseInt`는 `(string, radix)`를 받기 때문에 prev value(50)가 **radix**로 전달됨 → `parseInt('70', 50)` = NaN.
+
+검증:
+```js
+new Command().option('--n <n>', 'desc', parseInt, 50)
+  .parse(['node', 'x', 'test', '--n', '70']);
+// → opts.n = NaN
+```
+
+#### 수정
+
+`src/util/parsers.ts` 신규:
+```ts
+export const intArg = (v: string): number => parseInt(v, 10);
+export const floatArg = (v: string): number => parseFloat(v);
+```
+
+13곳 일괄 치환 — cache.ts, inspect.ts, vision.ts, input.ts, nav.ts, session.ts, emulate.ts, perf.ts, multi.ts. `parseInt` → `intArg`, `parseFloat` → `floatArg`. input.ts에 있던 `(v) => parseInt(v, 10)` inline wrapper도 통일.
+
+#### 검증
+
+- `test/parsers.test.ts` (신규) — 5 케이스. 회귀 방지 위해 `parseInt('70', 50) → NaN`을 명시적 sanity check도 포함
+- e2e — `--vision-min-confidence 70` 적용 후 247개 → 134개로 줄어듬 (low-confidence garbage 제거)
+- 63/63 tests pass (58 + 5 신규)
+
+#### 영향 범위
+
+default value가 있고 사용자가 옵션을 명시한 경우 모두 영향:
+- `cache list --limit`, `inspect console --limit`, `network --limit`
+- `snapshot --vision-min-confidence`, `vision ocr --min-confidence`
+- `nav --timeout`, `wait-for --timeout`
+- `input scroll --step`, `type --delay`
+- `perf trace --duration`, `multi diff --threshold`
+
+production 사용 전에 발견된 게 다행. unit test로도 catch 가능했어야 함 — coverage 부족이었던 영역.
+
+#### 교훈
+
+`parseInt` / `parseFloat`을 함수 레퍼런스로 직접 넘기지 말 것. JS 표준 라이브러리는 추가 인자를 받는 형태가 많아 callback-style 사용 시 시그니처 미스매치가 흔함. wrapper 강제.
+
+---
+
 ### Phase 6-1b — viewport-aware visual cache (PR #12)
 
 #### 의도
@@ -544,7 +601,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#9](https://github.com/Rockheung/tirno/pull/9) | feat: Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub | merged |
 | [#10](https://github.com/Rockheung/tirno/pull/10) | feat: Phase 6-2c — Florence-2 backend (experimental, output decoding 한계) | merged |
 | [#11](https://github.com/Rockheung/tirno/pull/11) | feat: Phase 6-2d — snapshot --vision 통합 (a11y 못 잡은 영역 OCR로 보강) | merged |
-| [#12](https://github.com/Rockheung/tirno/pull/12) | feat: Phase 6-1b — viewport-aware visual cache | open |
+| [#12](https://github.com/Rockheung/tirno/pull/12) | feat: Phase 6-1b — viewport-aware visual cache | merged |
+| [#13](https://github.com/Rockheung/tirno/pull/13) | fix: commander coercer로 parseInt/parseFloat 직접 사용 시 NaN 버그 (13곳) | open |
 
 ## 보류된 항목 (다음 phase 후보)
 

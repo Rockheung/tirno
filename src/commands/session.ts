@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { isAlive } from '../core/process-guard.js';
@@ -10,7 +11,7 @@ export function registerSessionCommands(program: Command): void {
     .command('new')
     .description('Create a new Chrome session')
     .argument('<name>', 'Session name')
-    .option('-p, --port <port>', 'DevTools port (auto-assign if omitted)', parseInt)
+    .option('-p, --port <port>', 'DevTools port (auto-assign if omitted)', intArg)
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable');
 
