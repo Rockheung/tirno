@@ -123,12 +123,29 @@ export function registerPerfCommands(program: Command): void {
         };
 
         // A round trip has to wait behind whatever is already queued on the main
-        // thread, so its duration IS the queue wait. Nothing clever needed.
+        // thread, so its duration IS the queue wait.
+        //
+        // The cap is not a detail. A renderer that is truly wedged never answers
+        // at all, and without a deadline this command — the one meant to keep
+        // reporting while the page is stuck — would hang on the very case it
+        // exists for. Timing out is not a failed sample; it is the strongest
+        // reading there is, so it counts as at least the cap.
+        const RTT_CAP_MS = 2000;
         const rtt = async (send: () => Promise<unknown>): Promise<number> => {
           const t0 = Date.now();
-          try { await send(); } catch { return Number.NaN; }
-          return Date.now() - t0;
+          let timer: NodeJS.Timeout | undefined;
+          const capped = new Promise<'capped'>(resolve => { timer = setTimeout(() => resolve('capped'), RTT_CAP_MS); });
+          try {
+            const outcome = await Promise.race([send().then(() => 'answered' as const), capped]);
+            return outcome === 'capped' ? Number.POSITIVE_INFINITY : Date.now() - t0;
+          } catch {
+            return Number.NaN;
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
         };
+        const rttLabel = (ms: number) =>
+          ms === Number.POSITIVE_INFINITY ? `no answer in ${RTT_CAP_MS}ms` : Number.isNaN(ms) ? 'error' : `${ms}ms`;
 
         const samples: Array<{ t: number; rendererRttMs: number; browserRttMs: number; taskPct: number; scriptPct: number; layoutPct: number; stylePct: number }> = [];
         let prev = await readMetrics();
@@ -159,8 +176,8 @@ export function registerPerfCommands(program: Command): void {
           prev = now; prevAt = at;
           if (!opts.json) {
             console.log(
-              `  ${String(s.t).padStart(5)}s  renderer=${String(Number.isNaN(s.rendererRttMs) ? 'no answer' : `${s.rendererRttMs}ms`).padStart(9)}` +
-              `  browser=${String(s.browserRttMs).padStart(5)}ms  task=${String(s.taskPct).padStart(5)}%` +
+              `  ${String(s.t).padStart(5)}s  renderer=${rttLabel(s.rendererRttMs).padStart(18)}` +
+              `  browser=${rttLabel(s.browserRttMs).padStart(6)}  task=${String(s.taskPct).padStart(5)}%` +
               `  script=${String(s.scriptPct).padStart(5)}%  layout=${String(s.layoutPct).padStart(5)}%  style=${String(s.stylePct).padStart(5)}%`
             );
           }
@@ -170,7 +187,12 @@ export function registerPerfCommands(program: Command): void {
         await browserCdp.detach().catch(() => {});
         browser.disconnect();
 
-        const max = (k: keyof typeof samples[0]) => samples.reduce((m, s) => Math.max(m, Number(s[k]) || 0), 0);
+        // `|| 0` would turn a timed-out sample (Infinity) into nothing, which is
+        // exactly backwards — that sample is the one that matters.
+        const max = (k: keyof typeof samples[0]) => samples.reduce((m, s) => {
+          const v = Number(s[k]);
+          return Number.isNaN(v) ? m : Math.max(m, v);
+        }, 0);
         const taskMax = max('taskPct');
         const rendererMax = max('rendererRttMs');
         const browserMax = max('browserRttMs');
@@ -188,10 +210,15 @@ export function registerPerfCommands(program: Command): void {
         else if (taskMax >= 50) verdict = 'heavy but not stuck — will be felt on slower hardware';
         else verdict = 'idle enough';
 
-        const blame = scriptMax >= layoutMax + styleMax
-          ? 'script (JS logic)'
-          : (layoutMax + styleMax) > 0 ? 'layout/style (thrashing — the getComputedStyle / getBoundingClientRect signature)'
-          : 'neither script nor layout — GC, raster or parsing, which these counters do not split';
+        // Naming a culprit on an idle page is noise dressed as a finding — a
+        // layout share of 0.3% is not thrashing, it is a page doing nothing.
+        // Only apportion blame once there is load worth apportioning.
+        const blame = taskMax < 50
+          ? null
+          : scriptMax >= layoutMax + styleMax
+            ? 'script (JS logic)'
+            : (layoutMax + styleMax) > 0 ? 'layout/style (thrashing — the getComputedStyle / getBoundingClientRect signature)'
+            : 'neither script nor layout — GC, raster or parsing, which these counters do not split';
 
         if (opts.json) {
           console.log(JSON.stringify({ samples, summary: { taskMax, scriptMax, layoutMax, styleMax, rendererRttMaxMs: rendererMax, browserRttMaxMs: browserMax, verdict, blame } }, null, 2));
@@ -199,14 +226,14 @@ export function registerPerfCommands(program: Command): void {
         }
 
         console.log('');
-        info(`renderer round trip up to ${rendererMax}ms · browser stayed at ${browserMax}ms`);
+        info(`renderer round trip up to ${rttLabel(rendererMax)} · browser stayed at ${rttLabel(browserMax)}`);
         // Only worth saying when the renderer actually stalled. A 9ms renderer
         // next to a 1ms browser is not an asymmetry, it is two healthy numbers.
         if (rendererMax >= 200 && browserMax < rendererMax / 4) {
           info('the browser kept answering while the renderer did not — this page, not the machine');
         }
         info(`worst second: task ${taskMax}% (script ${scriptMax}%, layout ${layoutMax}%, style ${styleMax}%)`);
-        success(`${verdict} · biggest share: ${blame}`);
+        success(blame ? `${verdict} · biggest share: ${blame}` : verdict);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
