@@ -51,6 +51,7 @@
     "@lancedb/lancedb": "^0.27.2",
     "chalk": "^5.4.1",
     "commander": "^14.0.0",
+    "lighthouse": "^12.8.2",
     "pixelmatch": "^6.0.0",
     "pngjs": "^7.0.0",
     "puppeteer-core": "^24.0.0"

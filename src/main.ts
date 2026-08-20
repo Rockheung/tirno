@@ -17,6 +17,8 @@ import { registerAskCommand } from './commands/ask.js';
 import { registerExploreCommand } from './commands/explore.js';
 import { registerAuthCommands } from './commands/auth.js';
 import { registerStatsCommand } from './commands/stats.js';
+import { registerAuditCommand } from './commands/audit.js';
+import { registerScreencastCommands } from './commands/screencast.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -44,6 +46,8 @@ registerAskCommand(program);
 registerExploreCommand(program);
 registerAuthCommands(program);
 registerStatsCommand(program);
+registerAuditCommand(program);
+registerScreencastCommands(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);
