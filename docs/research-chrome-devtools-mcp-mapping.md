@@ -45,7 +45,7 @@
 | mcp tool | tirno 명령 | 검증 결과 | 비고 |
 |---|---|---|---|
 | `click` (uid) | `tirno click @N` 또는 `tirno click <css>` | ✅ `BTN-CLICKED` 확인 | mcp 의 `uid` ↔ tirno snapshot `@N`. 둘 다 a11y backendNodeId 기반 |
-| `click_at` (x,y) | `tirno cdp Input.dispatchMouseEvent` 또는 `tirno drag x,y x,y` | ⚠️ 직접 명령 없음 | 좌표 클릭은 raw CDP. record/replay 는 좌표 fallback 내장 |
+| `click_at` (x,y) | `tirno click "<x>,<y>"` | ✅ wave 4 추가 — 좌표 형태면 `Input.dispatchMouseEvent` 로 trusted click |
 | `hover` | `tirno hover <selector>` | ✅ | — |
 | `fill` (text/checkbox/select 자동) | `tirno fill <target> <value>` | ✅ "hello-world" 입력 확인 | checkbox/select 자동 분기는 미지원 — `tirno eval` 또는 `click + press` 조합 |
 | `type_text` | `tirno type <text>` (+ `tirno press <key>`) | ✅ "via-keyboard" 입력 | submitKey 옵션은 별도 `press` 호출 |
@@ -85,8 +85,9 @@
 
 | mcp tool | tirno 명령 | 검증 결과 | 비고 |
 |---|---|---|---|
-| `performance_start_trace` (+ auto-stop) | `tirno trace --duration <s> --out <path>` | ✅ 62KB trace.json 저장 | mcp 는 start/stop 분리, tirno 는 단일 명령 (auto-stop 만 지원) |
-| `performance_stop_trace` (수동 stop) | ❌ | 미지원 | start 와 stop 분리 필요 시 추가 검토 |
+| `performance_start_trace` (+ auto-stop) | `tirno trace --duration <s> --out <path>` | ✅ 62KB trace.json 저장 | one-shot fixed-duration |
+| `performance_start_trace` (manual stop) | `tirno trace start <path>` | ✅ wave 4 — daemon worker (screencast 와 같은 패턴) |
+| `performance_stop_trace` | `tirno trace stop <path>` | ✅ wave 4 — SIGTERM 으로 finalize |
 | `performance_analyze_insight` | ❌ | 미지원 | trace.json 을 chrome://tracing 또는 외부 도구로 분석 |
 
 ---

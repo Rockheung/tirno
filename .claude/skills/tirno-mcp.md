@@ -42,7 +42,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 |---|---|---|
 | `click` (uid) | `tirno click @N` 또는 `tirno click <css>` | snapshot 후 ref 또는 selector |
 | `click` (dblClick) | **미구현 직접 옵션** — `tirno cdp Input.dispatchMouseEvent` 두 번 또는 `tirno eval "el.click(); el.click()"` | — |
-| `click_at` (x,y) | **미구현 직접 명령** — `tirno cdp Input.dispatchMouseEvent '{"type":"mousePressed","x":X,"y":Y,"button":"left","clickCount":1}'` + `mouseReleased` 두 번 호출 | record/replay 가 좌표 fallback 내장 |
+| `click_at` (x,y) | `tirno click "<x>,<y>" [--dbl]` | wave 4 — 좌표 형태면 자동으로 `Input.dispatchMouseEvent` trusted click 사용 |
 | `hover` | `tirno hover <selector>` | — |
 | `fill` (input/textarea) | `tirno fill <target> <value>` | target = selector or @ref |
 | `fill` (checkbox/select 자동) | **부분 매핑** — selector 가 select 이면 `tirno eval "document.querySelector('#s').value='b'"`, checkbox 는 `tirno click` | mcp 의 자동 분기 동등 미구현 |
@@ -81,8 +81,8 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | mcp tool | tirno 명령 | 비고 |
 |---|---|---|
 | `performance_start_trace` (+ auto-stop) | `tirno trace --duration <s> --out <path>` | one-shot, fixed duration |
-| `performance_start_trace` (manual stop) | **미구현** — daemon 모델 필요 (트레이스가 CDP 세션에 묶여 있어 split start/stop 어려움) | screencast 처럼 fork 가능하나 별도 PR |
-| `performance_stop_trace` | **미구현** | 동일 |
+| `performance_start_trace` (manual stop) | `tirno trace start [path]` | wave 4 — detached worker 가 trace 보유 |
+| `performance_stop_trace` | `tirno trace stop <path>` | wave 4 — SIGTERM 으로 finalize, 결과 파일 검증 후 `trace insight` 안내 |
 | `performance_analyze_insight` | `tirno trace insight <path>` | LCP / FCP / DCL / load / CLS / long tasks. `--json` 가능 |
 
 ### Debugging
@@ -213,16 +213,14 @@ tirno trail replay "로그인 후 대시보드 이동"
 
 이 영역은 tirno 직접 명령이 없다 — 사용자에게 명시:
 
-1. **`click_at` (x,y 직접 클릭)** — `tirno cdp Input.dispatchMouseEvent` mousePressed + mouseReleased
-2. **`get_tab_id` (실험적)** — `tirno pages` 의 ID 또는 `tirno cdp Target.getTargets`
-3. **`navigate_page initScript`** — `tirno cdp Page.addScriptToEvaluateOnNewDocument` 후 nav
-4. **`fill` checkbox/select 자동 분기** — selector 가 select 이면 eval, checkbox 면 click 으로 우회
-5. **`evaluate_script` 의 uid args 형식** — 함수 + element handle 배열은 미지원. expression 으로 inline
-6. **`performance_start_trace` (manual stop) + `performance_stop_trace`** — daemon 모델 필요
-7. **`audit timespan` 모드** — split start/stop 이라 daemon 필요
-8. **`get_nodes_by_class` (heap)** — class UID 별 instance 추적 미구현. `memory details` aggregate 만
-9. **Extensions 5종** (`install/uninstall/list/reload/trigger`) — `tirno cdp Extensions.*` raw passthrough만
-10. **Third-party / WebMCP 4종** (`list/execute_3p_developer_tools`, `list/execute_webmcp_tools`) — `tirno eval "window.__dtmcp.*"` 우회
+1. **`get_tab_id` (실험적)** — `tirno pages` 의 ID 또는 `tirno cdp Target.getTargets`
+2. **`navigate_page initScript`** — `tirno cdp Page.addScriptToEvaluateOnNewDocument` 후 nav
+3. **`fill` checkbox/select 자동 분기** — selector 가 select 이면 eval, checkbox 면 click 으로 우회
+4. **`evaluate_script` 의 uid args 형식** — 함수 + element handle 배열은 미지원. expression 으로 inline
+5. **`audit timespan` 모드** — split start/stop 이라 daemon 필요 (screencast/trace 와 같은 패턴으로 추후)
+6. **`get_nodes_by_class` (heap)** — class UID 별 instance 추적 미구현. `memory details` aggregate 만
+7. **Extensions 5종** (`install/uninstall/list/reload/trigger`) — `tirno cdp Extensions.*` raw passthrough만
+8. **Third-party / WebMCP 4종** (`list/execute_3p_developer_tools`, `list/execute_webmcp_tools`) — `tirno eval "window.__dtmcp.*"` 우회
 
 > 위 모든 항목은 `tirno cdp <method> [params-json]` 로 raw CDP 호출 가능. 특정 영역만 자주 쓰면 별도 wrapper PR 검토.
 

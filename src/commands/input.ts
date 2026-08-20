@@ -21,14 +21,36 @@ async function elemCenter(page: Page, selector: string): Promise<[number, number
 export function registerInputCommands(program: Command): void {
   program
     .command('click')
-    .description('Click an element by CSS selector or @ref')
-    .argument('<target>', 'CSS selector or @N ref from snapshot')
+    .description('Click by CSS selector, @ref, or "x,y" coordinates')
+    .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
     .option('-s, --session <name>', 'Session name')
     .option('--dbl', 'Double click')
     .action(async (target: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
+
+        // "x,y" coordinate form — dispatch raw CDP mouse events (trusted click).
+        const coordMatch = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/.exec(target);
+        if (coordMatch) {
+          const x = Number(coordMatch[1]);
+          const y = Number(coordMatch[2]);
+          const cdp = await page.createCDPSession();
+          try {
+            const clickCount = opts.dbl ? 2 : 1;
+            await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount });
+            await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount });
+            if (opts.dbl) {
+              await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount });
+              await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount });
+            }
+          } finally {
+            await cdp.detach();
+          }
+          browser.disconnect();
+          success(`Clicked (${x},${y})${opts.dbl ? ' (dbl)' : ''}`);
+          return;
+        }
 
         if (refStore.isRef(target)) {
           const backendId = refStore.resolveRef(meta.name, target);
