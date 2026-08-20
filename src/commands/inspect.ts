@@ -3,6 +3,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
+import * as refStore from '../core/ref-store.js';
 import type { ScreenshotOptions } from 'puppeteer-core';
 
 export function registerInspectCommands(program: Command): void {
@@ -46,21 +47,25 @@ export function registerInspectCommands(program: Command): void {
     .command('snapshot')
     .description('Take an accessibility tree snapshot')
     .option('-s, --session <name>', 'Session name')
-    .option('--verbose', 'Include hidden elements')
+    .option('--verbose', 'Include all elements (default: skip ignored)')
     .action(async (opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
+        const cdp = await page.createCDPSession();
 
-        const snapshot = await page.accessibility.snapshot({ interestingOnly: !opts.verbose });
+        const tree = await cdp.send('Accessibility.getFullAXTree') as { nodes: AXNode[] };
+        await cdp.detach();
         browser.disconnect();
 
-        if (!snapshot) {
+        if (!tree.nodes.length) {
           info('Empty snapshot');
           return;
         }
 
-        printA11yTree(snapshot, 0);
+        const { lines, refs } = renderAXTree(tree.nodes, !opts.verbose);
+        refStore.save(meta.name, refs);
+        for (const line of lines) console.log(line);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
@@ -163,14 +168,52 @@ export function registerInspectCommands(program: Command): void {
     });
 }
 
-function printA11yTree(node: import('puppeteer-core').SerializedAXNode, depth: number): void {
-  const indent = '  '.repeat(depth);
-  const name = node.name ? ` "${node.name}"` : '';
-  const value = node.value ? ` value="${node.value}"` : '';
-  console.log(`${indent}${node.role}${name}${value}`);
-  if (node.children) {
-    for (const child of node.children) {
-      printA11yTree(child, depth + 1);
+interface AXValue { value?: string | number | boolean }
+interface AXProperty { name: string; value: AXValue }
+interface AXNode {
+  nodeId: string;
+  role?: AXValue;
+  name?: AXValue;
+  value?: AXValue;
+  description?: AXValue;
+  ignored?: boolean;
+  childIds?: string[];
+  parentId?: string;
+  backendDOMNodeId?: number;
+  properties?: AXProperty[];
+}
+
+function renderAXTree(nodes: AXNode[], skipIgnored: boolean): { lines: string[]; refs: { [k: string]: number } } {
+  const byId = new Map<string, AXNode>();
+  for (const n of nodes) byId.set(n.nodeId, n);
+  const root = nodes.find(n => !n.parentId) ?? nodes[0];
+  const lines: string[] = [];
+  const refs: { [k: string]: number } = {};
+  let counter = 0;
+
+  function walk(node: AXNode, depth: number): void {
+    const skip = skipIgnored && node.ignored;
+    let nextDepth = depth;
+    if (!skip) {
+      const role = String(node.role?.value ?? '?');
+      const name = node.name?.value ? ` "${String(node.name.value)}"` : '';
+      const value = node.value?.value !== undefined ? ` value=${JSON.stringify(node.value.value)}` : '';
+      const indent = '  '.repeat(depth);
+      let prefix = '   '; // 3 spaces when no ref
+      if (node.backendDOMNodeId !== undefined) {
+        counter++;
+        refs[String(counter)] = node.backendDOMNodeId;
+        prefix = `@${counter}`.padEnd(4, ' ');
+      }
+      lines.push(`${prefix}${indent}${role}${name}${value}`);
+      nextDepth = depth + 1;
+    }
+    for (const cid of node.childIds ?? []) {
+      const child = byId.get(cid);
+      if (child) walk(child, nextDepth);
     }
   }
+
+  walk(root, 0);
+  return { lines, refs };
 }
