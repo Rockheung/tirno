@@ -43,6 +43,11 @@ export function registerCacheCommands(program: Command): void {
     .option('--json', 'Output the entry as JSON — the parseable form')
     .action((url, opts) => {
       try {
+        // An unknown mode used to fall through to urlPath, so a typo silently
+        // widened the match instead of failing.
+        if (opts.mode !== 'exact' && opts.mode !== 'urlPath') {
+          throw new Error(`--mode must be exact|urlPath, got "${opts.mode}"`);
+        }
         let viewport: visualCache.Viewport | undefined;
         if (opts.viewport) {
           const v = visualCache.parseViewportKey(opts.viewport);

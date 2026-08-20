@@ -74,10 +74,10 @@ tirno --help         # 설치 확인
 | | |
 |---|---|
 | **Node** | 22 이상 (`package.json` 의 `engines` 로 강제) |
-| **Chrome** | 자동 탐색: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` · `/usr/bin/google-chrome` · `/usr/bin/google-chrome-stable` |
+| **Chrome** | 자동 탐색: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` · `/usr/bin/google-chrome` · `/usr/bin/google-chrome-stable` · `/usr/bin/chromium-browser` |
 
-이 셋 중에 없으면 기동이 `Chrome not found` 로 멈춘다. Chromium·Brave·Edge·Windows 나
-다른 경로에 깔린 Chrome 은 **자동으로 찾지 않으므로** 경로를 직접 준다:
+이 넷 중에 없으면 기동이 `Chrome not found` 로 멈춘다. Brave·Edge·Windows 나 다른
+경로에 깔린 Chrome/Chromium 은 **자동으로 찾지 않으므로** 경로를 직접 준다:
 
 ```bash
 tirno new s1 --executable-path /path/to/chromium
@@ -231,7 +231,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `screenshot [--full] [--out path]` | 스크린샷 |
 | `snapshot [--no-cache]` | a11y 트리 + visual cache 적재 |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
-| `network [--type <t>]` | reload 후 2초간 network 캡처 |
+| `network [--type <t>]` | reload 하고 networkidle2 에 이를 때까지의 요청 캡처 |
 
 ### 입력
 | 명령 | 설명 |

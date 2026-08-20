@@ -31,6 +31,10 @@ export async function dHash(pngBuffer: Buffer): Promise<string> {
   return bits.toString(16).padStart(16, '0');
 }
 
+/**
+ * No caller in the CLI today: `visualFp` is stored and printed, never compared.
+ * Kept with its tests, but do not read its presence as evidence of a dependency.
+ */
 export function hammingDistance(a: string, b: string): number {
   if (a.length !== b.length) return -1;
   let x = BigInt('0x' + a) ^ BigInt('0x' + b);
