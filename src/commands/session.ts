@@ -2,39 +2,177 @@ import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
-import { isAlive } from '../core/process-guard.js';
-import { killAndWait } from '../core/process-guard.js';
-import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { isAlive, killAndWait } from '../core/process-guard.js';
+import { connect } from '../core/chrome-connector.js';
+import { getActivePage } from '../cdp/page-resolver.js';
+import { formatTable, success, info, error } from '../output/formatter.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+
+const NEW_DEFAULT_DESC = 'Create a new Chrome session';
+
+function summarizeFlags(flags: string[]): string {
+  // user flags only — strip the ones tirno injects
+  const builtins = new Set([
+    '--remote-debugging-port',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--window-size=1920,1080',
+    '--window-position=0,0',
+  ]);
+  const userFlags = flags.filter(f => {
+    const head = f.split('=')[0];
+    return !builtins.has(head) && !f.startsWith('--remote-debugging-port=');
+  });
+  if (userFlags.length === 0) return '-';
+  const joined = userFlags.join(' ');
+  return joined.length > 80 ? joined.slice(0, 77) + '...' : joined;
+}
 
 export function registerSessionCommands(program: Command): void {
   const newCmd = program
     .command('new')
-    .description('Create a new Chrome session')
+    .description(NEW_DEFAULT_DESC)
     .argument('<name>', 'Session name')
     .option('-p, --port <port>', 'DevTools port (auto-assign if omitted)', intArg)
     .option('--headless', 'Run in headless mode')
-    .option('--executable-path <path>', 'Path to Chrome executable');
+    .option('--executable-path <path>', 'Path to Chrome executable')
+    .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
+    .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
+    .option('--group <name>', 'Tag this session with a group label')
+    .option('--url <url>', 'Navigate to URL after creation (skips on failure)');
 
   // Chrome flags come after "--": tirno new test -- --no-proxy-server
   newCmd.allowUnknownOption(true);
   newCmd.allowExcessArguments(true);
 
-  newCmd.action(async (name: string, opts, cmd) => {
-      try {
-        // parse raw argv to extract everything after "--"
-        const rawArgs = process.argv;
-        const dashDashIdx = rawArgs.indexOf('--');
-        const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
+  newCmd.action(async (name: string, opts) => {
+    try {
+      const rawArgs = process.argv;
+      const dashDashIdx = rawArgs.indexOf('--');
+      const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
 
+      // wish A — same-name re-run handling
+      let existing: store.SessionMetadata | null = null;
+      try { existing = store.get(name); } catch { /* not found, fine */ }
+      if (existing) {
+        if (!opts.force) {
+          throw new Error(
+            `Session '${name}' already exists. Use --force to kill and re-create with new flags.`
+          );
+        }
+        try { await killAndWait(existing.pid); } catch { /* already dead */ }
+        if (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir())) {
+          fs.rmSync(existing.userDataDir, { recursive: true, force: true });
+        } else {
+          // Chrome leaves SingletonLock symlinks pointing to dead pids; new
+          // launch on the same user-data-dir hangs waiting for them.
+          for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+            try { fs.unlinkSync(`${existing.userDataDir}/${f}`); } catch { /* ok */ }
+          }
+        }
+        store.remove(name);
+        if (store.getActive() === name) store.clearActive();
+      }
+
+      // wish E — ephemeral profile
+      let userDataDirOverride: string | undefined;
+      if (opts.ephemeral) {
+        userDataDirOverride = fs.mkdtempSync(path.join(os.tmpdir(), `tirno-${name}-`));
+      }
+
+      const meta = await launch({
+        name,
+        port: opts.port,
+        chromeFlags,
+        executablePath: opts.executablePath,
+        headless: opts.headless,
+        userDataDir: userDataDirOverride,
+      });
+
+      // wish F — group tag
+      if (opts.group) {
+        store.update(name, { group: opts.group });
+      }
+
+      success(`Session '${name}' created (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${opts.ephemeral ? ', ephemeral' : ''})`);
+
+      // wish B — new + nav in one shot
+      if (opts.url) {
+        try {
+          const { browser } = await connect(name);
+          const page = await getActivePage(browser);
+          const response = await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          browser.disconnect();
+          const status = response?.status() ?? 0;
+          success(`Navigated → ${opts.url} (${status})`);
+        } catch (e) {
+          error(`Nav failed: ${(e as Error).message}`);
+          // session is alive, just nav failed — don't exit non-zero
+        }
+      }
+    } catch (e) {
+      error((e as Error).message);
+      process.exit(1);
+    }
+  });
+
+  // wish A alias — restart
+  program
+    .command('restart')
+    .description('Kill existing session (if any) and re-create with new chrome flags')
+    .argument('<name>', 'Session name')
+    .option('-p, --port <port>', 'DevTools port', intArg)
+    .option('--headless', 'Run headless')
+    .option('--executable-path <path>', 'Chrome path')
+    .option('--ephemeral', 'Use a temporary user-data-dir')
+    .option('--group <name>', 'Group label')
+    .option('--url <url>', 'Navigate after restart')
+    .allowUnknownOption(true)
+    .allowExcessArguments(true)
+    .action(async (name: string, opts) => {
+      const rawArgs = process.argv;
+      const dashDashIdx = rawArgs.indexOf('--');
+      const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
+      // delegate to `new --force` semantics inline (avoid extra subprocess)
+      try {
+        let existing: store.SessionMetadata | null = null;
+        try { existing = store.get(name); } catch { /* none */ }
+        if (existing) {
+          try { await killAndWait(existing.pid); } catch { /* dead */ }
+          if (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir())) {
+            fs.rmSync(existing.userDataDir, { recursive: true, force: true });
+          }
+          store.remove(name);
+          if (store.getActive() === name) store.clearActive();
+        }
+        let userDataDirOverride: string | undefined;
+        if (opts.ephemeral) {
+          userDataDirOverride = fs.mkdtempSync(path.join(os.tmpdir(), `tirno-${name}-`));
+        }
         const meta = await launch({
           name,
           port: opts.port,
           chromeFlags,
           executablePath: opts.executablePath,
           headless: opts.headless,
+          userDataDir: userDataDirOverride,
         });
+        if (opts.group) store.update(name, { group: opts.group });
+        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''})`);
 
-        success(`Session '${name}' created (port ${meta.port}, PID ${meta.pid})`);
+        if (opts.url) {
+          try {
+            const { browser } = await connect(name);
+            const page = await getActivePage(browser);
+            const response = await page.goto(opts.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            browser.disconnect();
+            success(`Navigated → ${opts.url} (${response?.status() ?? 0})`);
+          } catch (e) {
+            error(`Nav failed: ${(e as Error).message}`);
+          }
+        }
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
@@ -45,9 +183,12 @@ export function registerSessionCommands(program: Command): void {
     .command('ls')
     .description('List all sessions')
     .option('--json', 'Output as JSON')
+    .option('--group <name>', 'Filter by group')
+    .option('--flags', 'Include FLAGS column (truncated to 80 chars)')
     .action((opts) => {
-      const sessions = store.list();
+      let sessions = store.list();
       const active = store.getActive();
+      if (opts.group) sessions = sessions.filter(s => s.group === opts.group);
 
       if (opts.json) {
         console.log(JSON.stringify(sessions, null, 2));
@@ -58,6 +199,14 @@ export function registerSessionCommands(program: Command): void {
         info('No sessions. Use "tirno new <name>" to create one.');
         return;
       }
+
+      const showFlags = opts.flags === true;
+      const showGroup = sessions.some(s => s.group);
+
+      const headers = ['', 'NAME', 'PORT', 'STATUS', 'PROXY', 'EMULATION'];
+      if (showGroup) headers.push('GROUP');
+      if (showFlags) headers.push('FLAGS');
+      headers.push('LAST ACCESS');
 
       const rows = sessions.map(s => {
         const alive = isAlive(s.pid);
@@ -76,21 +225,14 @@ export function registerSessionCommands(program: Command): void {
         if (emu?.network) parts.push(`net:${emu.network}`);
         if (emu?.cpu) parts.push(`cpu:${emu.cpu}x`);
         const emulation = parts.length ? parts.join(', ') : '-';
-        return [
-          marker,
-          s.name,
-          String(s.port),
-          status,
-          proxy,
-          emulation,
-          s.lastAccessedAt.slice(0, 19).replace('T', ' '),
-        ];
+        const row = [marker, s.name, String(s.port), status, proxy, emulation];
+        if (showGroup) row.push(s.group ?? '-');
+        if (showFlags) row.push(summarizeFlags(s.chromeFlags));
+        row.push(s.lastAccessedAt.slice(0, 19).replace('T', ' '));
+        return row;
       });
 
-      console.log(formatTable(
-        ['', 'NAME', 'PORT', 'STATUS', 'PROXY', 'EMULATION', 'LAST ACCESS'],
-        rows
-      ));
+      console.log(formatTable(headers, rows));
     });
 
   program
@@ -99,7 +241,7 @@ export function registerSessionCommands(program: Command): void {
     .argument('<name>', 'Session name')
     .action((name: string) => {
       try {
-        store.get(name); // validate exists
+        store.get(name);
         store.setActive(name);
         success(`Active session: ${name}`);
       } catch (e) {
@@ -113,22 +255,33 @@ export function registerSessionCommands(program: Command): void {
     .description('Kill a session')
     .argument('[name]', 'Session name')
     .option('--all', 'Kill all sessions')
+    .option('--group <name>', 'Kill all sessions in this group')
     .option('--clean', 'Remove profile directory')
     .action(async (name: string | undefined, opts) => {
       try {
-        const targets = opts.all ? store.list() : [store.get(name!)];
+        let targets: store.SessionMetadata[];
+        if (opts.all) targets = store.list();
+        else if (opts.group) targets = store.list().filter(s => s.group === opts.group);
+        else if (name) targets = [store.get(name)];
+        else throw new Error('Provide a name, --all, or --group <name>');
+
+        if (targets.length === 0) {
+          info(`No sessions match`);
+          return;
+        }
 
         for (const meta of targets) {
           await killAndWait(meta.pid);
           store.remove(meta.name);
 
-          if (opts.clean) {
-            const { rmSync } = await import('node:fs');
-            rmSync(meta.userDataDir, { recursive: true, force: true });
+          // ephemeral dirs always cleaned; otherwise --clean
+          const isEphemeral = meta.userDataDir.startsWith(os.tmpdir());
+          if (opts.clean || isEphemeral) {
+            fs.rmSync(meta.userDataDir, { recursive: true, force: true });
           }
 
           if (store.getActive() === meta.name) store.clearActive();
-          success(`Killed '${meta.name}' (PID ${meta.pid})`);
+          success(`Killed '${meta.name}' (PID ${meta.pid}${isEphemeral ? ', ephemeral cleaned' : opts.clean ? ', profile cleaned' : ''})`);
         }
       } catch (e) {
         error((e as Error).message);
@@ -164,4 +317,6 @@ export function registerSessionCommands(program: Command): void {
         process.exit(1);
       }
     });
+
+  // broadcast group support is in commands/multi.ts; we just expose --group filter from there
 }

@@ -24,12 +24,14 @@ export interface LaunchOptions {
   chromeFlags?: string[];
   executablePath?: string;
   headless?: boolean;
+  /** Override default profile dir. Caller is responsible for cleanup if ephemeral. */
+  userDataDir?: string;
 }
 
 export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata> {
   const port = await allocate(opts.port);
   const executablePath = opts.executablePath ?? findChrome();
-  const userDataDir = profileDir(opts.name);
+  const userDataDir = opts.userDataDir ?? profileDir(opts.name);
   fs.mkdirSync(userDataDir, { recursive: true });
 
   // Default viewport 1920x1080 — fixed size is required for tirno's

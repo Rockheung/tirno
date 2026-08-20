@@ -759,7 +759,9 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#13](https://github.com/Rockheung/tirno/pull/13) | fix: commander coercer로 parseInt/parseFloat 직접 사용 시 NaN 버그 (13곳) | merged |
 | [#14](https://github.com/Rockheung/tirno/pull/14) | feat: Phase 6-2e — backend 분류 (local/cloud) + cloud backend stubs + default paddle | merged |
 | [#15](https://github.com/Rockheung/tirno/pull/15) | feat: default viewport + 작업 원칙 + raw CDP + dialog 우회 + drag | merged |
-| [#16](https://github.com/Rockheung/tirno/pull/16) | feat: record/replay — 사용자 행동 캡처 + raw CDP 재현 | open |
+| [#16](https://github.com/Rockheung/tirno/pull/16) | feat: record/replay — 사용자 행동 캡처 + raw CDP 재현 | merged |
+| [#17](https://github.com/Rockheung/tirno/pull/17) | chore: tesseract 제거 + eslint 설정 | merged |
+| [#18](https://github.com/Rockheung/tirno/pull/18) | feat: sandweb wishes (A/B/C/D/E/F) — 재실행 갱신, --url, ls flags, --strict, ephemeral, group | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
