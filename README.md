@@ -374,7 +374,7 @@ npm run lint            # eslint
 Chrome 의 행동이 아니다.** 그쪽은 스모크가 본다:
 
 ```bash
-node scripts/smoke.mjs   # 전 명령 실행. CI 게이트와 같은 것
+node scripts/smoke.mjs   # 전 명령 실행. PR 게이트가 이걸 그대로 돌린다
 ```
 
 ## 라이선스

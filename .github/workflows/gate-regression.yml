@@ -2,17 +2,19 @@ name: gate-regression
 
 # Gate 층 — 진짜 Chrome 위에서 tirno 를 돌린다. **PR 을 막지 않는다.**
 #
-# 두 가지를 본다: Chrome 계약(gate-check)과 명령이 실제로 도는가(smoke).
+# 보는 것은 하나다: Chrome 계약(gate-check). 명령이 실제로 도는가(smoke)는
+# ci.yml 의 PR 게이트로 옮겼다 — 그건 우리 코드의 회귀라 PR 을 세워야 한다.
 #
-# 목적은 회귀 차단이 아니라 통보다. tirno 의 앵커 설계는 Chrome 의 관측된 행동
+# 여기 남은 것의 목적은 회귀 차단이 아니라 통보다. tirno 의 앵커 설계는 Chrome 의 관측된 행동
 # (port 0 일 때만 DevToolsActivePort 를 쓴다 / 재기동하면 새 포트를 담는다)에
 # 얹혀 있고, 그건 문서화된 계약이 아니다. Chrome 이 그걸 바꾸면 유닛 186개는
 # 전부 초록인 채 런타임만 죽는다 — 그때 여기서 빨간불이 뜨는 것이 목적.
 #
 # 근거와 측정 기록: docs/plan-anchor-broker.md §7
 #
-# 첫 실행이 곧 Linux 측정이다. 지금까지의 Gate 기록은 전부 macOS Chrome 151 이고,
-# runner 는 다른 빌드다.
+# 수동 트리거로 둔다. Chrome 이 계약을 깨는 일은 드물고, 깨져도 우리가 고칠 수 있는
+# 게 아니라 알아야 하는 것이다 — 정기 실행으로 매일 초록을 찍는 건 값이 없다.
+# 새 Chrome 이 나왔거나 앵커 쪽을 건드렸을 때 손으로 돌린다.
 
 on:
   workflow_dispatch:
@@ -41,12 +43,3 @@ jobs:
         env:
           CHROME_FLAGS: '--no-sandbox --disable-dev-shm-usage'
         run: node scripts/gate-check.mjs
-
-      # 유닛이 닿지 않는 층 — 명령이 실제로 도는가. 이 하네스를 처음 돌렸을 때
-      # 96개 중 5개가 깨져 있었고 유닛 190개는 전부 초록이었다.
-      # gate-check 가 실패해도 여기까지는 봐야 무엇이 남았는지 알 수 있다.
-      - name: 전 명령 스모크
-        if: always()
-        env:
-          CHROME_FLAGS: '--no-sandbox --disable-dev-shm-usage'
-        run: node scripts/smoke.mjs
