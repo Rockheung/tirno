@@ -1,0 +1,131 @@
+import { Command } from 'commander';
+import { connect } from '../core/chrome-connector.js';
+import { getActivePage } from '../cdp/page-resolver.js';
+import * as recStore from '../core/record-store.js';
+import { formatTable, success, info, error } from '../output/formatter.js';
+
+interface ClientRecState {
+  events: recStore.RecordedEvent[];
+  recording: boolean;
+  startTs: number;
+}
+
+export function registerRecordCommands(program: Command): void {
+  const rec = program
+    .command('record')
+    .description('Record user input events for later replay');
+
+  rec
+    .command('start')
+    .description('Begin recording; events are collected on the page side')
+    .option('-s, --session <name>', 'Session name')
+    .action(async (opts) => {
+      try {
+        const { browser } = await connect(opts.session);
+        const page = await getActivePage(browser);
+        await page.evaluate(() => {
+          const w = window as unknown as { __tirno_rec: ClientRecState };
+          if (!w.__tirno_rec) throw new Error('record install missing — reconnect session');
+          w.__tirno_rec.events = [];
+          w.__tirno_rec.startTs = Date.now();
+          w.__tirno_rec.recording = true;
+        });
+        const url = page.url();
+        browser.disconnect();
+        success(`Recording on ${url} — interact with the page, then "tirno record stop"`);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  rec
+    .command('stop')
+    .description('Stop recording; print captured events')
+    .option('-s, --session <name>', 'Session name')
+    .option('--save <name>', 'Save under name (~/.tirno/recordings/<name>.json)')
+    .option('--json', 'Print events as raw JSON instead of summary')
+    .action(async (opts) => {
+      try {
+        const { browser } = await connect(opts.session);
+        const page = await getActivePage(browser);
+        const result = await page.evaluate(() => {
+          const w = window as unknown as { __tirno_rec: ClientRecState };
+          if (!w.__tirno_rec) return null;
+          w.__tirno_rec.recording = false;
+          return {
+            events: w.__tirno_rec.events,
+            durationMs: w.__tirno_rec.events.length > 0
+              ? w.__tirno_rec.events[w.__tirno_rec.events.length - 1].t
+              : 0,
+          };
+        });
+        const url = page.url();
+        browser.disconnect();
+
+        if (!result) throw new Error('No recording state on page');
+
+        if (opts.save) {
+          recStore.save({
+            name: opts.save,
+            capturedAt: new Date().toISOString(),
+            durationMs: result.durationMs,
+            startUrl: url,
+            events: result.events,
+          });
+          success(`Saved "${opts.save}" — ${result.events.length} events, ${result.durationMs}ms`);
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify(result.events, null, 2));
+        } else {
+          info(`${result.events.length} events captured (${result.durationMs}ms)`);
+          for (const e of result.events.slice(0, 50)) {
+            const sel = e.sel ? ` ${e.sel}` : '';
+            const xy = e.x !== undefined ? ` (${e.x},${e.y})` : '';
+            const extra = e.key ? ` key=${e.key}` : (e.value ? ` value="${(e.value || '').slice(0, 30)}"` : '');
+            console.log(`+${e.t.toString().padStart(5)}ms  ${e.type.padEnd(8)}${xy}${sel}${extra}`);
+          }
+          if (result.events.length > 50) info(`... ${result.events.length - 50} more (use --json for full)`);
+        }
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  rec
+    .command('list')
+    .description('List saved recordings')
+    .action(() => {
+      try {
+        const all = recStore.list();
+        if (all.length === 0) { info('No recordings'); return; }
+        console.log(formatTable(['NAME', 'EVENTS', 'DURATION', 'CAPTURED', 'URL'],
+          all.map(r => [
+            r.name,
+            String(r.events.length),
+            `${r.durationMs}ms`,
+            r.capturedAt.replace('T', ' ').slice(0, 19),
+            r.startUrl.length > 50 ? r.startUrl.slice(0, 47) + '...' : r.startUrl,
+          ])
+        ));
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  rec
+    .command('rm <name>')
+    .description('Delete a saved recording')
+    .action((name) => {
+      try {
+        recStore.remove(name);
+        success(`Removed "${name}"`);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+}

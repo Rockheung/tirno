@@ -44,14 +44,56 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
     };
   `;
 
+  // Recording listener — captures user input events into window.__tirno_rec.
+  // Inactive by default; tirno record start/stop toggles via __tirno_rec.recording.
+  // Replay (raw CDP Input.dispatchMouseEvent) also fires these events but
+  // recording flag is checked, so replays don't double-record unless explicitly on.
+  const RECORD_INSTALL = `
+    if (!window.__tirno_rec) {
+      const bestSelector = (el) => {
+        if (!el || el.nodeType !== 1) return null;
+        if (el.id && /^[A-Za-z][\\w-]*$/.test(el.id)) return '#' + el.id;
+        const testid = el.getAttribute && el.getAttribute('data-testid');
+        if (testid) return '[data-testid=' + JSON.stringify(testid) + ']';
+        const ariaLabel = el.getAttribute && el.getAttribute('aria-label');
+        if (ariaLabel) return '[aria-label=' + JSON.stringify(ariaLabel) + ']';
+        const name = el.getAttribute && el.getAttribute('name');
+        if (name && el.tagName) return el.tagName.toLowerCase() + '[name=' + JSON.stringify(name) + ']';
+        return null;
+      };
+      const rec = window.__tirno_rec = { events: [], recording: false, startTs: 0 };
+      const log = (type, e) => {
+        if (!rec.recording) return;
+        const t = e.target;
+        const r = t && t.getBoundingClientRect ? t.getBoundingClientRect() : null;
+        rec.events.push({
+          type,
+          t: Date.now() - rec.startTs,
+          x: e.clientX, y: e.clientY,
+          sel: bestSelector(t),
+          tag: t && t.tagName,
+          key: e.key,
+          value: e.target && (e.target.value !== undefined ? e.target.value : null),
+          bbox: r ? { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) } : null,
+        });
+      };
+      addEventListener('click', e => log('click', e), { capture: true, passive: true });
+      addEventListener('keydown', e => log('keydown', e), { capture: true, passive: true });
+      addEventListener('input', e => log('input', e), { capture: true, passive: true });
+      addEventListener('scroll', () => log('scroll', { clientX: 0, clientY: 0, target: document.scrollingElement }), { capture: true, passive: true });
+    }
+  `;
+
   const attachToPage = async (p: import('puppeteer-core').Page): Promise<void> => {
     try {
       p.removeAllListeners('dialog');
       p.on('dialog', (d) => { d.accept().catch(() => {}); });
       await p.evaluateOnNewDocument(NEUTRALIZE_UNLOAD);
+      await p.evaluateOnNewDocument(RECORD_INSTALL);
       // also patch the *current* document — evaluateOnNewDocument only takes
       // effect on next navigation; current page may have already attached
       await p.evaluate(NEUTRALIZE_UNLOAD).catch(() => {});
+      await p.evaluate(RECORD_INSTALL).catch(() => {});
     } catch { /* page may be detached; best-effort */ }
   };
   const attachAll = async (): Promise<void> => {

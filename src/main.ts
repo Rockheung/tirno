@@ -10,6 +10,8 @@ import { registerMultiCommands } from './commands/multi.js';
 import { registerCacheCommands } from './commands/cache.js';
 import { registerVisionCommands } from './commands/vision.js';
 import { registerCdpCommands } from './commands/cdp.js';
+import { registerRecordCommands } from './commands/record.js';
+import { registerReplayCommand } from './commands/replay.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -30,6 +32,8 @@ registerMultiCommands(program);
 registerCacheCommands(program);
 registerVisionCommands(program);
 registerCdpCommands(program);
+registerRecordCommands(program);
+registerReplayCommand(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);

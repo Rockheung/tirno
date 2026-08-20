@@ -309,6 +309,39 @@ interface CacheEntry {
 
 ---
 
+### record/replay — 사용자 행동 캡처 + raw CDP 재현 (PR #16)
+
+#### 의도
+
+사용자 정정: "유저가 행한 동작도 이해해서 따라할 수 있나?" — self-journaling의 진짜 형태. 사용자가 1회 직접 시연 → tirno가 시퀀스 학습 → 다음부터 자동 replay.
+
+#### 구현
+
+- `chrome-connector.ts` connect 시점 inject — `window.__tirno_rec` 객체 + capture-phase listener (click/keydown/input/scroll). recording flag로 toggle. event는 type/timestamp/clientX-Y/best-effort selector/bbox/key/value 캡처
+- `src/core/record-store.ts` (신규) — `~/.tirno/recordings/<name>.json` save/load/list/remove. 이름은 `[A-Za-z0-9_-]+`만 허용 (path traversal 방지)
+- `src/commands/record.ts` (신규) — `record start/stop/list/rm`. stop 시 `--save <name>`로 저장, `--json`으로 raw 출력
+- `src/commands/replay.ts` (신규) — `replay <name>`. raw CDP `Input.dispatchMouseEvent` (trusted, 위 PR #15 검증) + `Input.dispatchKeyEvent` 시퀀스로 재현. `--speed`, `--max-gap`, `--no-nav` 옵션
+- `test/record-store.test.ts` (신규) — save/load/list/remove + path safety 8 케이스. 76/76 tests pass
+
+#### 검증
+
+- `record start` → `recording: true` 확인
+- `dispatchEvent(MouseEvent('click', clientX, clientY))` 두 번 → 2 events 정확 캡처 (좌표/bbox/tag 모두)
+- `record stop --save mission-test` → file 저장
+- selector best-effort 작동 (id / data-testid / aria-label / tag[name])
+
+#### 한계
+
+- **navigation 시 listener 손실** — 사용자가 페이지 이동 일으키면 새 document에 새 inject되어 events 초기화. 보강은 localStorage flush 또는 CDP binding으로 host에 push하는 형태 (다음 PR 후보)
+- iframe / shadow DOM 내부 입력은 main document listener에 안 잡힘 (capture phase는 main document에서만)
+- replay 시 selector resolve가 record 시점과 다를 수 있음 — 좌표 fallback으로 보강했지만 layout 변경 시 stale
+
+#### 의의
+
+PR #15의 `tirno cdp` (raw passthrough) + 이 PR의 record/replay → **사용자 1회 시연 → 자동 재현**의 진짜 self-journaling 흐름이 완성됨. 사내플랫폼 디자인 모드 같은 비표준 흐름도 사용자가 직접 마우스로 한 번 보여주면 그 후 tirno가 그대로 반복 가능.
+
+---
+
 ### default viewport 1920x1080 + 작업 원칙 + raw CDP passthrough + dialog 우회 (PR #15)
 
 #### 추가 변경 (사용자 정정 후)
@@ -725,7 +758,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#12](https://github.com/Rockheung/tirno/pull/12) | feat: Phase 6-1b — viewport-aware visual cache | merged |
 | [#13](https://github.com/Rockheung/tirno/pull/13) | fix: commander coercer로 parseInt/parseFloat 직접 사용 시 NaN 버그 (13곳) | merged |
 | [#14](https://github.com/Rockheung/tirno/pull/14) | feat: Phase 6-2e — backend 분류 (local/cloud) + cloud backend stubs + default paddle | merged |
-| [#15](https://github.com/Rockheung/tirno/pull/15) | feat: default viewport 1920x1080 + emulate --viewport + tirno 작업 원칙 정책화 | open |
+| [#15](https://github.com/Rockheung/tirno/pull/15) | feat: default viewport + 작업 원칙 + raw CDP + dialog 우회 + drag | merged |
+| [#16](https://github.com/Rockheung/tirno/pull/16) | feat: record/replay — 사용자 행동 캡처 + raw CDP 재현 | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
