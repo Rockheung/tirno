@@ -91,7 +91,7 @@ export function lookup(url: string, opts: LookupOptions = {}): CacheEntry | null
   const dir = urlDir(key.domain, key.urlPath);
   if (!fs.existsSync(dir)) return null;
 
-  let chosen: string | null = null;
+  let chosen: string;
   if (opts.viewport) {
     const exact = entryFile(key.domain, key.urlPath, opts.viewport);
     if (!fs.existsSync(exact)) return null;

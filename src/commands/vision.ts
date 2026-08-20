@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { intArg, floatArg } from '../util/parsers.js';
+import { intArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
@@ -19,7 +19,7 @@ export function registerVisionCommands(program: Command): void {
     .description('Run OCR on the current page screenshot')
     .option('-s, --session <name>', 'Session name')
     .option('--backend <name>', BACKEND_HELP, DEFAULT_BACKEND)
-    .option('--lang <lang>', 'Language(s) (tesseract uses + e.g. kor+eng; paddle/florence ignore)', 'eng')
+    .option('--lang <lang>', 'Language hint (paddle: eng default; supply --paddle-models <dir> for other langs)', 'eng')
     .option('--full', 'Full page screenshot (default: viewport only)')
     .option('--out <path>', 'Write JSON result to path')
     .option('--min-confidence <n>', 'Filter words below this confidence (0-100)', intArg, 0)

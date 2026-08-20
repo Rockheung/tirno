@@ -74,7 +74,7 @@ tirno kill mysession
 | 명령 | 설명 |
 |---|---|
 | `screenshot [--full] [--out path]` | 스크린샷 |
-| `snapshot [--no-cache] [--vision [backend]]` | a11y 트리 + visual cache 적재. `--vision`으로 OCR 보강 (default tesseract). 옵션: `--vision-lang`, `--vision-min-confidence`, `--vision-iou`, `--vision-contain` |
+| `snapshot [--no-cache] [--vision [backend]]` | a11y 트리 + visual cache 적재. `--vision`으로 OCR 보강 (default paddle). 옵션: `--vision-lang`, `--vision-min-confidence`, `--vision-iou`, `--vision-contain` |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>]` | reload 후 2초간 network 캡처 |
 
@@ -119,7 +119,6 @@ backend 선택 — **local 기본**, cloud는 확장 예정 (현재 stub):
 
 **local**:
 - `paddle` (**default**) — PaddleOCR via @gutenye/ocr-node, line 단위, 영어 default. 한국어는 `--paddle-models <dir>` 로 PaddleOCR 한국어 det/rec/dict 지정
-- `tesseract` — light, 한국어/영어 동시 지원 (`--lang kor+eng`), word 단위. **올드 테크** — 한국어 단음절 분리 경향
 - `florence` — Florence-2 via `@huggingface/transformers`. **experimental** — 모델 로드/추론 인프라는 동작하나, transformers.js v4의 task token 처리에 디코딩 버그가 있어 output 정확성 미흡. env: `TIRNO_FLORENCE_MODEL`, `TIRNO_FLORENCE_DTYPE` (q4|q8|fp32), `TIRNO_FLORENCE_DEBUG=1`
 
 **cloud** (Phase 6-2f 예정 — 현재 stub):

@@ -13,7 +13,7 @@ export const openaiBackend: OcrBackend = {
     if (!process.env[ENV_KEY]) {
       throw new Error(
         `openai backend requires ${ENV_KEY} env var. ` +
-        `Real implementation pending — use --backend paddle or tesseract for local OCR.`
+        `Real implementation pending — use --backend paddle for local OCR.`
       );
     }
     throw new Error(

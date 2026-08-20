@@ -17,7 +17,7 @@ export const claudeBackend: OcrBackend = {
     if (!process.env[ENV_KEY]) {
       throw new Error(
         `claude backend requires ${ENV_KEY} env var. ` +
-        `Real implementation pending — use --backend paddle or tesseract for local OCR.`
+        `Real implementation pending — use --backend paddle for local OCR.`
       );
     }
     throw new Error(

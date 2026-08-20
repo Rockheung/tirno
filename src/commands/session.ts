@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { intArg, floatArg } from '../util/parsers.js';
+import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { isAlive } from '../core/process-guard.js';

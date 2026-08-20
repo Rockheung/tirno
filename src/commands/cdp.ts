@@ -29,11 +29,11 @@ export function registerCdpCommands(program: Command): void {
 
         const captured: unknown[] = [];
         if (opts.listen) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           (cdp as any).on(opts.listen, (e: unknown) => captured.push(e));
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const result = await ((cdp.send as any)(method, parsed) as Promise<unknown>);
 
         if (opts.listen) {

@@ -8,7 +8,6 @@ export { LOCAL_BACKENDS, CLOUD_BACKENDS, ALL_BACKENDS, DEFAULT_BACKEND } from '.
 
 const BACKENDS: Record<BackendName, () => Promise<OcrBackend>> = {
   // local
-  tesseract: async () => (await import('./backends/tesseract.js')).tesseractBackend,
   paddle: async () => (await import('./backends/paddle.js')).paddleBackend,
   florence: async () => {
     const mod = await import('./backends/florence.js').catch(() => null);
