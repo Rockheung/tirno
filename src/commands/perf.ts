@@ -96,6 +96,123 @@ function aggregateHeapByType(s: HeapSnapshot): HeapBucket[] {
 }
 
 export function registerPerfCommands(program: Command): void {
+  program
+    .command('stall')
+    .description('Is the main thread saturated, and what is eating it? Measures from outside the renderer, so it keeps reporting even when the page is wedged')
+    .option('-s, --session <name>', 'Session name')
+    .option('--window <s>', 'How long to watch, in seconds', floatArg, 10)
+    .option('--json', 'Output the samples and summary as JSON')
+    .action(async (opts) => {
+      try {
+        const { browser } = await connect(opts.session);
+        const page = await getActivePage(browser);
+        const rendererCdp = await page.createCDPSession();
+        // Layer 3 lives on the browser target, on its own socket. That is the
+        // whole point: a renderer can be pinned at 100% while the browser
+        // process answers in milliseconds, and the gap between the two is what
+        // proves the renderer is the problem rather than the machine.
+        const browserCdp = await browser.target().createCDPSession();
+
+        // Counters accumulate from `enable`, so the first read is the baseline
+        // and every later one is a delta against it.
+        await rendererCdp.send('Performance.enable');
+
+        const readMetrics = async (): Promise<Record<string, number>> => {
+          const { metrics } = await rendererCdp.send('Performance.getMetrics') as { metrics: Array<{ name: string; value: number }> };
+          return Object.fromEntries(metrics.map(m => [m.name, m.value]));
+        };
+
+        // A round trip has to wait behind whatever is already queued on the main
+        // thread, so its duration IS the queue wait. Nothing clever needed.
+        const rtt = async (send: () => Promise<unknown>): Promise<number> => {
+          const t0 = Date.now();
+          try { await send(); } catch { return Number.NaN; }
+          return Date.now() - t0;
+        };
+
+        const samples: Array<{ t: number; rendererRttMs: number; browserRttMs: number; taskPct: number; scriptPct: number; layoutPct: number; stylePct: number }> = [];
+        let prev = await readMetrics();
+        let prevAt = Date.now();
+        const started = Date.now();
+        const windowMs = opts.window * 1000;
+
+        if (!opts.json) info(`Watching for ${opts.window}s — renderer vs browser round trips, and where the time goes`);
+
+        while (Date.now() - started < windowMs) {
+          await new Promise(r => setTimeout(r, 1000));
+          const rendererRttMs = await rtt(() => rendererCdp.send('Runtime.evaluate', { expression: '1', returnByValue: true }));
+          const browserRttMs = await rtt(() => browserCdp.send('Browser.getVersion'));
+          const now = await readMetrics();
+          const at = Date.now();
+          const span = (at - prevAt) / 1000;
+          const pct = (k: string) => span > 0 ? ((now[k] ?? 0) - (prev[k] ?? 0)) / span * 100 : 0;
+          const s = {
+            t: Number(((at - started) / 1000).toFixed(1)),
+            rendererRttMs,
+            browserRttMs,
+            taskPct: Number(pct('TaskDuration').toFixed(1)),
+            scriptPct: Number(pct('ScriptDuration').toFixed(1)),
+            layoutPct: Number(pct('LayoutDuration').toFixed(1)),
+            stylePct: Number(pct('RecalcStyleDuration').toFixed(1)),
+          };
+          samples.push(s);
+          prev = now; prevAt = at;
+          if (!opts.json) {
+            console.log(
+              `  ${String(s.t).padStart(5)}s  renderer=${String(Number.isNaN(s.rendererRttMs) ? 'no answer' : `${s.rendererRttMs}ms`).padStart(9)}` +
+              `  browser=${String(s.browserRttMs).padStart(5)}ms  task=${String(s.taskPct).padStart(5)}%` +
+              `  script=${String(s.scriptPct).padStart(5)}%  layout=${String(s.layoutPct).padStart(5)}%  style=${String(s.stylePct).padStart(5)}%`
+            );
+          }
+        }
+
+        await rendererCdp.detach().catch(() => {});
+        await browserCdp.detach().catch(() => {});
+        browser.disconnect();
+
+        const max = (k: keyof typeof samples[0]) => samples.reduce((m, s) => Math.max(m, Number(s[k]) || 0), 0);
+        const taskMax = max('taskPct');
+        const rendererMax = max('rendererRttMs');
+        const browserMax = max('browserRttMs');
+        const scriptMax = max('scriptPct');
+        const layoutMax = max('layoutPct');
+        const styleMax = max('stylePct');
+
+        // Two different failures hide under "the page is slow", and only both
+        // numbers together tell them apart: a queue that is backed up (round
+        // trips crawl) versus a flood of short tasks (CPU pinned, round trips
+        // still fine). Reading one alone gets the second case wrong.
+        let verdict: string;
+        if (rendererMax >= 200) verdict = 'queue backed up — the UI is frozen and DevTools will not open';
+        else if (taskMax >= 90) verdict = 'short-task flood — CPU is pinned (fans, battery) but input still lands';
+        else if (taskMax >= 50) verdict = 'heavy but not stuck — will be felt on slower hardware';
+        else verdict = 'idle enough';
+
+        const blame = scriptMax >= layoutMax + styleMax
+          ? 'script (JS logic)'
+          : (layoutMax + styleMax) > 0 ? 'layout/style (thrashing — the getComputedStyle / getBoundingClientRect signature)'
+          : 'neither script nor layout — GC, raster or parsing, which these counters do not split';
+
+        if (opts.json) {
+          console.log(JSON.stringify({ samples, summary: { taskMax, scriptMax, layoutMax, styleMax, rendererRttMaxMs: rendererMax, browserRttMaxMs: browserMax, verdict, blame } }, null, 2));
+          return;
+        }
+
+        console.log('');
+        info(`renderer round trip up to ${rendererMax}ms · browser stayed at ${browserMax}ms`);
+        // Only worth saying when the renderer actually stalled. A 9ms renderer
+        // next to a 1ms browser is not an asymmetry, it is two healthy numbers.
+        if (rendererMax >= 200 && browserMax < rendererMax / 4) {
+          info('the browser kept answering while the renderer did not — this page, not the machine');
+        }
+        info(`worst second: task ${taskMax}% (script ${scriptMax}%, layout ${layoutMax}%, style ${styleMax}%)`);
+        success(`${verdict} · biggest share: ${blame}`);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
   const traceCmd = program
     .command('trace')
     .description('Run a performance trace for a fixed duration; subcommands for analysis')

@@ -184,6 +184,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `trace --duration <s>` | chrome://tracing 호환 JSON |
 | `memory` | heap snapshot |
+| `stall [--window <s>]` | 메인스레드가 포화됐나, 무엇이 먹나. 렌더러 밖(브라우저 타깃)에서 재므로 페이지가 멈춰 DevTools 가 안 열려도 계속 관측된다 |
 | `diff <s1> <s2>` | 두 세션 시각 diff (pixelmatch) |
 
 ### Visual cache (Phase 6-1, viewport-aware)
