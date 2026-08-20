@@ -111,9 +111,12 @@ tirno kill mysession
 ### Vision OCR (Phase 6-2)
 | 명령 | 설명 |
 |---|---|
-| `vision ocr [--lang <eng\|kor\|kor+eng>] [--full] [--out <path>] [--min-confidence <n>]` | tesseract.js로 페이지 OCR. 단어별 bbox + confidence |
+| `vision ocr [--backend <name>] [--lang <l>] [--full] [--out <path>] [--min-confidence <n>] [--paddle-models <dir>]` | 페이지 OCR — 단어/줄별 bbox + confidence |
 
-backend는 plug-in 구조 — 향후 PaddleOCR / Florence-2 추가 예정.
+backend 선택:
+- `tesseract` (default) — light, 한국어/영어 동시 지원 (`--lang kor+eng`), word 단위
+- `paddle` — PaddleOCR via @gutenye/ocr-node, line 단위, 영어 default. 한국어는 `--paddle-models <dir>` 로 PaddleOCR 한국어 det/rec/dict 지정
+- `florence` — Florence-2 via transformers.js (stub, 다음 phase)
 
 ### Multi-session
 | 명령 | 설명 |
