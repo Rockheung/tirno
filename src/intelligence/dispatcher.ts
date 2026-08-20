@@ -6,6 +6,7 @@ import type {
   IntelligenceResponse,
   BackendName,
 } from './types.js';
+import { withResilience, type ResilienceOptions } from './resilience.js';
 
 const BACKENDS: Record<BackendName, () => Promise<IntelligenceBackend>> = {
   claude: async () => (await import('./backends/claude.js')).claudeBackend,
@@ -30,10 +31,14 @@ export async function getIntelligence(name: BackendName): Promise<IntelligenceBa
 export async function ask(
   backend: BackendName,
   req: IntelligenceRequest,
+  resilience?: ResilienceOptions,
 ): Promise<IntelligenceResponse> {
   const b = await getIntelligence(backend);
   if (!b.available) {
     throw new Error(`${backend} intelligence backend not available — check API key env var.`);
   }
-  return b.ask(req);
+  return withResilience(() => b.ask(req), resilience);
 }
+
+export { resetSessionState, getSessionCost } from './resilience.js';
+export type { ResilienceOptions } from './resilience.js';

@@ -309,6 +309,76 @@ interface CacheEntry {
 
 ---
 
+### LLM backend production 수준 — retry/timeout/cost cap/circuit breaker (PR #27)
+
+#### 의도
+
+PR #23(Claude Vision)·#25(explore)·#26(RAG)까지 LLM 호출 자체는 동작하지만, production 사용 가정에서 **단일 호출 실패가 전체 흐름을 깨뜨림** + **비용 가시화·차단 부재**:
+- 429 rate limit → 즉시 fail
+- 일시 5xx → fail
+- 매 호출 무제한 cost 누적
+- 무한 hang (timeout 없음)
+- 연속 실패 시도 계속
+
+resilience 레이어로 한 번에 해결.
+
+#### 신규 모듈
+
+`src/intelligence/resilience.ts` — `withResilience(inner, opts)`:
+
+| 기능 | 동작 |
+|---|---|
+| **Retry** | 429 / 5xx / overloaded / timeout / ECONNRESET → exponential backoff (jitter 포함). `maxRetries: 3` default |
+| **Timeout** | per-call AbortController. `timeoutMs: 30000` default |
+| **Cost cap** | session 단위 cumulative cost. `costCapUsd` 초과 시 throw. before-call + after-call 두 번 체크 |
+| **Circuit breaker** | 연속 N회 실패 시 open. 새 호출 즉시 throw. `resetSessionState()`로 리셋 |
+| **Cost ledger** | `getSessionCost()`로 누적 조회 |
+| **Callbacks** | `onRetry(attempt, err)`, `onCost(total, last)` |
+
+#### CLI 옵션
+
+`tirno ask` + `tirno explore` 에 일괄:
+- `--max-retries <n>` (default 3)
+- `--timeout-ms <n>` (default 30000)
+- `--cost-cap <usd>` (cumulative)
+
+`explore`는 매 step의 LLM call을 wrap — 한 step 실패해도 retry, total cost cap 적용.
+
+#### 예시
+
+```bash
+# rate limit 자주 맞을 때
+tirno ask "..." --max-retries 5
+
+# 비용 제어
+tirno explore "<goal>" --cost-cap 0.50    # 누적 $0.50 도달 시 중단
+
+# 응답 느린 backend / 큰 prompt
+tirno ask "..." --timeout-ms 60000
+```
+
+#### 검증
+
+`test/resilience.test.ts` 9 케이스:
+- success passthrough
+- retry on retryable + 결국 success
+- non-retryable 즉시 fail
+- maxRetries 소진 후 throw
+- cost cap before-call / after-call 둘 다
+- circuit breaker open 후 즉시 throw
+- resetSessionState 후 cost / circuit 리셋
+- onRetry callback 호출 카운트
+
+97/97 tests pass (88 + 9).
+
+#### 한계 / 후속
+
+- streaming response 미지원 — 한 번에 받는 형태. 큰 prompt에 latency 영향
+- prompt caching (Anthropic 4-hour cache, OpenAI prefix cache) 미활성 — 다음 PR 후보
+- per-API-key rate limit 자체 추적 없음 — backend가 알아서 처리. 큰 규모면 token bucket 별도
+
+---
+
 ### embedding pipeline + RAG retrieval (PR #26)
 
 #### 의도

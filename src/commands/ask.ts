@@ -55,6 +55,9 @@ export function registerAskCommand(program: Command): void {
     .option('--no-a11y', 'Skip a11y tree dump')
     .option('--ax-lines <n>', 'Max a11y dump lines', (v: string) => parseInt(v, 10), 200)
     .option('--max-tokens <n>', 'Cap response tokens', (v: string) => parseInt(v, 10), 1024)
+    .option('--max-retries <n>', 'Retry on 429/5xx (default 3)', (v: string) => parseInt(v, 10), 3)
+    .option('--timeout-ms <n>', 'Per-call timeout (default 30000)', (v: string) => parseInt(v, 10), 30000)
+    .option('--cost-cap <usd>', 'Cumulative session cost cap in USD', parseFloat)
     .option('--out <path>', 'Write JSON response to path')
     .option('--hint <text>', 'User hint to include in prompt')
     .action(async (goal: string, opts) => {
@@ -89,18 +92,27 @@ export function registerAskCommand(program: Command): void {
         info(`Asking ${opts.backend} (goal: "${goal}", ${screenshot ? `${(screenshot.length / 1024).toFixed(0)}KB screenshot,` : 'no screenshot,'} ${a11yDump ? `a11y ${a11yDump.split('\n').length} lines` : 'no a11y'})...`);
 
         const start = Date.now();
-        const response = await intelligenceAsk(opts.backend as BackendName, {
-          goal,
-          ask: 'next_action',
-          context: {
-            pageUrl: url,
-            viewport,
-            screenshot,
-            a11yDump,
-            userHint: opts.hint,
+        const response = await intelligenceAsk(
+          opts.backend as BackendName,
+          {
+            goal,
+            ask: 'next_action',
+            context: {
+              pageUrl: url,
+              viewport,
+              screenshot,
+              a11yDump,
+              userHint: opts.hint,
+            },
+            maxTokens: opts.maxTokens,
           },
-          maxTokens: opts.maxTokens,
-        });
+          {
+            maxRetries: opts.maxRetries,
+            timeoutMs: opts.timeoutMs,
+            costCapUsd: opts.costCap,
+            onRetry: (attempt, err) => info(`retry ${attempt}/${opts.maxRetries}: ${err.message.slice(0, 80)}`),
+          },
+        );
         const elapsed = Date.now() - start;
 
         if (opts.out) {
