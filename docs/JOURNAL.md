@@ -309,6 +309,73 @@ interface CacheEntry {
 
 ---
 
+### 지능요청 — Anthropic Claude Vision backend (PR #23)
+
+#### 의도
+
+가치 흐름 4번 — 결정론(cache + multi-channel)이 막혔을 때 LLM에게 multi-channel context를 통째로 던져 next action을 받는다.
+
+PR #14의 cloud stub(claude/openai/gemini)에서 멈춰있었음. 1차 — Anthropic Claude 실제 구현.
+
+#### 모듈 구조
+
+```
+src/intelligence/
+  types.ts                  IntelligenceRequest / Response / Backend / ProposedAction
+  dispatcher.ts             backend lazy load (claude/openai/gemini)
+  backends/claude.ts        @anthropic-ai/sdk 실제 호출
+src/commands/
+  ask.ts                    tirno ask <goal>
+```
+
+vision/* (OCR 전용)과 분리. intelligence는 일반 LLM reasoning. claude는 둘 다 가능하지만 메인 의도가 다르므로 분리.
+
+#### Prompt 형식
+
+system: "tirno 행동 agent. JSON 형식으로 next action 응답."
+user content:
+1. screenshot (PNG → base64) — opt-out 가능
+2. multi-channel text:
+   - goal / ask / url / viewport
+   - userHint
+   - a11y tree dump (truncated)
+   - attemptedWaypoints (실패한 단서, 반복 방지)
+   - nearbyWaypoints (cache RAG retrieval — 향후 #21)
+
+응답 JSON:
+```json
+{
+  "action": { "type": "click", "target": { "selector": "...", "x": N, "y": N }, "reasoning": "..." },
+  "confidence": 0.0-1.0,
+  "reasoning": "1-3 sentences"
+}
+```
+
+#### CLI
+
+```bash
+tirno ask "<goal>" [--backend claude] \
+  [--no-screenshot] [--no-a11y] [--ax-lines N] \
+  [--max-tokens N] [--out path] [--hint "..."]
+```
+
+- 매 호출 token usage + estimated cost USD 출력 — 비용 가시화
+- `--out path` JSON으로 저장 (audit / 다음 step input)
+
+env:
+- `ANTHROPIC_API_KEY` (필수)
+- `TIRNO_CLAUDE_MODEL` (default `claude-haiku-4-5`)
+- `TIRNO_CLAUDE_PRICE_IN/OUT` (1M token당 USD, 가격 변경 시 override)
+
+#### 한계 / 후속
+
+- openai / gemini는 dispatcher에서 throw — 다음 PR
+- streaming / retry / circuit breaker / rate limit / prompt caching → #24 (LLM production 수준)
+- nearbyWaypoints RAG retrieval은 #21 (vector 검색)에서 자동 채움
+- explore 명령(#29)이 ask + 시도 + cache 저장 loop를 묶음
+
+---
+
 ### Trail 모델 + 가치 흐름 정정 (PR #22)
 
 #### 의도
