@@ -4,43 +4,10 @@ Multi-session browser automation CLI on raw CDP.
 
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다. agent가 사이트를 돌아다니며 알아낸 사실을 누적하고 다음 시도에 빠르게 재사용하는 게 목표.
 
-## 이름
+이름은 요정어로 *지켜보는 자* (`tir-` — 보다·지키다). 개명 내력은 [docs/JOURNAL.md](docs/JOURNAL.md).
 
-**tirno** — 요정어로 *지켜보는 자*. 「보다·지키다」를 뜻하는 어근 `tir-` 에서 나온 말이다.
-
-같은 뿌리에서 나온 훨씬 유명한 단어가 하나 있다. **palantír** — *palan*(멀리) + *tír*(보다),
-"멀리 보는 것". 이름을 고를 때 그쪽을 먼저 찾아봤지만 npm 에 임자가 있었고, 남아 있던 것이
-`tirno` 였다. 지나고 보니 이쪽이 맞았다. palantír 는 보여줄 것을 **고르고** 보는 사람을
-홀린다. tirno 는 고르지 않는다 — 본 것을 그대로 내놓고, 판단은 부르는 쪽에 맡긴다.
-
-### 두 번의 개명
-
-이름은 두 번 바뀌었고 (2026-05-05, 같은 날), 그 궤적이 이 도구가 무엇이 되려 했는지를
-그대로 보여준다.
-
-| | 뜻 | 이름이 가리킨 것 |
-|---|---|---|
-| `chromux` | Chrome + tmux | **구현** — 탭을 tmux 세션처럼 다루는 방식 |
-| `wandr` | wander | **행동** — 사이트를 휘적휘적 다니며 알아낸 것을 적어두기 |
-| `tirno` | watcher | **태도** — 관측하고, 보고한다 |
-
-`chromux` 를 버린 건 취향이 아니라 충돌이었다. npm 에 이미 같은 이름 같은 컨셉이 있었다 —
-"tmux for Chrome tabs, zero-dependency parallel Chrome tab controller via raw CDP". 남의 자리에
-같은 물건을 놓을 수는 없었다.
-
-`wandr` 는 하루를 못 넘겼다. 방랑은 이 도구가 **하는 일**이지 **되려는 것**이 아니었다.
-돌아다니는 건 수단이고, 남는 건 본 것이다.
-
-### 이름이 정확해진 날
-
-`tirno` 가 실제로 지켜보는 자가 된 건 3개월 반 뒤다. 2026-08-19, 이 안의 LLM 층을 전부
-들어냈다 — `ask` · `explore` · RAG 검색. 판단하는 부분이 빠지고 관측과 조작만 남았을 때에야
-이름과 물건이 같아졌다.
-
-> **지능은 tirno 를 호출하는 쪽이 갖는다.**
-> 이 도구는 보고, 적고, 다시 꺼내 준다. 무엇을 할지는 정하지 않는다.
-
-개명 전문은 [docs/JOURNAL.md](docs/JOURNAL.md) 의 2026-05-05 항목에 있다.
+> **지능은 tirno 를 호출하는 쪽이 갖는다.** 이 도구는 보고, 적고, 다시 꺼내 준다.
+> 무엇을 할지는 정하지 않는다 — 안에 LLM 이 없다.
 
 ## 핵심 컨셉
 
@@ -54,6 +21,9 @@ Multi-session browser automation CLI on raw CDP.
 | **Emulation** | device/network/cpu/dpr emulation 영속 — 한번 적용하면 다음 명령에서도 유지 |
 
 ## 설치
+
+> 처음이라면 [docs/ONBOARDING.md](docs/ONBOARDING.md) — 설치부터 첫 세션까지,
+> 자주 걸리는 자리와 그 메시지까지 실행해 본 순서대로 적어뒀다.
 
 npm 레지스트리에 올라가 있지 않다. 소스에서 받는다.
 
@@ -222,7 +192,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | 명령 | 설명 |
 |---|---|
 | `nav <url>` | URL로 이동 |
-| `reload` / `back` / `forward` | 페이지 이력 제어 |
+| `reload [--hard]` / `back` / `forward` | 페이지 이력 제어. `--hard` 는 캐시를 우회해 다시 받는다 |
 | `pages` / `select <id>` / `new-tab [url]` / `close-tab <id>` | 탭 제어. ID 는 CDP targetId 앞 8자리로, 탭이 열리고 닫혀도 안 바뀐다(위치 인덱스가 아니다). 4자 이상이면 접두사로도 된다 |
 
 ### 검사
@@ -238,9 +208,9 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `click <selector\|@N>` | 클릭 |
 | `fill <selector\|@N> <value>` | input clear + type |
-| `type <text>` / `press <key>` / `hover <selector>` | 키보드/마우스 |
+| `type <text>` / `press <key>` / `hover <selector\|@N>` | 키보드/마우스 |
 | `scroll up\|down\|<pixels>` | 스크롤 |
-| `wait <ms>` / `wait-for [selector] [--network-idle]` | 대기 |
+| `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
 
@@ -267,7 +237,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록 |
 | `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>]` | 캐시된 ref + selector + bbox emit. viewport 미지정 시 가장 최근 |
-| `cache prune [--older-than <days>] [--domain <d>]` | 정리 |
+| `cache prune (--older-than <days> \| --all) [--domain <d>]` | 정리. **나이나 `--all` 중 하나를 반드시 준다** — 무인자로 전량을 지우지 않는다 |
 
 저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
 
@@ -302,6 +272,14 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 
 `record` 와 저장소가 갈려 있는 이유는 성격이 달라서다 — `record` 는 내가 성공시킨 순서,
 `trail` 은 사람에게 빚진 순서다. 후자가 늘면 도구가 못하고 있다는 신호다.
+
+### 종료코드
+
+실패는 전부 **exit 1** 이다 — 실패한 navigation, 없는 세션, 거부된 kill, `broadcast` 의
+부분 실패(자식 하나만 죽어도), `eval` 이 페이지에서 받은 예외까지. 종류별로 코드를 나누지
+않으므로 `$?` 하나만 보면 된다.
+
+`drift` 는 선언한 플래그와 실행 중 프로세스가 다르면 1 로 끝나므로 그대로 게이트가 된다.
 
 ### 자기기술
 
