@@ -5,6 +5,18 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
 import { clickByRef, fillByRef } from '../cdp/dom-actions.js';
 import * as refStore from '../core/ref-store.js';
+import type { Page } from 'puppeteer-core';
+
+async function elemCenter(page: Page, selector: string): Promise<[number, number]> {
+  const box = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return [r.left + r.width / 2, r.top + r.height / 2];
+  }, selector);
+  if (!box) throw new Error(`Element not found: ${selector}`);
+  return [Math.round(box[0]), Math.round(box[1])];
+}
 
 export function registerInputCommands(program: Command): void {
   program
@@ -118,6 +130,76 @@ export function registerInputCommands(program: Command): void {
 
         browser.disconnect();
         success(`Hovered ${selector}`);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('drag')
+    .description('Drag from <from> to <to>. Coords as "x,y" or selectors (auto-detect).')
+    .argument('<from>', 'Source: "x,y" coord or CSS selector')
+    .argument('<to>', 'Destination: "x,y" coord or CSS selector')
+    .option('-s, --session <name>', 'Session name')
+    .option('--steps <n>', 'Intermediate mousemove steps (default 20)', intArg, 20)
+    .option('--hold <ms>', 'Hold time at source after mousedown (default 100)', intArg, 100)
+    .option('--native', 'Force native HTML5 drag intercept even with coord args')
+    .action(async (from: string, to: string, opts) => {
+      try {
+        const isCoord = (s: string) => /^\d+\s*,\s*\d+$/.test(s);
+        const parseCoord = (s: string): [number, number] => {
+          const [x, y] = s.split(',').map(n => parseInt(n.trim(), 10));
+          return [x, y];
+        };
+
+        const { browser } = await connect(opts.session);
+        const page = await getActivePage(browser);
+
+        // native HTML5 drag intercept path (selector OR coord — drag with
+        // CDP intercept gives the page the trusted dataTransfer it needs)
+        if (!isCoord(from) && !isCoord(to) || opts.native) {
+          const [fx, fy] = isCoord(from) ? parseCoord(from) : await elemCenter(page, from);
+          const [tx, ty] = isCoord(to) ? parseCoord(to) : await elemCenter(page, to);
+          const cdp = await page.createCDPSession();
+          let dragData: unknown = null;
+          cdp.on('Input.dragIntercepted', (e: unknown) => { dragData = (e as { data: unknown }).data; });
+          await cdp.send('Input.setInterceptDrags', { enabled: true });
+          await page.mouse.move(fx, fy);
+          await page.mouse.down();
+          // small move to trigger dragstart → dragIntercepted
+          await page.mouse.move(fx + 5, fy + 5);
+          await page.mouse.move(tx, ty, { steps: opts.steps });
+          // wait for intercept to capture data
+          await new Promise(r => setTimeout(r, 150));
+          if (dragData) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const data = dragData as any;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const sendAny = cdp.send.bind(cdp) as any;
+            await sendAny('Input.dispatchDragEvent', { type: 'dragEnter', x: tx, y: ty, data });
+            await sendAny('Input.dispatchDragEvent', { type: 'dragOver', x: tx, y: ty, data });
+            await sendAny('Input.dispatchDragEvent', { type: 'drop', x: tx, y: ty, data });
+          }
+          await page.mouse.up();
+          await cdp.send('Input.setInterceptDrags', { enabled: false });
+          await cdp.detach();
+          browser.disconnect();
+          success(`Dragged "${from}" (${fx},${fy}) → "${to}" (${tx},${ty}) ${dragData ? '[native drag]' : '[no drag data — mouse only]'}`);
+          return;
+        }
+
+        // coord-based fallback (mouse events only — no native drag)
+        const [fx, fy] = isCoord(from) ? parseCoord(from) : await elemCenter(page, from);
+        const [tx, ty] = isCoord(to) ? parseCoord(to) : await elemCenter(page, to);
+        await page.mouse.move(fx, fy);
+        await page.mouse.down();
+        await new Promise(r => setTimeout(r, opts.hold));
+        await page.mouse.move(tx, ty, { steps: opts.steps });
+        await page.mouse.up();
+
+        browser.disconnect();
+        success(`Dragged (${fx},${fy}) → (${tx},${ty}) (mouse only)`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

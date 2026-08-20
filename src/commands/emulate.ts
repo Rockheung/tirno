@@ -14,6 +14,7 @@ export function registerEmulateCommand(program: Command): void {
     .description('Emulate device, network, or CPU')
     .option('-s, --session <name>', 'Session name')
     .option('--device <name>', 'Device preset (e.g. "iPhone 14")')
+    .option('--viewport <wxh>', 'Set viewport size, e.g. 1920x1080. Persists like other emulation.')
     .option('--network <profile>', 'Network preset (slow-3g|fast-3g|4g|offline)')
     .option('--cpu <rate>', 'CPU throttle rate (e.g. 4 = 4x slowdown)', floatArg)
     .option('--dpr <n>', 'Device pixel ratio override', floatArg)
@@ -52,6 +53,18 @@ export function registerEmulateCommand(program: Command): void {
             mobile: device.viewport.isMobile ?? false,
           };
           applied.push(`device=${opts.device}`);
+        }
+
+        if (opts.viewport) {
+          const m = /^(\d+)x(\d+)$/.exec(opts.viewport);
+          if (!m) throw new Error(`--viewport must be <width>x<height>, got "${opts.viewport}"`);
+          const w = Number(m[1]);
+          const h = Number(m[2]);
+          // device 설정과 결합 가능 — device의 dsf/mobile 유지하고 width/height만 덮어씀
+          const base = nextEmu.viewport ?? { width: w, height: h, deviceScaleFactor: 1, mobile: false };
+          nextEmu.viewport = { ...base, width: w, height: h };
+          // explicit viewport overrides device viewport but keeps device UA/touch via emu.device
+          applied.push(`viewport=${w}x${h}`);
         }
 
         if (opts.network) {
