@@ -44,6 +44,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     headless: opts.headless ?? false,
     userDataDir,
     args,
+    ignoreDefaultArgs: ['--enable-automation'],
     pipe: false,
     defaultViewport: null,
   });
