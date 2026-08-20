@@ -143,9 +143,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     // Pin JS-side viewport to 1920x1080 via setDeviceMetricsOverride. Chrome
     // window-size flag handles the OS window, but the inner viewport differs
     // by chrome bar height; emulation viewport pins it deterministically.
-    emulation: {
-      viewport: { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false },
-    },
+    emulation: store.defaultEmulation(),
   };
 
   store.create(meta);

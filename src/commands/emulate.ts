@@ -36,10 +36,16 @@ export function registerEmulateCommand(program: Command): void {
         const page = await getActivePage(browser);
 
         if (opts.reset) {
+          // Back to what a fresh session has, not to what the browser does on
+          // its own. Wiping the entry outright dropped tirno's 1920x1080 pin
+          // too, leaving the session at the raw window size (1920x993) and out
+          // of step with every visual-cache entry other sessions wrote.
           await clearEmulation(page);
+          const restored = store.defaultEmulation();
+          await applyEmulation(page, restored);
           browser.disconnect();
-          store.update(meta.name, { emulation: undefined });
-          success('Emulation: cleared');
+          store.update(meta.name, { emulation: restored });
+          success('Emulation: reset to default (viewport 1920x1080)');
           return;
         }
 

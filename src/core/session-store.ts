@@ -13,6 +13,19 @@ export interface EmulationState {
   geolocation?: { latitude: number; longitude: number; accuracy: number };
 }
 
+/**
+ * What every session starts with, and what `tirno emulate --reset` goes back to
+ * — not to whatever the browser would do on its own.
+ *
+ * The fixed 1920x1080 is the point: it makes screenshots reproducible and keeps
+ * visual-cache viewport keys comparable between sessions (see CLAUDE.md).
+ * Clearing to the raw window size instead leaves 1920x993, which silently stops
+ * matching every cache entry another session wrote.
+ */
+export function defaultEmulation(): EmulationState {
+  return { viewport: { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false } };
+}
+
 export interface SessionMetadata {
   name: string;
   pid: number;
