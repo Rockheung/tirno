@@ -116,7 +116,7 @@ tirno kill mysession
 backend 선택:
 - `tesseract` (default) — light, 한국어/영어 동시 지원 (`--lang kor+eng`), word 단위
 - `paddle` — PaddleOCR via @gutenye/ocr-node, line 단위, 영어 default. 한국어는 `--paddle-models <dir>` 로 PaddleOCR 한국어 det/rec/dict 지정
-- `florence` — Florence-2 via transformers.js (stub, 다음 phase)
+- `florence` — Florence-2 via `@huggingface/transformers`. **experimental** — 모델 로드/추론 인프라는 동작하나, transformers.js v4의 task token(`<OCR_WITH_REGION>`) 처리에 디코딩 버그가 있어 output 정확성 미흡. production 용도는 tesseract/paddle 권장. env: `TIRNO_FLORENCE_MODEL`, `TIRNO_FLORENCE_DTYPE` (q4|q8|fp32), `TIRNO_FLORENCE_DEBUG=1`
 
 ### Multi-session
 | 명령 | 설명 |
