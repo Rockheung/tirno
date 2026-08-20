@@ -54,13 +54,15 @@ export function registerMultiCommands(program: Command): void {
 
   program
     .command('broadcast')
-    .description('Run a command on all sessions')
+    .description('Run a command on all sessions (or a group)')
     .argument('<cmd>', 'Command to run (nav, screenshot, eval, ...)')
     .argument('[args...]', 'Command arguments')
-    .action(async (cmd: string, args: string[]) => {
-      const sessions = store.list();
+    .option('--group <name>', 'Limit to sessions in this group')
+    .action(async (cmd: string, args: string[], opts) => {
+      let sessions = store.list();
+      if (opts.group) sessions = sessions.filter(s => s.group === opts.group);
       if (sessions.length === 0) {
-        info('No sessions');
+        info(opts.group ? `No sessions in group '${opts.group}'` : 'No sessions');
         return;
       }
 

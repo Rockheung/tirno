@@ -11,6 +11,7 @@ export function registerNavCommands(program: Command): void {
     .argument('<url>', 'Target URL')
     .option('-s, --session <name>', 'Session name')
     .option('--timeout <ms>', 'Navigation timeout', intArg, 30000)
+    .option('--strict', 'Exit non-zero unless response is 2xx')
     .action(async (url: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -23,6 +24,11 @@ export function registerNavCommands(program: Command): void {
         const elapsed = Date.now() - start;
         const status = response?.status() ?? 0;
         browser.disconnect();
+
+        if (opts.strict && (status < 200 || status >= 300)) {
+          error(`${url} (${status}, ${elapsed}ms) — strict: non-2xx`);
+          process.exit(1);
+        }
         success(`${url} (${status}, ${elapsed}ms)`);
       } catch (e) {
         error((e as Error).message);

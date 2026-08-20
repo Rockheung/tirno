@@ -20,6 +20,7 @@ export interface SessionMetadata {
   createdAt: string;
   lastAccessedAt: string;
   emulation?: EmulationState;
+  group?: string;
 }
 
 const TIRNO_DIR = path.join(os.homedir(), '.tirno');
