@@ -165,7 +165,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | 명령 | 설명 |
 |---|---|
 | `screenshot [--full] [--out path]` | 스크린샷 |
-| `snapshot [--no-cache] [--vision [backend]]` | a11y 트리 + visual cache 적재. `--vision`으로 OCR 보강 (default paddle). 옵션: `--vision-lang`, `--vision-min-confidence`, `--vision-iou`, `--vision-contain` |
+| `snapshot [--no-cache] [--embed]` | a11y 트리 + visual cache 적재. `--embed` 는 선택 의존(`@huggingface/transformers`)이 있을 때만 |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>]` | reload 후 2초간 network 캡처 |
 
@@ -205,30 +205,23 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 
 저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
 
-### Vision OCR
-| 명령 | 설명 |
-|---|---|
-| `vision ocr [--backend <name>] [--lang <l>] [--full] [--out <path>] [--min-confidence <n>] [--paddle-models <dir>]` | 페이지 OCR — 단어/줄별 bbox + confidence |
+### 설치 크기
 
-backend 선택 — **local 기본**, cloud는 확장 예정 (현재 stub):
+런타임 의존 8개, **233MB, 네이티브 바이너리 0개.**
 
-**local**:
-- `paddle` (**default**) — PaddleOCR via @gutenye/ocr-node, line 단위, 영어 default. 한국어는 `--paddle-models <dir>` 로 PaddleOCR 한국어 det/rec/dict 지정
-- `florence` — Florence-2 via `@huggingface/transformers`. **experimental** — 모델 로드/추론 인프라는 동작하나, transformers.js v4의 task token 처리에 디코딩 버그가 있어 output 정확성 미흡. env: `TIRNO_FLORENCE_MODEL`, `TIRNO_FLORENCE_DTYPE` (q4|q8|fp32), `TIRNO_FLORENCE_DEBUG=1`
+무거운 것은 `dependencies` 에 없다 — 실제로 안 쓰이는데 974MB 를 받게 했기 때문이다.
+필요하면 직접 설치하면 그 경로가 켜진다:
 
-**cloud** (Phase 6-2f 예정 — 현재 stub):
-- `claude` — `ANTHROPIC_API_KEY`
-- `openai` — `OPENAI_API_KEY`
-- `gemini` — `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`
+| 기능 | 필요한 것 | 크기 |
+|---|---|---|
+| `snapshot --embed` · `explore --rag` | `@huggingface/transformers` | ~588MB (onnxruntime 포함) |
+| `TIRNO_STORAGE_BACKEND=lance` | `@lancedb/lancedb` | ~92MB (네이티브) |
 
-cloud backend는 API key 없으면 안내 메시지, 있으면 "not yet implemented" 메시지. CLI surface는 stable.
+없는 상태에서 그 명령을 부르면 무엇을 설치하라는 안내가 나온다. 나머지는 전부 돈다.
 
-### 자기 기술 (agent 용)
-| 명령 | 설명 |
-|---|---|
-| `schema [--pretty]` | 명령 트리 전체를 JSON 으로. [The CLI Spec](https://clispec.dev/) v0.3 형식 |
-
-에이전트가 `--help` 를 긁을 필요가 없다 — 72개 엔드포인트가 `effects`(read_only / idempotent / non_idempotent)와 `destructive` 표시를 달고 나온다. commander 트리에서 자동 생성이라 CLI 와 어긋나지 않고, 분류가 빠지면 유닛 테스트가 깨진다.
+**OCR 은 없다.** `tirno vision` 과 `snapshot --vision*` 는 2026-08-19 에 제거했다 —
+`onnxruntime-node` 259MB 를 끌고 오면서 한 번도 쓰이지 않았고, `florence` 백엔드는
+자기 소스에 고장났다고 적혀 있었다. 되살릴 때는 플러그인으로 붙인다.
 
 ### Multi-session
 | 명령 | 설명 |

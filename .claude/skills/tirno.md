@@ -150,7 +150,6 @@ tirno broadcast [--group <g>] <cmd>   # 여러 세션에 같은 명령
 
 ```bash
 tirno cache list|load|prune           # 1번. URL·viewport 키 스냅샷 저장소
-tirno vision ocr [--backend <b>]      # 2번. OCR 채널 (기본 paddle, 로컬)
 tirno cdp <method> [params]           # 3번. 모든 CDP 명령 raw passthrough
 tirno ask <goal>                      # 4번. 단발 LLM 질의
 tirno explore <goal>                  # 4번. cache → 채널 → CDP → LLM 자율 탐색
@@ -160,8 +159,13 @@ tirno replay <name>                   # 신뢰 이벤트로 재생. 채널 순�
 ```
 
 **지능 백엔드는 claude 하나뿐이다.** `--backend openai|gemini` 는 인자로 받지만
-`dispatcher.ts` 가 "not yet implemented" 로 던진다. vision 의 cloud 백엔드 3종도 stub 이고
-실제로 도는 것은 로컬 paddle 이다.
+`dispatcher.ts` 가 "not yet implemented" 로 던진다.
+
+**OCR 채널은 없다.** 2026-08-19 에 들어냈다 — `onnxruntime` 259MB 를 끌고 오는데 이
+머신에서 한 번도 안 돌았다. 되살릴 때는 플러그인으로 붙인다.
+
+**임베딩·벡터검색(`snapshot --embed`, `explore --rag`, `TIRNO_STORAGE_BACKEND=lance`)은
+선택 의존이다.** 설치돼 있지 않으면 그 명령만 설치 안내를 던지고, 나머지는 다 돈다.
 
 ### 자기 기술 — 에이전트는 `--help` 를 긁지 말 것
 

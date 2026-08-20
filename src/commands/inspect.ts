@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { intArg, floatArg } from '../util/parsers.js';
+import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
@@ -8,8 +8,6 @@ import * as refStore from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
-import { visionAugment } from '../vision/augment.js';
-import { ALL_BACKENDS, DEFAULT_BACKEND, type BackendName } from '../vision/types.js';
 import type { Bbox } from '../cdp/iou.js';
 import type { ScreenshotOptions } from 'puppeteer-core';
 
@@ -56,11 +54,6 @@ export function registerInspectCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--verbose', 'Include all elements (default: skip ignored)')
     .option('--no-cache', 'Skip visual-cache write')
-    .option('--vision [backend]', `Augment with OCR-discovered text in regions a11y missed (default: ${DEFAULT_BACKEND})`)
-    .option('--vision-lang <lang>', 'Language(s) for vision OCR (e.g. eng, kor+eng)', 'eng')
-    .option('--vision-min-confidence <n>', 'Drop OCR words below this confidence', intArg, 50)
-    .option('--vision-iou <n>', 'IoU threshold for "covered by a11y" (0..1)', floatArg, 0.3)
-    .option('--vision-contain <n>', 'Contained-in threshold (vision word inside a11y bbox)', floatArg, 0.8)
     .option('--embed', 'Compute semantic embedding for each ref (for RAG retrieval, ~50ms each + first-load model download)')
     .action(async (opts) => {
       try {
@@ -88,26 +81,12 @@ export function registerInspectCommands(program: Command): void {
 
         const { lines, refs: detailed } = renderAXTree(tree.nodes, !opts.verbose);
 
-        // resolve vision backend if requested
-        let visionBackend: BackendName | null = null;
-        if (opts.vision) {
-          const requested = typeof opts.vision === 'string' ? opts.vision : DEFAULT_BACKEND;
-          if (!ALL_BACKENDS.includes(requested as BackendName)) {
-            await cdp.detach();
-            browser.disconnect();
-            throw new Error(`Unknown vision backend "${requested}". Valid: ${ALL_BACKENDS.join(', ')}`);
-          }
-          visionBackend = requested as BackendName;
-        }
-
         // collect cache data and (optional) vision augment while CDP is attached
         let cachePayload: visualCache.CacheEntry | null = null;
-        let visionMeta: { backend: string; durationMs: number; total: number; attached: number; orphan: number } | null = null;
         let cacheRefs: visualCache.Waypoint[] = [];
 
         const needCache = opts.cache !== false;
-        const needVision = visionBackend !== null;
-        if (needCache || needVision) {
+        if (needCache) {
           try {
             if (needCache) {
               const url = page.url();
@@ -148,27 +127,7 @@ export function registerInspectCommands(program: Command): void {
               };
             }
 
-            if (needVision && visionBackend) {
-              const aug = await visionAugment(screenshot, cacheRefs, {
-                backend: visionBackend,
-                lang: opts.visionLang,
-                containThreshold: opts.visionContain,
-                minConfidence: opts.visionMinConfidence,
-              });
-              cacheRefs = aug.refs;
-              visionMeta = {
-                backend: visionBackend,
-                durationMs: aug.durationMs,
-                total: aug.totalOcrWords,
-                attached: aug.attached,
-                orphan: aug.orphan,
-              };
-              if (cachePayload) cachePayload.refs = cacheRefs;
-            }
-          } catch (e) {
-            // best-effort — don't fail snapshot
-            if (needVision) info(`vision augment skipped: ${(e as Error).message}`);
-          }
+          } catch { /* best-effort — a cache write must not fail the snapshot */ }
         }
 
         await cdp.detach();
@@ -200,19 +159,6 @@ export function registerInspectCommands(program: Command): void {
 
         for (const line of lines) console.log(line);
 
-        if (visionMeta) {
-          console.log('');
-          console.log(`# vision (${visionMeta.backend}, ${visionMeta.durationMs}ms): ${visionMeta.attached} attached to a11y, ${visionMeta.orphan} orphan, ${visionMeta.total} total OCR words`);
-          // visual-only orphan refs
-          for (const r of cacheRefs) {
-            if (r.channels.a11y) continue;
-            const v = r.channels.visual;
-            if (!v) continue;
-            const conf = (v.ocrConf ?? 0).toString().padStart(3, ' ');
-            const bb = `(${v.bbox.x},${v.bbox.y} ${v.bbox.w}x${v.bbox.h})`;
-            console.log(`${(r.refId ?? r.id).padEnd(5)} text [${conf}%] ${bb} "${v.ocrText ?? ''}"`);
-          }
-        }
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

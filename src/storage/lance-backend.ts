@@ -29,11 +29,22 @@ const EMBEDDING_DIM = parseInt(process.env.TIRNO_EMBEDDING_DIM ?? '384', 10);
 type Table = any;
 type Connection = any;
 
+// Resolved at runtime, not by tsc — see embedding.ts for why.
+const OPTIONAL_MODULE = '@lancedb/lancedb';
+
 let cachedConn: Connection | null = null;
 async function getConnection(): Promise<Connection> {
   if (cachedConn) return cachedConn;
   fs.mkdirSync(lanceDir(), { recursive: true });
-  const lance = await import('@lancedb/lancedb');
+  // Not a dependency — only reachable via TIRNO_STORAGE_BACKEND=lance, and the
+  // default `file` backend covers everything short of a very large corpus.
+  const lance = await import(/* @vite-ignore */ OPTIONAL_MODULE).catch(() => {
+    throw new Error(
+      'TIRNO_STORAGE_BACKEND=lance needs @lancedb/lancedb, which tirno does not install.\n' +
+      '  npm i -g @lancedb/lancedb    (~92MB, native binary)\n' +
+      'Unset TIRNO_STORAGE_BACKEND to use the file backend.'
+    );
+  });
   cachedConn = await (lance as any).connect(lanceDir());
   return cachedConn!;
 }
