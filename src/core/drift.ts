@@ -87,6 +87,26 @@ export interface SessionDrift extends DriftReport {
 }
 
 /**
+ * Chrome takes trailing positionals as start URLs, and `ps -o command=` hands
+ * back one space-joined string, so a start URL glues itself onto the value of
+ * whatever flag precedes it — `--window-position=0,0 file:///page.html`. Every
+ * session opened with a URL then reports drift on that flag.
+ *
+ * The ledger keeps those positionals as their own entries, so the exact strings
+ * are known and can be removed before parsing. No guessing at which part of a
+ * value is a URL — values legitimately contain spaces
+ * (`--host-resolver-rules=MAP example.com 127.0.0.1`).
+ */
+export function stripPositionals(cmdline: string, declared: string[]): string {
+  let out = cmdline;
+  for (const item of declared) {
+    if (item.startsWith('--')) continue;
+    out = out.replace(` ${item}`, '');
+  }
+  return out;
+}
+
+/**
  * `expected` overrides the ledger: that is how "my routing config changed, does
  * this session need a restart?" gets answered without tirno understanding the
  * config.
@@ -95,8 +115,10 @@ export async function inspectDrift(meta: SessionMetadata, expected?: string[]): 
   const inventory = await inspectSession(meta);
   const cmdline = inventory.ownership === 'ours' ? await readCmdline(meta.pid) : null;
   const want = expected ?? meta.chromeFlags;
+  // Strip from the ledger, not from `want` — a caller-supplied flag list says
+  // nothing about which positionals this browser was launched with.
   const report = cmdline
-    ? diffFlags(want, parseFlags(cmdline))
+    ? diffFlags(want, parseFlags(stripPositionals(cmdline, meta.chromeFlags)))
     : { missing: [], changed: [], hasDrift: false };
 
   return {
