@@ -90,43 +90,46 @@ export async function applyEmulation(page: Page, emu: EmulationState): Promise<v
     });
   }
 
-  if (emu.network || emu.cpu !== undefined) {
-    const cdp = await page.createCDPSession();
-    try {
-      if (emu.network) {
-        const preset = NETWORK_PRESETS[emu.network.toLowerCase()];
-        if (preset) {
-          await cdp.send('Network.emulateNetworkConditions', {
-            offline: emu.network === 'offline',
-            downloadThroughput: preset.download,
-            uploadThroughput: preset.upload,
-            latency: preset.latency,
-          });
-        }
-      }
-      if (emu.cpu !== undefined) {
-        await cdp.send('Emulation.setCPUThrottlingRate', { rate: emu.cpu });
-      }
-    } finally {
-      await cdp.detach();
+  // Network and CPU go through the page for the same reason as everything above.
+  // A page.createCDPSession() override is released when that session detaches —
+  // which happened before the command that set it even returned, so `--cpu 20`
+  // and `--network offline` were recorded in the ledger and never reached the
+  // browser at all.
+  if (emu.network) {
+    const preset = NETWORK_PRESETS[emu.network.toLowerCase()];
+    if (preset) {
+      await page.emulateNetworkConditions({
+        offline: emu.network === 'offline',
+        download: preset.download,
+        upload: preset.upload,
+        latency: preset.latency,
+      });
     }
+  }
+  if (emu.cpu !== undefined) {
+    await page.emulateCPUThrottling(emu.cpu);
   }
 }
 
+/**
+ * Clears through the same door applyEmulation writes through.
+ *
+ * A fresh `page.createCDPSession()` cannot undo those overrides — it never set
+ * them, and whatever it sends dies with it on detach. That is why `--reset`
+ * used to print "Emulation: cleared" while a `--device` viewport stayed exactly
+ * where it was.
+ */
 export async function clearEmulation(page: Page): Promise<void> {
+  await page.setViewport(null);          // device metrics, touch, isMobile
+  await page.setUserAgent('');
+  await page.emulateMediaFeatures([]);
+  await page.emulateNetworkConditions(null);
+  await page.emulateCPUThrottling(null);
+
+  // Geolocation is the one override with no page-level clear in puppeteer, so
+  // it still needs a raw send.
   const cdp = await page.createCDPSession();
   try {
-    await cdp.send('Emulation.clearDeviceMetricsOverride');
-    await cdp.send('Emulation.setUserAgentOverride', { userAgent: '' });
-    await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: false });
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-      latency: 0,
-    });
-    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-    await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [] });
     await cdp.send('Emulation.clearGeolocationOverride');
   } finally {
     await cdp.detach();
