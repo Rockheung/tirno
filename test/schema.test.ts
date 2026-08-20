@@ -20,8 +20,7 @@ async function realProgram(): Promise<Command> {
     ['multi', 'registerMultiCommands'], ['cache', 'registerCacheCommands'],
     ['cdp', 'registerCdpCommands'],
     ['record', 'registerRecordCommands'], ['replay', 'registerReplayCommand'],
-    ['trail', 'registerTrailCommands'], ['ask', 'registerAskCommand'],
-    ['explore', 'registerExploreCommand'], ['auth', 'registerAuthCommands'],
+    ['trail', 'registerTrailCommands'],
     ['stats', 'registerStatsCommand'], ['audit', 'registerAuditCommand'],
     ['screencast', 'registerScreencastCommands'], ['schema', 'registerSchemaCommand'],
   ] as const;
@@ -50,7 +49,7 @@ test('destructive commands are flagged', async () => {
   const schema = buildSchema(await realProgram());
   const destructive = schema.commands.filter(c => c.destructive).map(c => c.name).sort();
   assert.deepEqual(destructive, [
-    'auth rm', 'cache prune', 'close-tab', 'gc', 'kill',
+    'cache prune', 'close-tab', 'gc', 'kill',
     'record rm', 'restart', 'trail rm',
   ]);
 });
@@ -65,7 +64,7 @@ test('read_only commands are never destructive', async () => {
 // thing the schema exists to expose.
 test('subcommands are emitted with their full path', async () => {
   const names = buildSchema(await realProgram()).commands.map(c => c.name);
-  for (const p of ['anchor set', 'trace insight', 'auth status', 'trail replay', 'cache prune']) {
+  for (const p of ['anchor set', 'trace insight', 'trail replay', 'cache prune']) {
     assert.ok(names.includes(p), `missing ${p}`);
   }
 });

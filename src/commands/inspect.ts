@@ -54,7 +54,6 @@ export function registerInspectCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--verbose', 'Include all elements (default: skip ignored)')
     .option('--no-cache', 'Skip visual-cache write')
-    .option('--embed', 'Compute semantic embedding for each ref (for RAG retrieval, ~50ms each + first-load model download)')
     .action(async (opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -137,21 +136,6 @@ export function registerInspectCommands(program: Command): void {
         const flatRefs: refStore.RefMap = {};
         for (const [k, v] of Object.entries(detailed)) flatRefs[k] = v.backendId;
         refStore.save(meta.name, flatRefs);
-
-        // optional embeddings — compute before cache save so they persist
-        if (opts.embed && cachePayload) {
-          try {
-            const { embed, buildEmbedText } = await import('../intelligence/embedding.js');
-            for (const r of cachePayload.refs) {
-              const text = buildEmbedText(r, cachePayload.url);
-              if (!text.trim()) continue;
-              const emb = await embed(text);
-              r.embedding = Array.from(emb);
-            }
-          } catch (e) {
-            info(`embed skipped: ${(e as Error).message}`);
-          }
-        }
 
         if (cachePayload) {
           try { visualCache.save(cachePayload); } catch { /* non-fatal */ }

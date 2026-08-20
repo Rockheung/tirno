@@ -155,9 +155,6 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
   없는 명령인지 판정할 수 있다. `-- <chrome flags>` 를 받는 명령은 `passthrough` 로 표시된다
 - `tirno record start/stop` + `tirno replay <name>` — 사용자 행동 캡처 + raw CDP trusted events 로 재생 (multi-channel fallback: dom → a11y → bbox → coords)
 - `tirno trail capture/save/list/show/replay/rm` — goal 별 다단계 행동 시퀀스 (multi-channel fallback)
-- `tirno explore <goal>` — 자율 탐색: cache → multi-channel → CDP → LLM → 누적
-- `tirno ask <goal>` — 단발 LLM 질의. **지능 백엔드는 claude 하나뿐이다** — `--backend openai|gemini` 는 인자로 받지만 `dispatcher.ts` 에서 "not yet implemented" 로 던진다. `tirno auth set` 은 셋 다 받지만 그건 키 보관일 뿐이다
-- `tirno auth set/rm/status` — OS keychain 기반 API key 관리 (env var 우선)
 - `tirno broadcast <cmd> [args...]` — 다세션 동시 실행
 - `tirno diff <s1> <s2>` — 두 세션 visual diff (pixelmatch)
 - `tirno stats` — `~/.tirno/metrics.jsonl` 집계 (cache hit, llm cost, trail success rate 등)
@@ -207,8 +204,6 @@ tirno kill cast --clean
 
 ### 5. 자율 탐색 (mcp 에 없는 tirno 메인 가치)
 ```bash
-tirno new explore https://example.com --headless --ephemeral
-tirno explore "로그인 후 대시보드 이동" --rag --cost-cap 0.50
 # 성공하면 trail 자동 저장. 다음에 같은 goal 재실행하면 cache 로드.
 tirno trail list
 tirno trail replay "로그인 후 대시보드 이동"
@@ -241,10 +236,9 @@ tirno trail replay "로그인 후 대시보드 이동"
 1. **cache lookup** — 결정론, ms 단위 (`tirno cache load <url>`)
 2. **multi-channel fallback** (selector → a11y → bbox → ocr text) — 결정론, ms 단위
 3. **CDP 직접 분석 + 자율 시도** — agent 가 페이지 구조 뜯어보며 행동경로 발견
-4. **LLM (지능요청) + RAG retrieval** — `tirno ask` / `tirno explore`. 비용 / 지연 있음
 5. **사용자 시연 부탁** — `tirno trail capture` / `tirno record start`. 위 모두 실패 시 마지막 보루
 
-`tirno explore <goal>` 가 1~4 단계를 자동으로 순회한다. 5번은 그 안에서도 실패 시에만 사용자에게 명시적으로 요청.
+**tirno 안에 LLM 은 없다** — 지능이 필요한 판단은 이 도구를 부르는 쪽이 한다. 결정론 층이 막히면 마지막 보루로 사용자 시연을 부탁한다.
 
 ---
 

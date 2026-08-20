@@ -37,25 +37,10 @@ export function registerStatsCommand(program: Command): void {
         if (agg.cacheHitRate !== null) {
           summary.push(['cache hit rate', `${(agg.cacheHitRate * 100).toFixed(1)}%`]);
         }
-        if (agg.llmCallCount > 0) {
-          summary.push(['LLM calls', String(agg.llmCallCount)]);
-          summary.push(['LLM cost', `$${agg.llmCostUsd.toFixed(4)}`]);
-          summary.push(['LLM retries', String(agg.llmRetryCount)]);
-          summary.push(['LLM fails', String(agg.llmFailCount)]);
-        }
-        if (agg.exploreCount > 0) {
-          summary.push(['explore runs', String(agg.exploreCount)]);
-          for (const [outcome, n] of Object.entries(agg.exploreOutcomes)) {
-            summary.push([`  outcome: ${outcome}`, String(n)]);
-          }
-        }
         if (agg.trailReplayCount > 0) {
           const rate = agg.trailReplaySuccessRate;
           summary.push(['trail replays', String(agg.trailReplayCount)]);
           summary.push(['trail replay success', rate !== null ? `${(rate * 100).toFixed(1)}%` : '-']);
-        }
-        if (agg.embeddingComputeCount > 0) {
-          summary.push(['embeddings computed', String(agg.embeddingComputeCount)]);
         }
 
         if (summary.length > 0) {

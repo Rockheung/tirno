@@ -26,11 +26,11 @@ tirno schema --pretty | jq '.commands[] | select(.destructive) | .name'
 1. **cache lookup** — `tirno cache load <url>` (결정론, ms)
 2. **multi-channel fallback** — selector → a11y(`@ref`) → bbox → ocr (결정론, ms)
 3. **CDP 직접 분석 + 자율 시도** — `snapshot` / `eval` / `cdp` 로 구조를 뜯어본다
-4. **LLM** — `tirno ask` / `tirno explore` (비용·지연 있음)
-5. **사용자 시연 부탁** — `tirno trail capture` / `record start`. **마지막 보루**
+4. **사용자 시연 부탁** — `tirno trail capture` / `record start`. **마지막 보루**
 
-3번에서 오래 헤매면 4번으로, 4번도 실패하면 그제서야 5번이다. 반대로 1·2번을 건너뛰고
-바로 LLM 을 부르는 것은 이 도구를 쓰는 이유를 버리는 것이다.
+**tirno 안에 LLM 은 없다.** 지능이 필요한 판단은 이 도구를 부르는 쪽이 한다.
+
+1·2번을 건너뛰고 바로 3번으로 가는 것은 이 도구를 쓰는 이유를 버리는 것이다.
 
 ## 1. 세션 기동
 
@@ -208,8 +208,6 @@ tirno ls                      # 남은 게 없는지
 ## 사실로 확인해 둔 제약
 
 - `tirno audit` 은 lighthouse 를 부르므로 **http(s) 만** 된다. `file://` 은 `INVALID_URL`.
-- 지능 백엔드는 **claude 하나뿐**이다. `--backend openai|gemini` 는 인자로 받지만 던진다.
-  `tirno auth set` 이 셋 다 받는 것은 키 보관일 뿐이다.
 - `audit --mode timespan` 은 미구현이다.
 - 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜨거나
   캐시된 페이지면 `cache load <url>` 이 ref + selector + bbox 를 준다.
