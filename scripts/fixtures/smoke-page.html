@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>tirno smoke</title>
+<style>body{font:16px system-ui;margin:24px} #box{width:200px;height:120px;background:#eee;margin:12px 0} .tall{height:2000px}</style>
+<h1 id="head">tirno smoke page</h1>
+<a id="link" href="#gone">go to anchor</a>
+<form>
+  <input id="text" type="text" placeholder="type here">
+  <textarea id="area" rows="2"></textarea>
+  <select id="sel"><option value="a">A</option><option value="b">B</option></select>
+  <input id="check" type="checkbox">
+  <input id="file" type="file">
+  <button id="btn" type="button">click me</button>
+</form>
+<div id="box">drag target</div>
+<p id="status">idle</p>
+<div class="tall"></div>
+<p id="bottom">bottom marker</p>
+<script>
+  document.getElementById('btn').addEventListener('click', () => {
+    document.getElementById('status').textContent = 'clicked';
+  });
+  document.getElementById('link').addEventListener('mouseover', () => {
+    document.getElementById('status').textContent = 'hovered';
+  });
+  console.log('smoke page loaded');
+  console.warn('a warning');
+  console.error('an error');
+  fetch('data:text/plain,hello').catch(() => {});
+</script>
