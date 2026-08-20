@@ -26,6 +26,8 @@ export interface LaunchOptions {
   headless?: boolean;
   /** Override default profile dir. Caller is responsible for cleanup if ephemeral. */
   userDataDir?: string;
+  /** URL appended as final chrome arg — chrome opens it directly, skipping about:blank. */
+  bootUrl?: string;
 }
 
 export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata> {
@@ -46,6 +48,10 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     '--window-position=0,0',
     ...(opts.chromeFlags ?? []),
   ];
+  // Chrome treats trailing positional args as start URLs. Putting bootUrl
+  // last means chrome opens it on launch — no about:blank flash, no separate
+  // navigate round-trip.
+  if (opts.bootUrl) args.push(opts.bootUrl);
 
   const browser = await puppeteer.launch({
     executablePath,
