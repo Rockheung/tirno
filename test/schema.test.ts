@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Command } from 'commander';
+import fs from 'node:fs';
+import path from 'node:path';
 import { buildSchema, SEMANTICS } from '../src/core/schema.js';
 
 // The point of `tirno schema` is that nothing hand-maintained can drift from the
@@ -104,4 +106,40 @@ test('args and options carry through from commander', async () => {
 
   const ls = schema.commands.find(c => c.name === 'ls');
   assert.ok(ls?.options.some(o => o.flags.includes('--flags')));
+});
+
+// Error messages tell people what to run next, and two of them named commands
+// that do not exist (`trail start`, `trace stop --out <p>`). Nothing checks
+// prose, so the only way these stay true is to compare them against the schema.
+test('every "tirno <cmd>" in a message names a real command', async () => {
+  const names = new Set(buildSchema(await realProgram()).commands.map(c => c.name));
+  const srcDir = path.join(import.meta.dirname, '..', '..', 'src');
+
+  const files: string[] = [];
+  (function walkDir(d: string): void {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walkDir(p);
+      else if (e.name.endsWith('.ts')) files.push(p);
+    }
+  })(srcDir);
+
+  const bad: string[] = [];
+  for (const file of files) {
+    // Comments are stripped first: a quoted phrase in prose ("tirno killed an
+    // unrelated app") is not a command anyone types. Only what reaches a user
+    // — error messages, descriptions, printed hints — is checked.
+    const text = fs.readFileSync(file, 'utf-8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    // Only quoted forms — a backtick or quote is what makes it a command someone
+    // is meant to type, rather than the word "tirno" in a sentence.
+    for (const m of text.matchAll(/[`'"]tirno ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?/g)) {
+      // A second word that is an option or a placeholder means the command is
+      // the first word alone.
+      const two = m[2] && names.has(`${m[1]} ${m[2]}`) ? `${m[1]} ${m[2]}` : m[1];
+      if (!names.has(two)) bad.push(`${path.basename(file)}: ${m[0].slice(1)}`);
+    }
+  }
+  assert.deepEqual(bad, [], bad.join(' · '));
 });

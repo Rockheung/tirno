@@ -346,7 +346,7 @@ export function registerPerfCommands(program: Command): void {
         if (fs.existsSync(pidFile)) {
           const old = Number(fs.readFileSync(pidFile, 'utf-8'));
           if (Number.isFinite(old) && pidAlive(old)) {
-            throw new Error(`Trace already running (PID ${old}) writing to ${outPath} — run \`tirno trace stop --out ${outPath}\` first`);
+            throw new Error(`Trace already running (PID ${old}) writing to ${outPath} — run \`tirno trace stop ${outPath}\` first`);
           }
         }
 

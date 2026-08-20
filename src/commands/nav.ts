@@ -45,9 +45,21 @@ export function registerNavCommands(program: Command): void {
       try {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
-        await page.reload({ waitUntil: 'domcontentloaded' });
+        if (opts.hard) {
+          // puppeteer's reload has no cache switch, so the CDP call goes direct.
+          // Navigation is awaited separately because Page.reload resolves on
+          // dispatch, not on load.
+          const cdp = await page.createCDPSession();
+          await Promise.all([
+            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+            cdp.send('Page.reload', { ignoreCache: true }),
+          ]);
+          await cdp.detach();
+        } else {
+          await page.reload({ waitUntil: 'domcontentloaded' });
+        }
         browser.disconnect();
-        success(`Reloaded ${page.url()}`);
+        success(`Reloaded ${page.url()}${opts.hard ? ' (cache bypassed)' : ''}`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

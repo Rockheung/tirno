@@ -78,7 +78,7 @@ export function registerTrailCommands(program: Command): void {
   const trail = program
     .command('trail')
     .description(
-      'Trail = goal에 도달하는 행동 시퀀스. 메인 흐름은 자율 탐색 (cache + multi-channel + LLM). ' +
+      'Trail = goal에 도달하는 행동 시퀀스. 메인 흐름은 자율 탐색 (cache + multi-channel + CDP 직접 분석). ' +
       'capture는 그 모두가 실패했을 때만 사용자에게 시연 받는 마지막 fallback.'
     );
 
@@ -129,7 +129,7 @@ export function registerTrailCommands(program: Command): void {
     .action(async (opts) => {
       try {
         const active = trailStore.getActive();
-        if (!active && !opts.name) throw new Error('No active trail. Use "tirno trail start <name>" first.');
+        if (!active && !opts.name) throw new Error('No active trail. Use "tirno trail capture <name>" first.');
 
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);

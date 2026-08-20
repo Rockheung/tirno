@@ -207,7 +207,18 @@ export function list(opts: ListOptions = {}): CacheEntry[] {
     if (!fs.existsSync(dDir) || !fs.statSync(dDir).isDirectory()) continue;
     for (const urlHash of fs.readdirSync(dDir)) {
       const urlD = path.join(dDir, urlHash);
-      if (!fs.statSync(urlD).isDirectory()) continue;
+      if (!fs.statSync(urlD).isDirectory()) {
+        // One level short of the usual <domain>/<urlHash>/<viewport>.json. A
+        // `file://` URL has no hostname, so its entries land directly under the
+        // root — and skipping them hid pages that save wrote and load finds.
+        // `prune` already walks this shape.
+        if (urlHash.endsWith('.json')) {
+          try {
+            out.push(migrateEntry(JSON.parse(fs.readFileSync(urlD, 'utf-8')) as unknown));
+          } catch { /* skip corrupt */ }
+        }
+        continue;
+      }
       for (const f of fs.readdirSync(urlD)) {
         if (!f.endsWith('.json')) continue;
         try {
