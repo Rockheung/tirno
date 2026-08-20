@@ -14,7 +14,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable');
 
-  // Chrome flags come after "--": wandr new test -- --no-proxy-server
+  // Chrome flags come after "--": tirno new test -- --no-proxy-server
   newCmd.allowUnknownOption(true);
   newCmd.allowExcessArguments(true);
 
@@ -54,7 +54,7 @@ export function registerSessionCommands(program: Command): void {
       }
 
       if (sessions.length === 0) {
-        info('No sessions. Use "wandr new <name>" to create one.');
+        info('No sessions. Use "tirno new <name>" to create one.');
         return;
       }
 

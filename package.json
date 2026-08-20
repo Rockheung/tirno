@@ -1,15 +1,15 @@
 {
-  "name": "wandr",
+  "name": "tirno",
   "version": "0.1.0",
   "description": "Multi-session browser automation CLI on raw CDP",
   "type": "module",
   "bin": {
-    "wandr": "./bin/wandr.js"
+    "tirno": "./bin/tirno.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node bin/wandr.js"
+    "start": "node bin/tirno.js"
   },
   "dependencies": {
     "chalk": "^5.4.1",

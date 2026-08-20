@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const TMP_DIR = path.join(os.homedir(), '.wandr', 'tmp');
+const TMP_DIR = path.join(os.homedir(), '.tirno', 'tmp');
 
 function ensureTmpDir(): void {
   fs.mkdirSync(TMP_DIR, { recursive: true });

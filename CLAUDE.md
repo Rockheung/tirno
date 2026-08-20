@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-wandr — Multi-session browser automation CLI on raw CDP.
+tirno — Multi-session browser automation CLI on raw CDP.
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다.
 puppeteer-core 기반.
 
@@ -16,10 +16,10 @@ npm run build    # tsc → dist/
 ## 테스트
 
 ```bash
-node bin/wandr.js new test -- --no-proxy-server
-node bin/wandr.js nav https://example.com
-node bin/wandr.js screenshot --out /tmp/test.png
-node bin/wandr.js kill test
+node bin/tirno.js new test -- --no-proxy-server
+node bin/tirno.js nav https://example.com
+node bin/tirno.js screenshot --out /tmp/test.png
+node bin/tirno.js kill test
 ```
 
 ## 구조

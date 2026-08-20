@@ -22,10 +22,10 @@ export interface SessionMetadata {
   emulation?: EmulationState;
 }
 
-const WANDR_DIR = path.join(os.homedir(), '.wandr');
-const SESSIONS_DIR = path.join(WANDR_DIR, 'sessions');
-const PROFILES_DIR = path.join(WANDR_DIR, 'profiles');
-const ACTIVE_FILE = path.join(WANDR_DIR, 'active');
+const TIRNO_DIR = path.join(os.homedir(), '.tirno');
+const SESSIONS_DIR = path.join(TIRNO_DIR, 'sessions');
+const PROFILES_DIR = path.join(TIRNO_DIR, 'profiles');
+const ACTIVE_FILE = path.join(TIRNO_DIR, 'active');
 
 function ensureDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
