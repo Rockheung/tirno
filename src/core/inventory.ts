@@ -248,7 +248,7 @@ export async function readCmdline(pid: number): Promise<string | null> {
  * Resolve symlinks so an anchored profile and its target compare equal. Falls
  * back to a lexical resolve when the path is gone.
  */
-export function normalizeDir(dir: string): string {
+function normalizeDir(dir: string): string {
   try {
     return fs.realpathSync(path.resolve(dir));
   } catch {

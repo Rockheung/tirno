@@ -59,7 +59,7 @@ function readLink(anchor: string): string | null {
 }
 
 /** Session whose profile is this directory. Compared after resolving symlinks. */
-export function sessionForDir(resolved: string): string | null {
+function sessionForDir(resolved: string): string | null {
   const norm = (p: string): string => {
     try { return fs.realpathSync(path.resolve(p)); } catch { return path.resolve(p); }
   };

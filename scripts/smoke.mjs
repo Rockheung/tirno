@@ -137,11 +137,10 @@ run('memory details', ['memory', 'details', `${OUT}/h.heapsnapshot`, '--page-siz
 run('cdp', ['cdp', 'Runtime.evaluate', '{"expression":"1+1","returnByValue":true}', ...S]);
 run('cdp --browser', ['cdp', '--browser', 'Browser.getVersion', ...S]);
 
-// ── cache / vision
+// ── cache
 run('cache list', ['cache', 'list']);
 run('cache load', ['cache', 'load', PAGE]);
 run('cache prune --older-than', ['cache', 'prune', '--older-than', '0']);
-run('vision ocr', ['vision', 'ocr', ...S], { timeout: 180_000 });
 
 // ── record / replay / trail
 run('record start', ['record', 'start', ...S]);
@@ -150,11 +149,6 @@ run('record list', ['record', 'list']);
 run('replay', ['replay', 'smokerec', ...S], { timeout: 120_000 });
 run('record rm', ['record', 'rm', 'smokerec']);
 run('trail list', ['trail', 'list']);
-
-// ── 지능 (키 없음 — 깨끗한 실패를 기대)
-run('auth status', ['auth', 'status']);
-run('ask (키 없음 → 실패 기대)', ['ask', 'find the button', ...S], { timeout: 60_000, expectFail: true });
-run('explore (키 없음 → 실패 기대)', ['explore', 'click the button', '--max-steps', '1', ...S], { timeout: 60_000, expectFail: true });
 
 // ── 앵커 / gc / 통계
 run('anchor set', ['anchor', 'set', 'smokeanchor', 'smoke']);

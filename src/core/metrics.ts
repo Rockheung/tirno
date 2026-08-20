@@ -10,16 +10,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-// Only `trail.replay` is emitted today. The rest are read-side: a log written
-// before the LLM layer was removed still carries llm.* / explore.* /
-// embedding.compute lines, and aggregate() must not choke on them — unknown
-// kinds fall through to `totals`.
-export type EventKind =
-  | 'cache.hit'
-  | 'cache.miss'
-  | 'cache.save'
-  | 'trail.replay'
-  | 'trail.save';
+// `trail.replay` is the only event anything emits. Kinds are not declared
+// ahead of a caller — cache.* and trail.save sat here for months describing
+// events no code ever wrote, which made `tirno stats` print a cache hit rate
+// computed from zero samples.
+//
+// Read-side stays permissive: a log written before the LLM layer was removed
+// still carries llm.* / explore.* / embedding.compute lines, and aggregate()
+// must not choke on them — unknown kinds fall through to `totals`.
+export type EventKind = 'trail.replay';
 
 export interface MetricEvent {
   ts: string;          // ISO timestamp
@@ -68,7 +67,6 @@ export function readAll(): MetricEvent[] {
 
 export interface Aggregate {
   totals: Record<string, number>;
-  cacheHitRate: number | null;
   trailReplayCount: number;
   trailReplaySuccessRate: number | null;
   avgLatencyMs: Record<string, number>;
@@ -78,7 +76,6 @@ export interface Aggregate {
 
 export function aggregate(events: MetricEvent[]): Aggregate {
   const totals: Record<string, number> = {};
-  let cacheHits = 0, cacheMisses = 0;
   let trailReplays = 0, trailReplaySuccess = 0;
   const latencyByKind: Record<string, { sum: number; n: number }> = {};
   let firstTs: string | null = null;
@@ -94,15 +91,12 @@ export function aggregate(events: MetricEvent[]): Aggregate {
       b.n += 1;
       latencyByKind[e.kind] = b;
     }
-    if (e.kind === 'cache.hit') cacheHits++;
-    else if (e.kind === 'cache.miss') cacheMisses++;
-    else if (e.kind === 'trail.replay') {
+    if (e.kind === 'trail.replay') {
       trailReplays++;
       if (e.success === true) trailReplaySuccess++;
     }
   }
 
-  const cacheTotal = cacheHits + cacheMisses;
   const avgLatencyMs: Record<string, number> = {};
   for (const [k, b] of Object.entries(latencyByKind)) {
     avgLatencyMs[k] = b.n > 0 ? Math.round(b.sum / b.n) : 0;
@@ -110,7 +104,6 @@ export function aggregate(events: MetricEvent[]): Aggregate {
 
   return {
     totals,
-    cacheHitRate: cacheTotal > 0 ? cacheHits / cacheTotal : null,
     trailReplayCount: trailReplays,
     trailReplaySuccessRate: trailReplays > 0 ? trailReplaySuccess / trailReplays : null,
     avgLatencyMs,

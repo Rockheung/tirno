@@ -5,15 +5,6 @@ export interface FormatOptions {
   ndjson?: boolean;
 }
 
-export function formatOutput(data: unknown, opts: FormatOptions = {}): string {
-  if (opts.json) return JSON.stringify(data, null, 2);
-  if (opts.ndjson) {
-    if (Array.isArray(data)) return data.map(d => JSON.stringify(d)).join('\n');
-    return JSON.stringify(data);
-  }
-  // default: return as-is (commands format their own text output)
-  return String(data);
-}
 
 export function formatTable(headers: string[], rows: string[][]): string {
   const widths = headers.map((h, i) =>
