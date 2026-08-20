@@ -102,19 +102,66 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
       };
       window.__tirno_rec_flush = flushNow;
 
+      const a11yRoleOf = (el) => {
+        if (!el || el.nodeType !== 1) return undefined;
+        const explicit = el.getAttribute && el.getAttribute('role');
+        if (explicit) return explicit;
+        // implicit role from tagName for common interactives
+        const tag = el.tagName ? el.tagName.toLowerCase() : '';
+        if (tag === 'a' && el.hasAttribute && el.hasAttribute('href')) return 'link';
+        if (tag === 'button') return 'button';
+        if (tag === 'input') {
+          const t = el.getAttribute('type') || 'text';
+          return t === 'submit' || t === 'button' ? 'button' : 'textbox';
+        }
+        if (tag === 'textarea') return 'textbox';
+        if (tag === 'select') return 'combobox';
+        return tag || undefined;
+      };
+      const a11yNameOf = (el) => {
+        if (!el || el.nodeType !== 1) return undefined;
+        const ariaLabel = el.getAttribute && el.getAttribute('aria-label');
+        if (ariaLabel) return ariaLabel;
+        const labelledBy = el.getAttribute && el.getAttribute('aria-labelledby');
+        if (labelledBy) {
+          const lbl = document.getElementById(labelledBy);
+          if (lbl) return (lbl.textContent || '').trim().slice(0, 80);
+        }
+        const alt = el.getAttribute && el.getAttribute('alt');
+        if (alt) return alt;
+        const title = el.getAttribute && el.getAttribute('title');
+        if (title) return title;
+        // visible text fallback (truncated)
+        const txt = (el.textContent || '').trim();
+        if (txt) return txt.slice(0, 80);
+        return undefined;
+      };
+
       const log = (type, e) => {
         if (!rec.recording) return;
         const t = e.target;
         const r = t && t.getBoundingClientRect ? t.getBoundingClientRect() : null;
+        const sel = bestSelector(t);
+        const role = a11yRoleOf(t);
+        const name = a11yNameOf(t);
+        const bbox = r ? { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) } : null;
+
+        const channels = {};
+        if (role || name) channels.a11y = { role, name };
+        if (sel || (t && t.tagName)) channels.dom = { selector: sel || undefined, tagName: t && t.tagName };
+        if (bbox) channels.visual = { bbox };
+
         rec.events.push({
           type,
           t: Date.now() - rec.startTs,
           x: e.clientX, y: e.clientY,
-          sel: bestSelector(t),
-          tag: t && t.tagName,
           key: e.key,
           value: e.target && (e.target.value !== undefined ? e.target.value : null),
-          bbox: r ? { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) } : null,
+          channels,
+          // legacy flat fields kept for downgrade tools
+          sel,
+          tag: t && t.tagName,
+          bbox,
         });
         scheduleFlush();
       };

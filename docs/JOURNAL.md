@@ -309,6 +309,64 @@ interface CacheEntry {
 
 ---
 
+### record/replay multi-channel + fallback chain (PR #21)
+
+#### 의도
+
+Waypoint 모델(PR #20)의 multi-channel 컨텍스트를 record/replay 흐름에 적용. 사용자 정정의 "selector / aria / 좌표 / OCR이 같은 element의 다른 관점" — 행동 시퀀스에서도 한 채널 깨져도 다른 채널로 fallback.
+
+#### 변경
+
+**RecordedEvent에 channels** (record-store):
+```ts
+channels: {
+  a11y?:   { role, name };       // implicit role from tagName + aria-label/alt/title/text
+  dom?:    { selector, tagName };
+  visual?: { bbox };
+}
+```
+
+기존 flat fields(`sel/tag/bbox`)는 **backward compat 유지** — 이전 recordings 그대로 replay 가능.
+
+**inject script log()** (chrome-connector):
+- `a11yRoleOf(el)`: explicit `role` 또는 implicit (a/button/input/textarea/select)
+- `a11yNameOf(el)`: aria-label → labelledby → alt → title → textContent (80자 truncate)
+- 매 event에 channels 자동 첨부
+
+**replay fallback chain** (replay.ts):
+```
+resolveTarget(ev):
+  1. dom.selector → querySelector + bbox center
+  2. a11y.role+name → live DOM 검색 (implicit role 매칭)
+  3. visual.bbox → elementFromPoint 검증
+  4. event.xy → fallback (record-time 좌표)
+실패 시 click 스킵
+```
+
+`replay --verbose` — event 별 매칭 채널 출력. `Replayed "name" — 5/5 events [dom:3 a11y:1 visual.bbox:1]` 같은 channel breakdown 보고.
+
+#### 검증
+
+- record start → `<a>` element click dispatch
+- captured event:
+  ```json
+  channels: {
+    a11y: { role: 'link' },           // implicit from <a href>
+    dom:  { tagName: 'A' },           // no stable selector (id/data-testid 없음)
+    visual: { bbox: { x: 410, y: 80, w: 234, h: 22 } }
+  }
+  ```
+- legacy `sel/tag/bbox`도 함께 보존
+- 80/80 tests pass (regression 없음)
+
+#### 한계 / 후속
+
+- a11yNameOf는 element-side 근사 — 진짜 a11y tree는 chromium computed accessible name. 차이 가능
+- replay fallback은 event 단위 — 다음 PR(#17 Trail)이 step 단위 트레일로 확장
+- matchStats 누적은 #18(지능요청) PR에서 cache로 push
+
+---
+
 ### multi-channel Waypoint + vision attach (PR #20)
 
 #### 의도
