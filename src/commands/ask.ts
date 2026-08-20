@@ -65,10 +65,13 @@ export function registerAskCommand(program: Command): void {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
-        let screenshot: Buffer | undefined;
-        if (opts.screenshot !== false) {
-          screenshot = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
-        }
+        // Chrome builds the accessibility tree off a rendered frame, so the
+        // capture has to happen even when the image will not be sent — without
+        // it the a11y dump is the root and nothing else, and the model gets
+        // asked to act on what looks like an empty page. `--no-screenshot` is
+        // about what goes to the model (tokens), not about skipping the frame.
+        const frame = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
+        const screenshot: Buffer | undefined = opts.screenshot === false ? undefined : frame;
 
         let a11yDump: string | undefined;
         if (opts.a11y !== false) {

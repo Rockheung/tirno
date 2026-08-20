@@ -68,6 +68,15 @@ export function registerInspectCommands(program: Command): void {
         const page = await getActivePage(browser);
         const cdp = await page.createCDPSession();
 
+        // Chrome builds the accessibility tree off a rendered frame. Ask for it
+        // before anything has painted and it comes back with the root and
+        // nothing else — which made the FIRST snapshot of every session look
+        // like an empty page (headless and headful alike) and pushed callers
+        // down to the LLM step for nothing. Capturing forces that frame, and
+        // the same buffer is reused for the cache below, so the default path
+        // pays nothing extra.
+        const screenshot = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
+
         const tree = await cdp.send('Accessibility.getFullAXTree') as { nodes: AXNode[] };
 
         if (!tree.nodes.length) {
@@ -100,8 +109,6 @@ export function registerInspectCommands(program: Command): void {
         const needVision = visionBackend !== null;
         if (needCache || needVision) {
           try {
-            const screenshot = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
-
             if (needCache) {
               const url = page.url();
               const viewport = await page.evaluate(() => ({
