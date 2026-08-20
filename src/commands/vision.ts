@@ -39,6 +39,9 @@ export function registerVisionCommands(program: Command): void {
         }) as Buffer;
         browser.disconnect();
 
+        if (backend === 'florence') {
+          info('florence backend is experimental — output decoding may be incomplete (see backends/florence.ts for status)');
+        }
         info(`Running OCR (backend=${backend}, lang=${opts.lang}, ${(buf.length / 1024).toFixed(0)}KB)...`);
 
         const ocrOpts: Record<string, unknown> = { lang: opts.lang };

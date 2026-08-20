@@ -309,6 +309,50 @@ interface CacheEntry {
 
 ---
 
+### Phase 6-2c — Florence-2 backend (PR #10, experimental)
+
+#### 의도
+
+Phase 6-2b에서 stub으로 남긴 Florence-2 backend를 `@huggingface/transformers` v4로 실제 구현. vision-language 모델로 OCR + OCR_WITH_REGION + OD + DENSE_REGION_CAPTION 통합 지원이 목표.
+
+#### 구현
+
+`src/vision/backends/florence.ts` — `Florence2ForConditionalGeneration` + `AutoProcessor` + `AutoTokenizer` + `RawImage` 통합. 모델 캐시는 `~/.tirno/models/florence/` (env `TIRNO_MODELS_DIR` override).
+
+env로 제어:
+- `TIRNO_FLORENCE_MODEL` (default `onnx-community/Florence-2-base-ft`)
+- `TIRNO_FLORENCE_DTYPE` (default `q4` — `fp16`은 onnxruntime graph fusion 버그)
+- `TIRNO_FLORENCE_DEBUG=1` — raw decoded text를 stderr로 출력
+
+#### 검증 시도와 한계
+
+1. **fp16 dtype** — onnxruntime init 실패: `SimplifiedLayerNormFusion` graph optimization 충돌 (onnxruntime-node 버전 vs Florence-2 fp16 onnx graph)
+2. **q4 dtype** — init 성공, 추론 ~1.5s. 그러나 output 디코딩 깨짐:
+   ```
+   raw: "</s><s>R_WITH_REGION<poly><loc_0><loc_999>...</s>"
+   ```
+   - 첫 task token `<OCR_WITH_REGION>`의 `<OC` 부분이 tokenizer 인코딩에서 잘려 `R_WITH_REGION`만 prompt로 들어가는 듯
+   - 결과로 `<loc_*>` 토큰만 나오고 실제 텍스트 라벨은 없음
+   - `post_process_generation`이 task split 못 해 빈 quad_boxes/labels 반환
+3. **q8 dtype** — 동일 증상 (~80s)
+4. **`Xenova/Florence-2-base-ft` 변형** — 다운로드 시간 초과 (180s)
+
+#### 현재 상태
+
+- 모델 download / load / generate 인프라 모두 동작
+- output 디코딩에 transformers.js v4 + Florence-2 통합 버그
+- production용은 **tesseract / paddle 권장**. CLI 사용 시 명시 경고
+- 코드는 stub로 되돌리지 않고 유지 — 향후 transformers.js 업그레이드 또는 디코딩 우회 패치 시 즉시 활용 가능
+- 49/49 tests pass (회귀 없음)
+
+#### 추정 원인 (향후 디버깅 단서)
+
+- transformers.js v4 tokenizer가 `<OCR_WITH_REGION>` special token을 `<` + `OC` + `R_WITH_REGION` 식으로 분할 인코딩 가능성 → tokenizer config의 added_tokens 점검
+- `add_special_tokens=true`로 `tokenizer(TASK)` 강제 시도
+- `Florence-2-large` 또는 `microsoft/Florence-2-base` 직접 사용 (transformers.js 호환 onnx 변환 별도)
+
+---
+
 ### Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub (PR #9)
 
 #### 의도
@@ -426,7 +470,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#6](https://github.com/Rockheung/tirno/pull/6) | feat: Phase 6-1 — URL-keyed visual cache + node:test | merged |
 | [#7](https://github.com/Rockheung/tirno/pull/7) | chore: 프로덕션 마감 — README + packaging + element-info 격리 | merged |
 | [#8](https://github.com/Rockheung/tirno/pull/8) | feat: Phase 6-2 — vision OCR backend (tesseract.js) + IoU helper | merged |
-| [#9](https://github.com/Rockheung/tirno/pull/9) | feat: Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub | open |
+| [#9](https://github.com/Rockheung/tirno/pull/9) | feat: Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub | merged |
+| [#10](https://github.com/Rockheung/tirno/pull/10) | feat: Phase 6-2c — Florence-2 backend (experimental, output decoding 한계) | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
