@@ -18,9 +18,14 @@ export function registerEvalCommand(program: Command): void {
         // Always wrapped, so a thrown expression is distinguishable from one that
         // returned. A bare `{ __error }` sentinel cannot be — a page is free to
         // return that shape — and it left the caller reading exit 0 either way.
-        const outcome = await page.evaluate((expr) => {
+        //
+        // The callback is async and the expression is awaited: puppeteer only
+        // awaits a promise it gets at the top level, so `{ value: <promise> }`
+        // would serialize to `{}` and every async expression would lose its
+        // result. Rejections land in the same catch as synchronous throws.
+        const outcome = await page.evaluate(async (expr) => {
           try {
-            return { threw: false, value: eval(expr) };
+            return { threw: false, value: await eval(expr) };
           } catch (e) {
             return { threw: true, message: (e as Error).message };
           }
