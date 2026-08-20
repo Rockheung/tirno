@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { recognize, shutdown } from '../vision/ocr.js';
-import type { BackendName } from '../vision/types.js';
+import { ALL_BACKENDS, LOCAL_BACKENDS, CLOUD_BACKENDS, DEFAULT_BACKEND, type BackendName } from '../vision/types.js';
 import { success, info, error } from '../output/formatter.js';
 
-const VALID_BACKENDS: BackendName[] = ['tesseract', 'paddle', 'florence'];
+const BACKEND_HELP = `OCR backend\n  local:  ${LOCAL_BACKENDS.join(' | ')}\n  cloud:  ${CLOUD_BACKENDS.join(' | ')} (require API keys, stub — Phase 6-2f)`;
 
 export function registerVisionCommands(program: Command): void {
   const vision = program
@@ -18,7 +18,7 @@ export function registerVisionCommands(program: Command): void {
     .command('ocr')
     .description('Run OCR on the current page screenshot')
     .option('-s, --session <name>', 'Session name')
-    .option('--backend <name>', `OCR backend: ${VALID_BACKENDS.join(' | ')}`, 'tesseract')
+    .option('--backend <name>', BACKEND_HELP, DEFAULT_BACKEND)
     .option('--lang <lang>', 'Language(s) (tesseract uses + e.g. kor+eng; paddle/florence ignore)', 'eng')
     .option('--full', 'Full page screenshot (default: viewport only)')
     .option('--out <path>', 'Write JSON result to path')
@@ -27,8 +27,8 @@ export function registerVisionCommands(program: Command): void {
     .action(async (opts) => {
       try {
         const backend = opts.backend as BackendName;
-        if (!VALID_BACKENDS.includes(backend)) {
-          throw new Error(`Unknown backend "${backend}". Valid: ${VALID_BACKENDS.join(', ')}`);
+        if (!ALL_BACKENDS.includes(backend)) {
+          throw new Error(`Unknown backend "${backend}". Valid: ${ALL_BACKENDS.join(', ')}`);
         }
 
         const { browser } = await connect(opts.session);

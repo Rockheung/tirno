@@ -29,6 +29,7 @@ async function getWorker(lang: string): Promise<import('tesseract.js').Worker> {
 
 export const tesseractBackend: OcrBackend = {
   name: 'tesseract.js',
+  kind: 'local',
 
   async recognize(pngBuffer: Buffer, opts: OcrOptions = {}): Promise<OcrResult> {
     const lang = opts.lang ?? 'eng';

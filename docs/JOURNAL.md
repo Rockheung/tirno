@@ -309,6 +309,44 @@ interface CacheEntry {
 
 ---
 
+### Phase 6-2e — backend 분류 (local/cloud) + cloud stubs + default paddle (PR #14)
+
+#### 의도
+
+사용자 정정 — "tesseract 같은 올드테크를 써야 하나?". 1985년 시작 OCR 엔진을 default로 두는 게 production 적절치 않음. 또한 "로컬 모델을 기본으로, api key 설정 또는 로컬모델을 사용할 수 있도록 확장 예정"이라는 방향성 명시.
+
+#### 구현
+
+- `src/vision/types.ts`:
+  - `OcrBackend.kind: 'local' | 'cloud'` 필드 추가
+  - `LocalBackendName` / `CloudBackendName` / `BackendName` union 분리
+  - `LOCAL_BACKENDS`, `CLOUD_BACKENDS`, `ALL_BACKENDS` 상수
+  - `DEFAULT_BACKEND = 'paddle'` (was 'tesseract')
+- `src/vision/backends/claude.ts` (신규) — `ANTHROPIC_API_KEY` 검사 + "not yet implemented" 명확한 안내
+- `src/vision/backends/openai.ts` (신규) — `OPENAI_API_KEY` 동일
+- `src/vision/backends/gemini.ts` (신규) — `GEMINI_API_KEY` / `GOOGLE_API_KEY` 동일
+- `src/vision/ocr.ts` dispatcher — cloud backend lazy import 추가, 상수 re-export
+- `src/commands/vision.ts` — `--backend` help에 local/cloud 그룹 명시, default `DEFAULT_BACKEND`
+- `src/commands/inspect.ts` — `--vision` default 동일
+- `test/backends.test.ts` (신규) — 5 케이스: registry 일관성, kind 매핑, key 부재 시 안내, key 있을 때 "not implemented" 메시지
+
+#### 검증
+
+- `vision ocr --help` — local: tesseract|paddle|florence / cloud: claude|openai|gemini 그룹 표시
+- 옵션 없이 호출 → paddle backend 사용 (example.com 4 line 정상)
+- `--backend claude` (key 없음) → "claude backend requires ANTHROPIC_API_KEY env var..."
+- `ANTHROPIC_API_KEY=fake --backend claude` → "claude backend is not yet implemented. Tracked in Phase 6-2f."
+- 68/68 tests pass (63 + 5 신규)
+
+#### 다음 (Phase 6-2f, 별도 PR)
+
+- claude vision 실제 구현 (`@anthropic-ai/sdk`)
+- openai gpt-4o vision 실제 구현
+- gemini 실제 구현
+- 다만 VLM은 pixel-precise bbox 약함 → text extraction 위주 + 필요 시 paddle bbox와 hybrid 매칭
+
+---
+
 ### parseInt/parseFloat 직접 commander coercer 사용 버그 (PR #13)
 
 #### 발견
@@ -602,7 +640,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#10](https://github.com/Rockheung/tirno/pull/10) | feat: Phase 6-2c — Florence-2 backend (experimental, output decoding 한계) | merged |
 | [#11](https://github.com/Rockheung/tirno/pull/11) | feat: Phase 6-2d — snapshot --vision 통합 (a11y 못 잡은 영역 OCR로 보강) | merged |
 | [#12](https://github.com/Rockheung/tirno/pull/12) | feat: Phase 6-1b — viewport-aware visual cache | merged |
-| [#13](https://github.com/Rockheung/tirno/pull/13) | fix: commander coercer로 parseInt/parseFloat 직접 사용 시 NaN 버그 (13곳) | open |
+| [#13](https://github.com/Rockheung/tirno/pull/13) | fix: commander coercer로 parseInt/parseFloat 직접 사용 시 NaN 버그 (13곳) | merged |
+| [#14](https://github.com/Rockheung/tirno/pull/14) | feat: Phase 6-2e — backend 분류 (local/cloud) + cloud backend stubs + default paddle | open |
 
 ## 보류된 항목 (다음 phase 후보)
 

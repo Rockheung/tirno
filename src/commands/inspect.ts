@@ -9,11 +9,9 @@ import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
 import { visionAugment } from '../vision/augment.js';
-import type { BackendName } from '../vision/types.js';
+import { ALL_BACKENDS, DEFAULT_BACKEND, type BackendName } from '../vision/types.js';
 import type { Bbox } from '../cdp/iou.js';
 import type { ScreenshotOptions } from 'puppeteer-core';
-
-const VALID_BACKENDS: BackendName[] = ['tesseract', 'paddle', 'florence'];
 
 export function registerInspectCommands(program: Command): void {
   program
@@ -58,7 +56,7 @@ export function registerInspectCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--verbose', 'Include all elements (default: skip ignored)')
     .option('--no-cache', 'Skip visual-cache write')
-    .option('--vision [backend]', 'Augment with OCR-discovered text in regions a11y missed (default backend: tesseract)')
+    .option('--vision [backend]', `Augment with OCR-discovered text in regions a11y missed (default: ${DEFAULT_BACKEND})`)
     .option('--vision-lang <lang>', 'Language(s) for vision OCR (e.g. eng, kor+eng)', 'eng')
     .option('--vision-min-confidence <n>', 'Drop OCR words below this confidence', intArg, 50)
     .option('--vision-iou <n>', 'IoU threshold for "covered by a11y" (0..1)', floatArg, 0.3)
@@ -83,11 +81,11 @@ export function registerInspectCommands(program: Command): void {
         // resolve vision backend if requested
         let visionBackend: BackendName | null = null;
         if (opts.vision) {
-          const requested = typeof opts.vision === 'string' ? opts.vision : 'tesseract';
-          if (!VALID_BACKENDS.includes(requested as BackendName)) {
+          const requested = typeof opts.vision === 'string' ? opts.vision : DEFAULT_BACKEND;
+          if (!ALL_BACKENDS.includes(requested as BackendName)) {
             await cdp.detach();
             browser.disconnect();
-            throw new Error(`Unknown vision backend "${requested}". Valid: ${VALID_BACKENDS.join(', ')}`);
+            throw new Error(`Unknown vision backend "${requested}". Valid: ${ALL_BACKENDS.join(', ')}`);
           }
           visionBackend = requested as BackendName;
         }
