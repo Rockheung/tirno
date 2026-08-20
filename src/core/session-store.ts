@@ -16,7 +16,14 @@ export interface EmulationState {
 export interface SessionMetadata {
   name: string;
   pid: number;
+  /** Observed at launch. With `--remote-debugging-port=0` the OS picks it. */
   port: number;
+  /**
+   * Cache hint, NOT truth. Frozen at launch, so it goes stale the moment Chrome
+   * restarts (new port, new browser UUID). `profiles/<name>/DevToolsActivePort`
+   * is the live value; connect() reads that first and falls back to this for
+   * legacy fixed-port sessions, which write no such file.
+   */
   wsEndpoint: string;
   userDataDir: string;
   chromeFlags: string[];
@@ -26,22 +33,52 @@ export interface SessionMetadata {
   group?: string;
 }
 
-const TIRNO_DIR = path.join(os.homedir(), '.tirno');
-const SESSIONS_DIR = path.join(TIRNO_DIR, 'sessions');
-const PROFILES_DIR = path.join(TIRNO_DIR, 'profiles');
-const ACTIVE_FILE = path.join(TIRNO_DIR, 'active');
+/**
+ * Resolved per call, not once at import: `TIRNO_DIR` lets tests point the whole
+ * store at a temp directory, and gc/anchor tests must never run against a real
+ * `~/.tirno` — they delete profiles, which are logged-in browser sessions.
+ * Same escape hatch as `TIRNO_CACHE_DIR` for the visual cache.
+ */
+function tirnoDir(): string {
+  return process.env.TIRNO_DIR ?? path.join(os.homedir(), '.tirno');
+}
+
+function sessionsRoot(): string {
+  return path.join(tirnoDir(), 'sessions');
+}
+
+function activeFile(): string {
+  return path.join(tirnoDir(), 'active');
+}
 
 function ensureDirs(): void {
-  fs.mkdirSync(SESSIONS_DIR, { recursive: true });
-  fs.mkdirSync(PROFILES_DIR, { recursive: true });
+  fs.mkdirSync(sessionsRoot(), { recursive: true });
+  fs.mkdirSync(profilesRoot(), { recursive: true });
 }
 
 function sessionPath(name: string): string {
-  return path.join(SESSIONS_DIR, `${name}.json`);
+  return path.join(sessionsRoot(), `${name}.json`);
 }
 
 export function profileDir(name: string): string {
-  return path.join(PROFILES_DIR, name);
+  return path.join(profilesRoot(), name);
+}
+
+export function profilesRoot(): string {
+  return path.join(tirnoDir(), 'profiles');
+}
+
+/**
+ * Anchors are what a browser MCP points at (`--user-data-dir=<anchor>`), and
+ * they are deliberately NOT the same thing as `active`: switching the CLI's
+ * session must not silently re-aim someone's MCP at a different browser.
+ */
+export function anchorsRoot(): string {
+  return path.join(tirnoDir(), 'anchors');
+}
+
+export function anchorPath(anchor: string): string {
+  return path.join(anchorsRoot(), anchor);
 }
 
 export function create(meta: SessionMetadata): void {
@@ -70,9 +107,9 @@ export function remove(name: string): void {
 
 export function list(): SessionMetadata[] {
   ensureDirs();
-  return fs.readdirSync(SESSIONS_DIR)
+  return fs.readdirSync(sessionsRoot())
     .filter(f => f.endsWith('.json'))
-    .map(f => JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf-8')));
+    .map(f => JSON.parse(fs.readFileSync(path.join(sessionsRoot(), f), 'utf-8')));
 }
 
 export function rename(oldName: string, newName: string): void {
@@ -85,15 +122,15 @@ export function rename(oldName: string, newName: string): void {
 
 export function getActive(): string | null {
   ensureDirs();
-  if (!fs.existsSync(ACTIVE_FILE)) return null;
-  return fs.readFileSync(ACTIVE_FILE, 'utf-8').trim() || null;
+  if (!fs.existsSync(activeFile())) return null;
+  return fs.readFileSync(activeFile(), 'utf-8').trim() || null;
 }
 
 export function setActive(name: string): void {
   ensureDirs();
-  fs.writeFileSync(ACTIVE_FILE, name);
+  fs.writeFileSync(activeFile(), name);
 }
 
 export function clearActive(): void {
-  if (fs.existsSync(ACTIVE_FILE)) fs.unlinkSync(ACTIVE_FILE);
+  if (fs.existsSync(activeFile())) fs.unlinkSync(activeFile());
 }
