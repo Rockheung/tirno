@@ -237,7 +237,3 @@ export function buildSchema(program: Command): CliSchema {
   };
 }
 
-/** Every path the schema emits, for the coverage test. */
-export function endpointPaths(program: Command): string[] {
-  return buildSchema(program).commands.map(c => c.name);
-}

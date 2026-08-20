@@ -34,9 +34,6 @@ export function registerStatsCommand(program: Command): void {
 
         // top-level summary
         const summary: Array<[string, string]> = [];
-        if (agg.cacheHitRate !== null) {
-          summary.push(['cache hit rate', `${(agg.cacheHitRate * 100).toFixed(1)}%`]);
-        }
         if (agg.trailReplayCount > 0) {
           const rate = agg.trailReplaySuccessRate;
           summary.push(['trail replays', String(agg.trailReplayCount)]);

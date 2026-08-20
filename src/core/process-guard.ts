@@ -7,7 +7,7 @@ export function isAlive(pid: number): boolean {
   }
 }
 
-export function killProcess(pid: number, signal: NodeJS.Signals = 'SIGTERM'): boolean {
+function killProcess(pid: number, signal: NodeJS.Signals = 'SIGTERM'): boolean {
   try {
     process.kill(pid, signal);
     return true;
