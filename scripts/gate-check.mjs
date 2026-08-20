@@ -35,7 +35,21 @@ function check(label, fn) {
 }
 
 function tirno(...args) {
-  return execFileSync('node', [TIRNO, ...args], { env, encoding: 'utf8', timeout: 120_000 });
+  try {
+    // stderr 는 캡처한다 — 기본값은 부모로 흘려보내는 것이라, 아래에서 이유를
+    // 다시 찍으면 같은 줄이 두 번 나오고 정리 단계의 에러까지 로그에 샌다.
+    return execFileSync('node', [TIRNO, ...args], {
+      env,
+      encoding: 'utf8',
+      timeout: 120_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    // An execFileSync failure stringifies as the whole result object — pid, status,
+    // signal, buffers — and buries the one line that says why. Keep that line.
+    const reason = String(e.stderr || e.stdout || '').trim().split('\n').filter(Boolean).pop();
+    throw new Error(`\`tirno ${args.join(' ')}\` 실패: ${reason || e.message}`);
+  }
 }
 
 function meta() {
@@ -46,8 +60,14 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
+let phase = '';
+function gate(title) {
+  phase = title.split(' —')[0];
+  console.log(title);
+}
+
 try {
-  console.log('gate 1 — port 0 으로 띄우면 chrome 이 DevToolsActivePort 를 쓴다');
+  gate('gate 1 — port 0 으로 띄우면 chrome 이 DevToolsActivePort 를 쓴다');
   const started = Date.now();
   tirno('new', SESSION, ...launchArgs);
   const elapsed = Date.now() - started;
@@ -76,7 +96,7 @@ try {
     assert(out.includes('2'), `eval 결과가 이상하다: ${out.trim()}`);
   });
 
-  console.log('gate 2 — 재기동하면 새 포트를 잡고 파일이 갱신된다');
+  gate('gate 2 — 재기동하면 새 포트를 잡고 파일이 갱신된다');
   tirno('restart', SESSION, ...launchArgs);
   const second = meta();
 
@@ -92,6 +112,11 @@ try {
     const row = tirno('ls').split('\n').find(l => l.includes(SESSION)) ?? '';
     assert(/\bours\b/.test(row), `OWNER 가 ours 가 아니다: ${row.trim()}`);
   });
+} catch (e) {
+  // check() 밖에서 터진 것 — 대개 launch 자체가 실패한 경우다. 스택을 그대로
+  // 흘리면 CI 로그에서 이유가 객체 덤프에 묻히므로 항목과 같은 모양으로 찍는다.
+  failures++;
+  console.log(`  FAIL  ${phase} 중단 — ${e.message}`);
 } finally {
   try { tirno('kill', SESSION, '--clean'); } catch { /* 이미 없으면 그만 */ }
   fs.rmSync(env.TIRNO_DIR, { recursive: true, force: true });
