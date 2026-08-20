@@ -22,10 +22,10 @@ export interface SessionMetadata {
   emulation?: EmulationState;
 }
 
-const CHROMUX_DIR = path.join(os.homedir(), '.chromux');
-const SESSIONS_DIR = path.join(CHROMUX_DIR, 'sessions');
-const PROFILES_DIR = path.join(CHROMUX_DIR, 'profiles');
-const ACTIVE_FILE = path.join(CHROMUX_DIR, 'active');
+const WANDR_DIR = path.join(os.homedir(), '.wandr');
+const SESSIONS_DIR = path.join(WANDR_DIR, 'sessions');
+const PROFILES_DIR = path.join(WANDR_DIR, 'profiles');
+const ACTIVE_FILE = path.join(WANDR_DIR, 'active');
 
 function ensureDirs(): void {
   fs.mkdirSync(SESSIONS_DIR, { recursive: true });
