@@ -13,7 +13,6 @@ import type { Waypoint } from '../core/visual-cache.js';
 const DEFAULT_MODEL = process.env.TIRNO_EMBED_MODEL ?? 'Xenova/all-MiniLM-L6-v2';
 export const EMBEDDING_DIM = 384;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Extractor = (text: string | string[], opts?: any) => Promise<{ data: Float32Array | number[] }>;
 
 let cached: Extractor | null = null;
@@ -24,9 +23,7 @@ async function getExtractor(): Promise<Extractor> {
   const cacheDir = process.env.TIRNO_MODELS_DIR
     ? path.join(process.env.TIRNO_MODELS_DIR, 'embeddings')
     : path.join(os.homedir(), '.tirno', 'models', 'embeddings');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (tx as any).env.cacheDir = cacheDir;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pipeline = (tx as any).pipeline as (task: string, model: string) => Promise<Extractor>;
   cached = await pipeline('feature-extraction', DEFAULT_MODEL);
   return cached!;

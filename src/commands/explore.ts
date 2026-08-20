@@ -14,7 +14,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { ask as intelligenceAsk } from '../intelligence/dispatcher.js';
 import type { BackendName, ProposedAction } from '../intelligence/types.js';
-import { embed, buildEmbedText } from '../intelligence/embedding.js';
+import { embed } from '../intelligence/embedding.js';
 import { emit as metric } from '../core/metrics.js';
 import { getTrailStore, getWaypointStore } from '../storage/index.js';
 import type { Waypoint } from '../core/visual-cache.js';
@@ -113,7 +113,6 @@ async function executeAction(
   cdp: CDPSession,
   action: ProposedAction,
 ): Promise<{ ok: boolean; event?: RecordedEvent; reason?: string }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const send = cdp.send.bind(cdp) as any;
 
   switch (action.type) {

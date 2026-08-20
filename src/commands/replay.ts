@@ -116,7 +116,6 @@ export function registerReplayCommand(program: Command): void {
         }
 
         const cdp = await page.createCDPSession();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const send = cdp.send.bind(cdp) as any;
 
         const speed = Math.max(0.01, opts.speed);
@@ -174,7 +173,6 @@ export function registerReplayCommand(program: Command): void {
     });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function dispatchClick(send: any, x: number, y: number): Promise<void> {
   const moved: DispatchMouseParams = { type: 'mouseMoved', x, y };
   const pressed: DispatchMouseParams = { type: 'mousePressed', x, y, button: 'left', clickCount: 1 };
@@ -184,7 +182,6 @@ async function dispatchClick(send: any, x: number, y: number): Promise<void> {
   await send('Input.dispatchMouseEvent', released);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function dispatchKey(send: any, key: string): Promise<void> {
   const isPrintable = key.length === 1;
   const down: DispatchKeyParams = isPrintable

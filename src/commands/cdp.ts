@@ -7,7 +7,7 @@
 import { Command } from 'commander';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
-import { success, info, error } from '../output/formatter.js';
+import { info, error } from '../output/formatter.js';
 
 export function registerCdpCommands(program: Command): void {
   program

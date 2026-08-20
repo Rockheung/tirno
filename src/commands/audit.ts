@@ -55,9 +55,7 @@ export function registerAuditCommand(program: Command): void {
         // Loose typing at the boundary — lighthouse's Flags type is huge and
         // changes between minor versions; we only need a narrow subset.
         const lhMod = await import('lighthouse');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const lighthouse = lhMod.default as any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const desktopConfig = lhMod.desktopConfig as any;
 
         const flags = {
@@ -70,7 +68,6 @@ export function registerAuditCommand(program: Command): void {
         info(`Running Lighthouse (${opts.mode}, ${opts.device}) on ${url}…`);
         let result: unknown;
         if (opts.mode === 'snapshot') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           result = await (lhMod.snapshot as any)({ url, flags, config });
         } else if (opts.mode === 'timespan') {
           throw new Error('timespan mode is split start/stop — not yet wired into tirno (use mode=navigation)');
