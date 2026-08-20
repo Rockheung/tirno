@@ -63,7 +63,7 @@ interface PageContext {
 async function capturePageContext(page: Page, axLines: number): Promise<PageContext> {
   const screenshot = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
   const cdp = await page.createCDPSession();
-  let a11yDump = '';
+  let a11yDump: string;
   try {
     const tree = await cdp.send('Accessibility.getFullAXTree') as { nodes: AXNode[] };
     a11yDump = renderAXDump(tree.nodes, axLines);
