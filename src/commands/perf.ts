@@ -1,4 +1,5 @@
 import { Command } from 'commander';
+import { intArg, floatArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
@@ -10,7 +11,7 @@ export function registerPerfCommands(program: Command): void {
     .command('trace')
     .description('Run a performance trace for a fixed duration')
     .option('-s, --session <name>', 'Session name')
-    .option('--duration <s>', 'Trace duration in seconds', parseFloat, 5)
+    .option('--duration <s>', 'Trace duration in seconds', floatArg, 5)
     .option('--out <path>', 'Output file path')
     .action(async (opts) => {
       try {
