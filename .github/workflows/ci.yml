@@ -32,4 +32,8 @@ jobs:
 
       - run: npm run build
 
+      # 경고는 통과시킨다(현재 21건). 에러만 막는다 — --max-warnings 을 걸려면
+      # 그 21건을 먼저 정리해야 하고, 그건 이 게이트가 할 일이 아니다.
+      - run: npm run lint
+
       - run: npm test

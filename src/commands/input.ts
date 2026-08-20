@@ -88,7 +88,7 @@ export function registerInputCommands(program: Command): void {
             if (!Array.isArray(parsed)) throw new Error('expected array');
             entries = parsed;
           } catch (e) {
-            throw new Error(`--batch invalid JSON: ${(e as Error).message}`);
+            throw new Error(`--batch invalid JSON: ${(e as Error).message}`, { cause: e });
           }
           for (const entry of entries) {
             if (!entry.target || typeof entry.value !== 'string') {
