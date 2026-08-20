@@ -1,16 +1,46 @@
 {
   "name": "tirno",
   "version": "0.1.0",
-  "description": "Multi-session browser automation CLI on raw CDP",
+  "description": "Multi-session browser automation CLI on raw CDP — agent self-journaling",
+  "keywords": [
+    "cdp",
+    "chrome-devtools-protocol",
+    "puppeteer",
+    "browser-automation",
+    "cli",
+    "multi-session",
+    "a11y",
+    "agent"
+  ],
   "type": "module",
   "bin": {
     "tirno": "./bin/tirno.js"
   },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rockheung/tirno.git"
+  },
+  "homepage": "https://github.com/Rockheung/tirno#readme",
+  "bugs": {
+    "url": "https://github.com/Rockheung/tirno/issues"
+  },
+  "author": "Rockheung <rockheung@gmail.com>",
+  "license": "ISC",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node bin/tirno.js",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/test/*.test.js",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "chalk": "^5.4.1",
