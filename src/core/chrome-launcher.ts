@@ -58,7 +58,10 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     headless: opts.headless ?? false,
     userDataDir,
     args,
-    ignoreDefaultArgs: ['--enable-automation'],
+    // puppeteer's default args inject `--remote-debugging-port=0` (auto-pick)
+    // which silently overrides our explicit port. Drop both so only our
+    // `--remote-debugging-port=${port}` reaches chrome.
+    ignoreDefaultArgs: ['--enable-automation', '--remote-debugging-port'],
     pipe: false,
     defaultViewport: null,
   });
