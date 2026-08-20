@@ -40,6 +40,7 @@ export function registerCacheCommands(program: Command): void {
     .description('Emit cached snapshot for a URL')
     .option('--mode <m>', 'Match mode: exact | urlPath', 'urlPath')
     .option('--viewport <wxh@dpr>', 'Specific viewport (e.g. 1200x800@2). If omitted, most-recent viewport for that URL.')
+    .option('--json', 'Output the entry as JSON — the parseable form')
     .action((url, opts) => {
       try {
         let viewport: visualCache.Viewport | undefined;
@@ -53,6 +54,15 @@ export function registerCacheCommands(program: Command): void {
           info(`No cached entry for ${url} (mode: ${opts.mode}${viewport ? `, viewport: ${visualCache.viewportKey(viewport)}` : ''})`);
           process.exit(1);
         }
+        // The text form below puts the selector in brackets, and selectors
+        // routinely contain brackets themselves (`input[name="q"]`), so it
+        // cannot be parsed back. This is the first step of the value flow and
+        // its reader is an agent, so it needs a form that survives a round trip.
+        if (opts.json) {
+          console.log(JSON.stringify(entry, null, 2));
+          return;
+        }
+
         console.log(`# cached at ${entry.capturedAt}`);
         console.log(`# url: ${entry.url}`);
         const vp = entry.viewport ? visualCache.viewportKey(entry.viewport) : '?';
