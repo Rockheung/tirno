@@ -74,7 +74,7 @@ tirno kill mysession
 | 명령 | 설명 |
 |---|---|
 | `screenshot [--full] [--out path]` | 스크린샷 |
-| `snapshot [--no-cache]` | a11y 트리 + visual cache 적재 |
+| `snapshot [--no-cache] [--vision [backend]]` | a11y 트리 + visual cache 적재. `--vision`으로 OCR 보강 (default tesseract). 옵션: `--vision-lang`, `--vision-min-confidence`, `--vision-iou`, `--vision-contain` |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>]` | reload 후 2초간 network 캡처 |
 

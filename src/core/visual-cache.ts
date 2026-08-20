@@ -14,6 +14,8 @@ export interface CacheRef {
   selector?: string;
   bbox?: { x: number; y: number; w: number; h: number };
   backendId?: number;
+  source?: 'a11y' | 'vision';  // default 'a11y' for back-compat
+  confidence?: number;          // populated for vision-sourced refs
 }
 
 export interface CacheEntry {

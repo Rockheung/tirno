@@ -7,7 +7,12 @@ import * as refStore from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
+import { visionAugment } from '../vision/augment.js';
+import type { BackendName } from '../vision/types.js';
+import type { Bbox } from '../cdp/iou.js';
 import type { ScreenshotOptions } from 'puppeteer-core';
+
+const VALID_BACKENDS: BackendName[] = ['tesseract', 'paddle', 'florence'];
 
 export function registerInspectCommands(program: Command): void {
   program
@@ -52,6 +57,11 @@ export function registerInspectCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--verbose', 'Include all elements (default: skip ignored)')
     .option('--no-cache', 'Skip visual-cache write')
+    .option('--vision [backend]', 'Augment with OCR-discovered text in regions a11y missed (default backend: tesseract)')
+    .option('--vision-lang <lang>', 'Language(s) for vision OCR (e.g. eng, kor+eng)', 'eng')
+    .option('--vision-min-confidence <n>', 'Drop OCR words below this confidence', parseInt, 50)
+    .option('--vision-iou <n>', 'IoU threshold for "covered by a11y" (0..1)', parseFloat, 0.3)
+    .option('--vision-contain <n>', 'Contained-in threshold (vision word inside a11y bbox)', parseFloat, 0.8)
     .action(async (opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -69,49 +79,96 @@ export function registerInspectCommands(program: Command): void {
 
         const { lines, refs: detailed } = renderAXTree(tree.nodes, !opts.verbose);
 
-        // collect cache data while CDP is still attached
+        // resolve vision backend if requested
+        let visionBackend: BackendName | null = null;
+        if (opts.vision) {
+          const requested = typeof opts.vision === 'string' ? opts.vision : 'tesseract';
+          if (!VALID_BACKENDS.includes(requested as BackendName)) {
+            await cdp.detach();
+            browser.disconnect();
+            throw new Error(`Unknown vision backend "${requested}". Valid: ${VALID_BACKENDS.join(', ')}`);
+          }
+          visionBackend = requested as BackendName;
+        }
+
+        // collect cache data and (optional) vision augment while CDP is attached
         let cachePayload: visualCache.CacheEntry | null = null;
-        if (opts.cache !== false) {
+        let visionRefs: visualCache.CacheRef[] = [];
+        let visionMeta: { backend: string; durationMs: number; total: number } | null = null;
+        let cacheRefs: visualCache.CacheRef[] = [];
+
+        const needCache = opts.cache !== false;
+        const needVision = visionBackend !== null;
+        if (needCache || needVision) {
           try {
-            const url = page.url();
             const screenshot = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
-            const viewport = await page.evaluate(() => ({
-              w: window.innerWidth,
-              h: window.innerHeight,
-              dpr: window.devicePixelRatio,
-            }));
-            const refEntries = Object.entries(detailed);
-            const elementInfos = await Promise.all(
-              refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch(() => ({})))
-            );
-            const cacheRefs: visualCache.CacheRef[] = refEntries.map(([k, v], i) => ({
-              refId: `@${k}`,
-              role: v.role,
-              name: v.name,
-              backendId: v.backendId,
-              ...elementInfos[i],
-            }));
-            const visualFp = await dHash(screenshot);
-            const key = visualCache.parseUrl(url);
-            cachePayload = {
-              url: key.fullUrl,
-              urlPath: key.urlPath,
-              domain: key.domain,
-              capturedAt: new Date().toISOString(),
-              visualFp,
-              viewport,
-              refs: cacheRefs,
-            };
+
+            if (needCache) {
+              const url = page.url();
+              const viewport = await page.evaluate(() => ({
+                w: window.innerWidth,
+                h: window.innerHeight,
+                dpr: window.devicePixelRatio,
+              }));
+              const refEntries = Object.entries(detailed);
+              const elementInfos = await Promise.all(
+                refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch(() => ({})))
+              );
+              cacheRefs = refEntries.map(([k, v], i) => ({
+                refId: `@${k}`,
+                role: v.role,
+                name: v.name,
+                backendId: v.backendId,
+                source: 'a11y' as const,
+                ...elementInfos[i],
+              }));
+              const visualFp = await dHash(screenshot);
+              const key = visualCache.parseUrl(url);
+              cachePayload = {
+                url: key.fullUrl,
+                urlPath: key.urlPath,
+                domain: key.domain,
+                capturedAt: new Date().toISOString(),
+                visualFp,
+                viewport,
+                refs: cacheRefs,
+              };
+            }
+
+            if (needVision && visionBackend) {
+              // a11y bboxes for IoU filter — collect from element-info we already have or fetch fresh
+              let a11yBboxes: Bbox[];
+              if (cacheRefs.length > 0) {
+                a11yBboxes = cacheRefs.map(r => r.bbox).filter((b): b is Bbox => !!b);
+              } else {
+                const refEntries = Object.entries(detailed);
+                type MaybeInfo = { bbox?: Bbox };
+                const infos = await Promise.all(
+                  refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch((): MaybeInfo => ({})))
+                );
+                a11yBboxes = infos.map((i: MaybeInfo) => i.bbox).filter((b): b is Bbox => !!b);
+              }
+              const aug = await visionAugment(screenshot, a11yBboxes, {
+                backend: visionBackend,
+                lang: opts.visionLang,
+                iouThreshold: opts.visionIou,
+                containThreshold: opts.visionContain,
+                minConfidence: opts.visionMinConfidence,
+              });
+              visionRefs = aug.refs;
+              visionMeta = { backend: visionBackend, durationMs: aug.durationMs, total: aug.totalOcrWords };
+              if (cachePayload) cachePayload.refs = [...cachePayload.refs, ...visionRefs];
+            }
           } catch (e) {
-            // cache write is best-effort — don't fail snapshot
-            cachePayload = null;
+            // best-effort — don't fail snapshot
+            if (needVision) info(`vision augment skipped: ${(e as Error).message}`);
           }
         }
 
         await cdp.detach();
         browser.disconnect();
 
-        // flat refs for ref-store (backward compatible)
+        // flat refs for ref-store (backward compatible — a11y only)
         const flatRefs: refStore.RefMap = {};
         for (const [k, v] of Object.entries(detailed)) flatRefs[k] = v.backendId;
         refStore.save(meta.name, flatRefs);
@@ -121,6 +178,18 @@ export function registerInspectCommands(program: Command): void {
         }
 
         for (const line of lines) console.log(line);
+
+        if (visionMeta && visionRefs.length > 0) {
+          console.log('');
+          console.log(`# vision (${visionMeta.backend}, ${visionMeta.durationMs}ms, ${visionRefs.length}/${visionMeta.total} not covered by a11y):`);
+          for (const r of visionRefs) {
+            const conf = (r.confidence ?? 0).toString().padStart(3, ' ');
+            const bb = r.bbox ? `(${r.bbox.x},${r.bbox.y} ${r.bbox.w}x${r.bbox.h})` : '';
+            console.log(`${r.refId.padEnd(5)} text [${conf}%] ${bb} "${r.name}"`);
+          }
+        } else if (visionMeta) {
+          info(`vision (${visionMeta.backend}, ${visionMeta.durationMs}ms): all ${visionMeta.total} OCR words covered by a11y`);
+        }
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
