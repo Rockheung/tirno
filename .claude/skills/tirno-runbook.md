@@ -17,7 +17,7 @@ tirno schema --pretty | jq '.commands[] | select(.destructive) | .name'
 ```
 
 **되돌릴 수 없는 명령을 실행 전에 가려내는 유일한 기계적 방법이다** — 지금은 8개다
-(`kill` `gc` `restart` `close-tab` `cache prune` `trail rm` `record rm` `auth rm`).
+(`kill` `gc` `restart` `close-tab` `cache prune` `trail rm` `record rm`).
 
 ## 0. 가치 흐름 (CLAUDE.md, 불변)
 
@@ -60,6 +60,23 @@ tirno wait-for '<selector>' --timeout 10000
 tirno wait-for --text "<보일 문구>" --timeout 10000
 tirno wait-for --network-idle
 ```
+
+**셋은 대안이지 병용이 아니다.** 둘 이상 주면 거부한다 — 예전엔 셀렉터가 조용히 무시됐다.
+
+**임의의 JS 조건**을 기다려야 하면 `eval` 이 promise 를 그대로 받는다. 폴링을 명령 여러
+번으로 나눌 필요가 없다:
+
+```bash
+tirno eval 'new Promise((ok, no) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    if (window.__FINAL__) { clearInterval(t); ok(JSON.stringify(window.__FINAL__)); }
+    else if (Date.now() - t0 > 10000) { clearInterval(t); no(new Error("timeout")); }
+  }, 100);
+})'
+```
+
+reject 는 exit 1 로 떨어지므로 그대로 게이트가 된다.
 
 `snapshot` 을 뜨는 경로는 이게 덜 드러난다 — 트리를 뜨는 동안 시간이 지나기 때문이다.
 **캐시 경로(아래)는 그 완충이 없으니 대기를 반드시 명시한다.**
@@ -183,6 +200,35 @@ GC·래스터·파싱이고, 이 카운터로는 더 못 쪼갠다.
 `script 0.2%` 가 기준선이고 거기서 벌어지는 폭이 증거다. 조건(뷰포트·이벤트·상태)을 쓸 수 없는
 지적은 내지 않는다.
 
+## 4.9 페이지 안에서 실험을 돌릴 때
+
+브라우저 안에서만 잴 수 있는 것이 있다 — iframe `sandbox` 조합, CSP, 격리 경계,
+`globalThis.top` 이 뚫리는지 같은 것. 이때는 "조작하고 확인" 이 아니라 **하네스를 태우고
+결과를 회수**하는 모양이 된다.
+
+```bash
+# 실험 페이지는 로컬에서 띄우고, 브라우저는 버릴 것으로 만든다
+tirno new lab --headless --ephemeral http://127.0.0.1:8931/index.html
+
+# 결과가 찰 때까지 한 번의 eval 로 기다린다 (명령을 여러 번 나누지 않는다)
+tirno eval 'new Promise((ok, no) => {
+  const t0 = Date.now();
+  const t = setInterval(() => {
+    if (window.__FINAL__) { clearInterval(t); ok(JSON.stringify(window.__FINAL__)); }
+    else if (Date.now() - t0 > 30000) { clearInterval(t); no(new Error("harness timeout")); }
+  }, 100);
+})'
+
+tirno kill lab --clean
+```
+
+- **`--ephemeral`** — 실험은 프로필을 남길 이유가 없다. kill 할 때 통째로 사라진다.
+- **결과를 전역 하나에 모은다.** 페이지가 `window.__FINAL__` 을 채우면 회수는 한 줄이다.
+  값을 여러 전역에 흩으면 `eval` 이 그 수만큼 늘어난다.
+- **대조군을 같은 하네스 안에 둔다.** 브라우저 밖에서 조합을 바꿔가며 여러 번 띄우는 것보다,
+  한 페이지가 조합을 전부 돌고 결과 표를 내는 편이 재현이 쉽다.
+- 하네스가 안 끝나면 `tirno stall` 로 메인스레드가 포화됐는지 **렌더러 밖에서** 본다(§4.5).
+
 ## 5. 정리
 
 ```bash
@@ -209,8 +255,16 @@ tirno ls                      # 남은 게 없는지
 
 - `tirno audit` 은 lighthouse 를 부르므로 **http(s) 만** 된다. `file://` 은 `INVALID_URL`.
 - `audit --mode timespan` 은 미구현이다.
-- 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜨거나
-  캐시된 페이지면 `cache load <url>` 이 ref + selector + bbox 를 준다.
+- 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜬다.
+- **`cache load` 로 꺼낸 `@N` 으로는 바로 조작할 수 없다.** 출력만 하고 ref store 를 안 채워서
+  `click @7` 은 `Unknown ref` 로 실패한다 — 조작하려면 `snapshot` 을 다시 찍어야 한다.
+  캐시에 담기는 채널도 `a11y`(role·name)와 `bbox` 둘뿐이고 selector 는 없다(2026-08-20 실측).
+- **실패는 전부 exit 1** 이다 — 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서
+  받은 예외까지. 종류별 코드가 없으니 `$?` 하나만 본다.
+- **`cache prune` 은 `--older-than` 이나 `--all` 중 하나를 요구한다.** 예전엔 무인자가 전량
+  삭제였다.
+- **`eval` 은 promise 를 기다린다.** `fetch(...)`·`new Promise(...)` 를 그대로 쓸 수 있고,
+  reject 는 exit 1 이다.
 - `tirno nav` 는 실패하면 **exit 1** 이다. `&&` / `||` 로 분기해도 된다. 단, 파이프 뒤에서
   종료코드를 읽으면 파이프 마지막 명령의 것을 읽는다 — `nav ... > /dev/null; echo $?` 로 재라.
 - **`--group` 없는 `tirno broadcast` 는 모든 세션에 간다.** 남의 세션이 떠 있는 머신에서는
@@ -224,6 +278,10 @@ tirno ls                      # 남은 게 없는지
   기계로 읽을 때는 `tirno schema` 를 쓴다.
 - `snapshot` 출력에서 조작 대상을 `grep textbox|button` 으로 찾으면 **`InlineTextBox` 가 대량으로
   걸려 정작 `searchbox`·`button` 이 묻힌다.** `@ref` 가 붙은 줄만 걸러라 — `grep -E '^@[0-9]+'`.
+- **"요청이 없다"로 오독하기 쉬운 자리 둘.** `tirno network` 의 캡처 창은 `networkidle2` 에서
+  닫히므로 그 뒤에 나가는 요청은 안 잡힌다. 그리고 페이지의
+  `performance.getEntriesByType('resource')` 는 **기본 250개에서 끊긴다** — JS 를 수백 개
+  부르는 페이지는 진작 넘쳐 있다. `performance.clearResourceTimings()` 후 다시 본다.
 
 ## 작업을 마치며
 

@@ -81,7 +81,7 @@ tirno click <selector|@N> [--dbl]      # selector 또는 @N ref (snapshot에서 
 tirno fill <selector|@N> <value>
 tirno type <text> [--delay ms]
 tirno press <key>                       # Enter, Tab, Escape, ArrowDown...
-tirno hover <selector>
+tirno hover <selector|@N>
 tirno drag <from> <to>                  # 좌표 "x,y" 또는 selector (자동 판별)
 tirno upload <selector> <files...>
 tirno scroll <up|down|<pixels>> [--step <px>]
@@ -172,7 +172,7 @@ tirno schema [--pretty]          # 명령 트리 전체를 JSON 으로 (The CLI 
 
 - `effects` — `read_only` / `idempotent` / `non_idempotent`
 - `destructive` — **되돌릴 수 없이 뭔가를 없앤다**: `kill` `gc` `restart` `close-tab`
-  `cache prune` `trail rm` `record rm` `auth rm`. 실행 전에 이걸 보면 된다
+  `cache prune` `trail rm` `record rm`. 실행 전에 이걸 보면 된다
 - `passthrough` — `-- <chrome flags>` 를 받는 명령(`new` `restart` `drift`)
 - `args` / `options` / `cardinality` / `output_kind`
 
