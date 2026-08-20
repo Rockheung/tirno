@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import * as store from './session-store.js';
 import { profileDir } from './session-store.js';
 import { allocate } from './port-allocator.js';
+import { waitForActivePort, clearActivePort } from './devtools-port.js';
 
 const CHROME_PATHS = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -18,6 +19,15 @@ function findChrome(): string {
   throw new Error('Chrome not found. Install Google Chrome or set --executable-path');
 }
 
+function portFromWsEndpoint(wsEndpoint: string): number | null {
+  try {
+    const port = Number.parseInt(new URL(wsEndpoint).port, 10);
+    return Number.isNaN(port) ? null : port;
+  } catch {
+    return null;
+  }
+}
+
 export interface LaunchOptions {
   name: string;
   port?: number;
@@ -31,17 +41,28 @@ export interface LaunchOptions {
 }
 
 export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata> {
-  const port = await allocate(opts.port);
+  // Default to `--remote-debugging-port=0`: the OS picks a free port and chrome
+  // records it in DevToolsActivePort. That removes the port-collision class
+  // entirely (9222+ is a shared range — other apps squat it) and is what lets a
+  // browser MCP anchor on the profile *directory* instead of a port number.
+  // An explicit --port keeps the legacy fixed-port path, which writes no
+  // DevToolsActivePort and so cannot be an anchor target (`tirno new` warns).
+  const requestedPort = opts.port === undefined ? 0 : await allocate(opts.port);
   const executablePath = opts.executablePath ?? findChrome();
   const userDataDir = opts.userDataDir ?? profileDir(opts.name);
   fs.mkdirSync(userDataDir, { recursive: true });
+
+  // A previous chrome on this profile left its DevToolsActivePort behind (chrome
+  // never removes it — measured, see devtools-port.ts). Clear it first so the
+  // file we read back below can only have been written by the chrome we launch.
+  clearActivePort(userDataDir);
 
   // Default viewport 1920x1080 — fixed size is required for tirno's
   // visual cache / journaling to be reproducible. User can override by
   // passing their own `--window-size=...` after `--`; chrome uses the
   // last value on the cmdline.
   const args = [
-    `--remote-debugging-port=${port}`,
+    `--remote-debugging-port=${requestedPort}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--window-size=1920,1080',
@@ -58,9 +79,9 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     headless: opts.headless ?? false,
     userDataDir,
     args,
-    // puppeteer's default args inject `--remote-debugging-port=0` (auto-pick)
-    // which silently overrides our explicit port. Drop both so only our
-    // `--remote-debugging-port=${port}` reaches chrome.
+    // puppeteer's default args inject their own `--remote-debugging-port`,
+    // which silently overrides ours. Drop both so only our
+    // `--remote-debugging-port=${requestedPort}` reaches chrome.
     ignoreDefaultArgs: ['--enable-automation', '--remote-debugging-port'],
     pipe: false,
     defaultViewport: null,
@@ -73,6 +94,13 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
 
   // disconnect without closing — Chrome stays running
   browser.disconnect();
+
+  // With port 0 the requested port is not the real one. DevToolsActivePort is
+  // what chrome itself wrote, and it is the same file a directory-anchored MCP
+  // reads, so prefer it. wsEndpoint (parsed by puppeteer from chrome's stderr)
+  // is the fallback — it carries the real port too, just without the file.
+  const active = requestedPort === 0 ? await waitForActivePort(userDataDir) : null;
+  const port = active?.port ?? portFromWsEndpoint(wsEndpoint) ?? requestedPort;
 
   const now = new Date().toISOString();
   const meta: store.SessionMetadata = {

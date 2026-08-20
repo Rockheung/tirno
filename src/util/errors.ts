@@ -26,6 +26,18 @@ export class ChromeNotRunning extends TirnoError {
   }
 }
 
+/**
+ * Something is listening, but observation says it is not this session's chrome.
+ * The message names the actual owner — a bare "cannot connect" would invite the
+ * user to retry or "clean up" the very process we are protecting.
+ */
+export class SessionNotOwned extends TirnoError {
+  constructor(name: string, port: number | null, reason: string) {
+    super(`Refusing to connect to session '${name}'${port === null ? '' : ` (port ${port})`}: ${reason}`);
+    this.name = 'SessionNotOwned';
+  }
+}
+
 export class NoActiveSession extends TirnoError {
   constructor() {
     super('No active session. Use "tirno attach <name>" or "-s <name>"');

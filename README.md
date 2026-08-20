@@ -56,12 +56,71 @@ tirno kill mysession
 ### 세션
 | 명령 | 설명 |
 |---|---|
-| `new <name> [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등) |
-| `ls` | 세션 목록 (port, status, proxy, emulation, last access) |
+| `new <name> [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨) |
+| `ls` | 세션 목록 (port, status, **owner**, proxy, emulation, last access) |
 | `attach <name>` | active 세션 변경 |
-| `kill [name]` | 세션 종료 |
+| `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
+| `gc [--dry-run] [--older-than <N>]` | 낡은 장부 정리. 기본은 장부만(ghost/foreign 엔트리, 잔존 `DevToolsActivePort`). `--older-than <N>`일 때만 **N일 이상 안 쓴 orphan 프로필 삭제** |
 | `rename <old> <new>` | 이름 변경 |
 | `export <name>` | 메타데이터 출력 |
+
+#### 소유권 (`ls` 의 OWNER)
+
+세션 메타는 기동 시점의 주장이지 현재 사실이 아니다 — pid 는 재사용되고 포트는 다른
+프로세스가 물려받는다. tirno 는 **세 사실이 모두 일치할 때만** 그 세션을 자기 것으로 본다:
+pid 생존 ∧ 그 pid 가 그 포트를 LISTEN ∧ 그 프로세스의 `--user-data-dir` 이 세션 프로필과 일치.
+
+| OWNER | 뜻 | 허용 조치 |
+|---|---|---|
+| `ours` | 3중 일치 | connect / kill |
+| `foreign(<app>)` | 하나라도 불일치 — 그 포트는 남의 것 | 표시만. connect·kill 거부 |
+| `ambiguous` | 같은 포트에 리스너 둘 이상 (IPv4/IPv6) | 표시만. 자동 조치 전면 금지 |
+| `ghost` | 대장에만 있고 리스너·pid 없음 | connect 불가 (kill 로 정리 가능) |
+
+`gc` 는 이 판정 위에서만 움직인다. **프로필 삭제는 로그인 세션 소실**이므로 `--older-than`
+없이는 절대 지우지 않고, 앵커가 가리키는 프로필·active 세션·살아있는 세션은 어느 경우에도
+보존한다. `foreign` 은 대장 엔트리(tirno 자기 json)만 지우고 프로세스·프로필은 건드리지
+않는다. `ambiguous` 는 아무것도 하지 않는다. 먼저 `tirno gc --dry-run` 으로 확인할 것.
+
+### 앵커 (브라우저 MCP 접속 대상)
+
+| 명령 | 설명 |
+|---|---|
+| `anchor ls [--json]` | 앵커 → 세션 매핑과 각 대상의 포트·소유권 |
+| `anchor set <anchor> <session> [--evict]` | 앵커를 세션 프로필로 향하게 함 (심링크 교체) |
+| `anchor rm <anchor>` | 앵커 심링크만 제거 (프로필 불변) |
+
+브라우저 MCP 를 **포트가 아니라 디렉토리**에 붙인다. `chrome-devtools-mcp` 는 툴 호출마다
+재연결하며 그때 `<dir>/DevToolsActivePort` 를 다시 읽으므로, Chrome 이 재기동해서 포트가
+바뀌어도 **MCP 재시작 없이** 따라간다.
+
+```jsonc
+// .mcp.json — 절대경로로 적을 것 ($HOME 전개 안 됨)
+{
+  "mcpServers": {
+    "chrome": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest",
+               "--auto-connect", "--user-data-dir=/Users/<me>/.tirno/anchors/main"]
+    }
+  }
+}
+```
+
+```bash
+tirno anchor set main mysession     # main 앵커를 mysession 으로
+tirno anchor set main other --evict # 전환 + 이전 Chrome 종료
+```
+
+앵커는 여러 개 둘 수 있다(`main`, `wt-foo`, …) — 디렉토리는 포트와 달리 충돌하지 않으므로
+MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
+
+주의 두 가지:
+
+- **이미 연결된 MCP 는 심링크 교체만으로 옮겨가지 않는다.** 연결된 browser 를 캐시하기
+  때문이다. `--evict` 로 이전 Chrome 을 종료해야 다음 툴 호출에서 새 대상에 붙는다.
+- **앵커(`anchors/*`)와 CLI 의 `active` 는 별개다.** `tirno attach` 로 CLI 세션을 바꿔도
+  MCP 대상은 그대로다 — 의도적 분리.
 
 ### 네비게이션
 | 명령 | 설명 |
@@ -139,6 +198,8 @@ cloud backend는 API key 없으면 안내 메시지, 있으면 "not yet implemen
 |---|---|
 | `~/.tirno/sessions/<name>.json` | 세션 메타 (port, pid, emulation 상태) |
 | `~/.tirno/profiles/<name>/` | Chrome user-data-dir (cookies, storage) |
+| `~/.tirno/profiles/<name>/DevToolsActivePort` | Chrome이 직접 쓴 실제 포트 + ws 경로. 세션 메타의 `wsEndpoint`보다 이쪽이 진실 |
+| `~/.tirno/anchors/<anchor>` | 프로필로의 심링크. 브라우저 MCP가 가리키는 곳 |
 | `~/.tirno/refs/<name>.json` | snapshot의 ref → backendDOMNodeId 매핑 |
 | `~/.tirno/visual-cache/<domain>/<sha1>.json` | URL-keyed snapshot 캐시 |
 | `~/.tirno/active` | 현재 active 세션 |
@@ -161,3 +222,7 @@ ISC
 ## 진행 상황
 
 작업 일지는 [docs/JOURNAL.md](docs/JOURNAL.md), 비교 도구 리서치는 [docs/RESEARCH.md](docs/RESEARCH.md).
+
+진행 중인 설계 — **anchor broker** (브라우저 MCP 접속 대상을 포트가 아닌 디렉토리로,
+소유권을 관찰로 판정): [docs/research-anchor-broker.md](docs/research-anchor-broker.md) ·
+[docs/plan-anchor-broker.md](docs/plan-anchor-broker.md) (Gate 1·2·3 통과 — Stage 1 착수 가능)

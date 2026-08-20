@@ -1,7 +1,7 @@
 import puppeteer, { type Browser } from 'puppeteer-core';
 import * as store from './session-store.js';
-import { isAlive } from './process-guard.js';
-import { ChromeNotRunning, NoActiveSession } from '../util/errors.js';
+import { inspectSession } from './inventory.js';
+import { ChromeNotRunning, NoActiveSession, SessionNotOwned } from '../util/errors.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
 
@@ -11,12 +11,18 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
 
   const meta = store.get(name);
 
-  if (!isAlive(meta.pid)) {
-    throw new ChromeNotRunning(name, meta.pid);
-  }
+  // `isAlive(pid)` alone used to decide this, and it is not enough: pids are
+  // recycled and ports are inherited. Require pid + port + profile to agree
+  // before handing CDP control to whatever answers on that port.
+  const inv = await inspectSession(meta);
+  if (inv.ownership === 'ghost') throw new ChromeNotRunning(name, meta.pid);
+  if (inv.ownership !== 'ours') throw new SessionNotOwned(name, inv.resolvedPort, inv.reason);
 
+  // inspectSession already resolved DevToolsActivePort (live) over
+  // meta.wsEndpoint (a launch-time snapshot that goes stale on restart);
+  // legacy fixed-port sessions write no such file and fall back to meta.
   const browser = await puppeteer.connect({
-    browserWSEndpoint: meta.wsEndpoint,
+    browserWSEndpoint: inv.wsEndpoint,
     defaultViewport: null,
   });
 

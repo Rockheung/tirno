@@ -3,6 +3,9 @@ import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
+import { clearActivePort } from '../core/devtools-port.js';
+import { collectListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
+import * as gc from '../core/gc.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,7 +37,7 @@ export function registerSessionCommands(program: Command): void {
     .description(NEW_DEFAULT_DESC)
     .argument('<name>', 'Session name')
     .argument('[url]', 'Optional URL — chrome opens directly, skipping about:blank')
-    .option('-p, --port <port>', 'DevTools port (auto-assign if omitted)', intArg)
+    .option('-p, --port <port>', 'Pin a fixed DevTools port. Omit to let the OS assign one — required for browser-MCP anchoring', intArg)
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
@@ -99,6 +102,12 @@ export function registerSessionCommands(program: Command): void {
       }
 
       success(`Session '${name}' created (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${opts.ephemeral ? ', ephemeral' : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
+
+      // A fixed port makes chrome skip DevToolsActivePort entirely (measured),
+      // so a directory-anchored browser MCP has nothing to read.
+      if (opts.port !== undefined) {
+        info(`--port ${opts.port} pins a fixed port; chrome writes no DevToolsActivePort, so this session cannot be a browser-MCP anchor target. Omit --port for that.`);
+      }
     } catch (e) {
       error((e as Error).message);
       process.exit(1);
@@ -111,7 +120,7 @@ export function registerSessionCommands(program: Command): void {
     .description('Kill existing session (if any) and re-create with new chrome flags')
     .argument('<name>', 'Session name')
     .argument('[url]', 'Optional URL — chrome opens directly, skipping about:blank')
-    .option('-p, --port <port>', 'DevTools port', intArg)
+    .option('-p, --port <port>', 'Pin a fixed DevTools port (omit to let the OS assign one)', intArg)
     .option('--headless', 'Run headless')
     .option('--executable-path <path>', 'Chrome path')
     .option('--ephemeral', 'Use a temporary user-data-dir')
@@ -159,17 +168,28 @@ export function registerSessionCommands(program: Command): void {
 
   program
     .command('ls')
-    .description('List all sessions')
+    .description('List all sessions (OWNER is observed, not from the ledger: ours|foreign|ambiguous|ghost)')
     .option('--json', 'Output as JSON')
     .option('--group <name>', 'Filter by group')
     .option('--flags', 'Include FLAGS column (truncated to 80 chars)')
-    .action((opts) => {
+    .action(async (opts) => {
       let sessions = store.list();
       const active = store.getActive();
       if (opts.group) sessions = sessions.filter(s => s.group === opts.group);
 
+      // One lsof for the whole list; each session is then matched against it.
+      const listeners = sessions.length ? await collectListeners() : [];
+      const owner = new Map<string, SessionInventory>();
+      for (const s of sessions) owner.set(s.name, await inspectSession(s, listeners));
+
       if (opts.json) {
-        console.log(JSON.stringify(sessions, null, 2));
+        console.log(JSON.stringify(
+          sessions.map(s => {
+            const inv = owner.get(s.name);
+            return { ...s, ownership: inv?.ownership, ownershipReason: inv?.reason, resolvedPort: inv?.resolvedPort };
+          }),
+          null, 2,
+        ));
         return;
       }
 
@@ -181,12 +201,13 @@ export function registerSessionCommands(program: Command): void {
       const showFlags = opts.flags === true;
       const showGroup = sessions.some(s => s.group);
 
-      const headers = ['', 'NAME', 'PORT', 'STATUS', 'PROXY', 'EMULATION'];
+      const headers = ['', 'NAME', 'PORT', 'STATUS', 'OWNER', 'PROXY', 'EMULATION'];
       if (showGroup) headers.push('GROUP');
       if (showFlags) headers.push('FLAGS');
       headers.push('LAST ACCESS');
 
       const rows = sessions.map(s => {
+        const inv = owner.get(s.name);
         const alive = isAlive(s.pid);
         const marker = s.name === active ? '*' : ' ';
         const status = alive ? 'running' : 'dead';
@@ -203,7 +224,14 @@ export function registerSessionCommands(program: Command): void {
         if (emu?.network) parts.push(`net:${emu.network}`);
         if (emu?.cpu) parts.push(`cpu:${emu.cpu}x`);
         const emulation = parts.length ? parts.join(', ') : '-';
-        const row = [marker, s.name, String(s.port), status, proxy, emulation];
+        // Name the squatter rather than just flagging it — "foreign" alone
+        // reads like a tirno bug, "foreign(OtherAgentApp)" reads like the
+        // fact it is.
+        const squatter = inv?.listeners.find(l => l.pid !== s.pid)?.command;
+        const ownership = inv
+          ? inv.ownership === 'foreign' && squatter ? `foreign(${squatter})` : inv.ownership
+          : '?';
+        const row = [marker, s.name, String(inv?.resolvedPort ?? s.port), status, ownership, proxy, emulation];
         if (showGroup) row.push(s.group ?? '-');
         if (showFlags) row.push(summarizeFlags(s.chromeFlags));
         row.push(s.lastAccessedAt.slice(0, 19).replace('T', ' '));
@@ -230,7 +258,7 @@ export function registerSessionCommands(program: Command): void {
 
   program
     .command('kill')
-    .description('Kill a session')
+    .description('Kill a session (refuses foreign/ambiguous ports — see "tirno ls")')
     .argument('[name]', 'Session name')
     .option('--all', 'Kill all sessions')
     .option('--group <name>', 'Kill all sessions in this group')
@@ -248,8 +276,24 @@ export function registerSessionCommands(program: Command): void {
           return;
         }
 
+        const listeners = await collectListeners();
+
         for (const meta of targets) {
+          // The ledger says this pid is ours; observation gets the final word.
+          // Killing on the ledger's say-so is how a stale entry turns into
+          // "tirno killed an unrelated app" (2026-07-07). Refuse and name it —
+          // ghosts still pass, since killing a dead pid is a no-op.
+          const inv = await inspectSession(meta, listeners);
+          if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
+            error(`Refusing to kill '${meta.name}' — ${inv.ownership}: ${inv.reason}`);
+            continue;
+          }
+
           await killAndWait(meta.pid);
+          // Chrome leaves DevToolsActivePort behind on every exit path, and a
+          // leftover makes the next MCP attach fail with an opaque
+          // `ECONNREFUSED <port>` instead of "no browser here".
+          clearActivePort(meta.userDataDir);
           store.remove(meta.name);
 
           // ephemeral dirs always cleaned; otherwise --clean
@@ -260,6 +304,47 @@ export function registerSessionCommands(program: Command): void {
 
           if (store.getActive() === meta.name) store.clearActive();
           success(`Killed '${meta.name}' (PID ${meta.pid}${isEphemeral ? ', ephemeral cleaned' : opts.clean ? ', profile cleaned' : ''})`);
+        }
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('gc')
+    .description('Clean up stale bookkeeping (ghost/foreign entries, leftover DevToolsActivePort). Never kills a browser; never removes an anchored, active or live profile')
+    .option('--dry-run', 'Show what would be removed, change nothing')
+    .option('--older-than <days>', 'Also delete orphan profiles unused for this many days (destructive: a profile is a logged-in session)', intArg)
+    .action(async (opts) => {
+      try {
+        const scanned = await gc.scan();
+        const plan = gc.plan(scanned, { olderThanDays: opts.olderThan }, new Date());
+
+        for (const s of plan.skipped) info(`keep ${s.target} — ${s.reason}`);
+
+        if (plan.actions.length === 0) {
+          info('Nothing to clean.');
+          return;
+        }
+
+        // Size and last-used are printed before deleting, not after: a profile
+        // directory is someone's logged-in browser session.
+        for (const a of plan.actions) {
+          const detail = [
+            a.sizeKb !== undefined ? `${(a.sizeKb / 1024).toFixed(1)} MB` : null,
+            a.lastUsed ? `last used ${a.lastUsed}` : null,
+          ].filter(Boolean).join(', ');
+          info(`${opts.dryRun ? 'would remove' : 'remove'} ${a.kind} ${a.target}${detail ? ` (${detail})` : ''} — ${a.reason}`);
+        }
+
+        const result = gc.apply(plan, opts.dryRun === true);
+        for (const f of result.failed) error(`failed on ${f.action.target}: ${f.error}`);
+
+        if (opts.dryRun) {
+          info(`Dry run — nothing changed. ${result.applied.length} item(s) would be removed.`);
+        } else {
+          success(`Removed ${result.applied.length} item(s)${result.failed.length ? `, ${result.failed.length} failed` : ''}`);
         }
       } catch (e) {
         error((e as Error).message);
