@@ -3,6 +3,13 @@ import path from 'node:path';
 import os from 'node:os';
 import { SessionNotFound, SessionAlreadyExists } from '../util/errors.js';
 
+export interface EmulationState {
+  device?: string;
+  viewport?: { width: number; height: number; deviceScaleFactor: number; mobile: boolean };
+  network?: string;
+  cpu?: number;
+}
+
 export interface SessionMetadata {
   name: string;
   pid: number;
@@ -12,6 +19,7 @@ export interface SessionMetadata {
   chromeFlags: string[];
   createdAt: string;
   lastAccessedAt: string;
+  emulation?: EmulationState;
 }
 
 const CHROMUX_DIR = path.join(os.homedir(), '.chromux');

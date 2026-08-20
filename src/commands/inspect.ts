@@ -29,9 +29,12 @@ export function registerInspectCommands(program: Command): void {
         const buffer = await page.screenshot(screenshotOpts);
         browser.disconnect();
 
-        const filepath = writeScreenshot(buffer as Buffer, opts.out, opts.format);
-        const viewport = page.viewport();
-        const size = viewport ? `${viewport.width}x${viewport.height}` : 'unknown';
+        const buf = buffer as Buffer;
+        const filepath = writeScreenshot(buf, opts.out, opts.format);
+        let size = `${(buf.length / 1024).toFixed(1)}KB`;
+        if (opts.format === 'png' && buf.length >= 24 && buf.toString('ascii', 1, 4) === 'PNG') {
+          size = `${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`;
+        }
         success(`${filepath} (${size})`);
       } catch (e) {
         error((e as Error).message);

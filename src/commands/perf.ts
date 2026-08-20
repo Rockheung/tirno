@@ -6,14 +6,12 @@ import { writeScreenshot } from '../output/image-writer.js';
 import { success, info, error } from '../output/formatter.js';
 
 export function registerPerfCommands(program: Command): void {
-  const trace = program
+  program
     .command('trace')
-    .description('Performance tracing');
-
-  trace
-    .command('start')
-    .description('Start a performance trace')
+    .description('Run a performance trace for a fixed duration')
     .option('-s, --session <name>', 'Session name')
+    .option('--duration <s>', 'Trace duration in seconds', parseFloat, 5)
+    .option('--out <path>', 'Output file path')
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -30,23 +28,8 @@ export function registerPerfCommands(program: Command): void {
           ],
         });
 
-        browser.disconnect();
-        success('Trace started. Use "chromux trace stop" to save.');
-      } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
-      }
-    });
-
-  trace
-    .command('stop')
-    .description('Stop tracing and save')
-    .option('-s, --session <name>', 'Session name')
-    .option('--out <path>', 'Output file path')
-    .action(async (opts) => {
-      try {
-        const { browser } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        info(`Tracing for ${opts.duration}s...`);
+        await new Promise(r => setTimeout(r, opts.duration * 1000));
 
         const buffer = await page.tracing.stop();
         browser.disconnect();
