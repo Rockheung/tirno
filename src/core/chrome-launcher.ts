@@ -32,10 +32,16 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   const userDataDir = profileDir(opts.name);
   fs.mkdirSync(userDataDir, { recursive: true });
 
+  // Default viewport 1920x1080 — fixed size is required for tirno's
+  // visual cache / journaling to be reproducible. User can override by
+  // passing their own `--window-size=...` after `--`; chrome uses the
+  // last value on the cmdline.
   const args = [
     `--remote-debugging-port=${port}`,
     '--no-first-run',
     '--no-default-browser-check',
+    '--window-size=1920,1080',
+    '--window-position=0,0',
     ...(opts.chromeFlags ?? []),
   ];
 
@@ -67,6 +73,12 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     chromeFlags: args,
     createdAt: now,
     lastAccessedAt: now,
+    // Pin JS-side viewport to 1920x1080 via setDeviceMetricsOverride. Chrome
+    // window-size flag handles the OS window, but the inner viewport differs
+    // by chrome bar height; emulation viewport pins it deterministically.
+    emulation: {
+      viewport: { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false },
+    },
   };
 
   store.create(meta);

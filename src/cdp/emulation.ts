@@ -33,11 +33,15 @@ export async function applyEmulation(page: Page, emu: EmulationState): Promise<v
       await page.emulate(device);
       const targetDsf = emu.viewport?.deviceScaleFactor;
       const deviceDsf = device.viewport.deviceScaleFactor ?? 1;
-      if (targetDsf !== undefined && targetDsf !== deviceDsf) {
+      const targetW = emu.viewport?.width ?? device.viewport.width;
+      const targetH = emu.viewport?.height ?? device.viewport.height;
+      const dsfChanged = targetDsf !== undefined && targetDsf !== deviceDsf;
+      const sizeChanged = targetW !== device.viewport.width || targetH !== device.viewport.height;
+      if (dsfChanged || sizeChanged) {
         await page.setViewport({
-          width: device.viewport.width,
-          height: device.viewport.height,
-          deviceScaleFactor: targetDsf,
+          width: targetW,
+          height: targetH,
+          deviceScaleFactor: targetDsf ?? deviceDsf,
           isMobile: device.viewport.isMobile ?? false,
           hasTouch: device.viewport.hasTouch ?? false,
         });

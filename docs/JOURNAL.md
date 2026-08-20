@@ -309,6 +309,89 @@ interface CacheEntry {
 
 ---
 
+### default viewport 1920x1080 + 작업 원칙 + raw CDP passthrough + dialog 우회 (PR #15)
+
+#### 추가 변경 (사용자 정정 후)
+
+**"tirno 갖다 버릴까?"** 질문에 대한 답: tirno에 raw CDP passthrough가 없어서 매 미션마다 wrapper 추가하는 패턴이 비효율이었음. 정정 즉시 추가.
+
+- `src/commands/cdp.ts` (신규) — `tirno cdp <method> [params-json]`. 모든 CDP method 즉시 호출. `--browser`로 browser-level session, `--listen <event>` + `--listen-ms`로 event capture
+- `src/commands/input.ts` — `drag <from> <to>` 명령 (selector OR 좌표, `--native`로 CDP intercept)
+- `src/core/chrome-connector.ts` — connect 시 onbeforeunload 무력화 + dialog 자동 accept (사용자 정정 "사이트 이탈시 시스템 dialog가 뜨는지도 매 페이지에서 체크해야 뭘 하다 갑자기 멈추지 않지")
+
+#### 미션 완수 — dev-user.internal-test.example 디자인 모드 위젯 추가 10회
+
+자격 차단 풀린 후 끝까지 시도한 결과:
+
+1. ✅ admin 로그인 (redacted@example.com)
+2. ✅ admin/design/ URL 진입 + dialog 우회로 navigation 정상화
+3. ✅ `design-mode-magnet` shadow DOM 발견 (open mode) + 좌상단 + 버튼 (8, 57) 위치 확인
+4. ✅ `_widget_type[data-type="text"]` 좌표 (953, 354) 확보
+5. ✅ jQuery click()/dispatchEvent — **untrusted라 사내플랫폼 handler 발동 안 함**
+6. ✅ DragEvent dispatch — modal 닫혔으나 `widgetHtml.attr is not a function` (untrusted dataTransfer 부족)
+7. ✅ `tirno cdp Input.dispatchMouseEvent` — **trusted CDP mouse event** → 정상 작동
+8. ✅ 10회 반복 시간: 4232 / 4376 / 4093 / 3931 / 4256 / 4497 / 4021 / 4133 / 4359 / 3915 ms — 평균 **4181ms/회**, 분산 작음
+9. ✅ 텍스트 위젯 32개 누적 (이전 시도 포함)
+
+#### 잘못된 가설 (기록)
+
+사용자 정정 "drag 기반이 아닌데 뭘로 그런 판단을 했을까" — click이 안 먹히는 걸 보고 자동으로 drag 가설로 점프했던 게 잘못. 실제 메커니즘은 단순 click이고, 단지 **untrusted JS click vs trusted CDP click** 차이. 가설 검증 단계에서 dragstart handler 0개 먼저 확인했어야 함. self-journaling이라면 이런 false trail도 cache에 기록 (다음에 같은 함정 안 빠지게).
+
+#### 의의
+
+- `tirno cdp` 추가로 wrapper의 한계가 사라짐 — 어떤 CDP 도메인이든 즉시 호출
+- onbeforeunload 자동 무력화로 SPA navigation 안정화
+- 사용자 직접 클릭 vs 자동화 차이의 본질이 **trusted event** 라는 진단 명확화
+- self-journaling: admin 페이지 cache 효용 87% + 위젯 추가 액션 실측 데이터 확보
+
+---
+
+### default viewport 1920x1080 + emulate --viewport + 작업 원칙 정책화 (PR #15)
+
+#### 의도
+
+사용자 정정 두 가지:
+
+1. **"tirno는 삽질을 통해 성공 경로를 기록하고, 성공 패턴을 효과적으로 재활용. 지시를 성공할 때까지 사용자를 찾지 않는다."** — tirno의 본질적 가치관. CLAUDE.md에 정책으로 명문화.
+2. **"viewport 1920x1080 — tirno 동작에 대한 가장 기본적인 신뢰를 위해."** — visual cache의 viewport-key 매칭과 layout journaling의 재현성 위해 default 고정.
+
+#### 구현
+
+- `CLAUDE.md` — "tirno 작업 원칙 (불변)" 섹션 추가 (4 항목)
+- `src/core/chrome-launcher.ts`:
+  - chrome flag `--window-size=1920,1080` + `--window-position=0,0` default 추가
+  - 새 세션 launch 시 `meta.emulation.viewport = { width: 1920, height: 1080, deviceScaleFactor: 1 }` 자동 설정 → connect 시 setDeviceMetricsOverride로 JS-side viewport 정확히 1920x1080 강제 (chrome bar height 영향 제거)
+- `src/commands/emulate.ts` — `--viewport <wxh>` 옵션 추가. device 설정과 결합 가능 (UA/touch는 device, size는 viewport)
+- `src/cdp/emulation.ts` — device + viewport 결합 시 viewport size override 처리
+
+#### self-journaling 효용 정량 검증
+
+`dev-user.internal-test.example/admin/` 페이지 10회 반복 시뮬레이션 (mac M-series, 1920x1080):
+
+| | 시간 |
+|---|---|
+| Run 1 (cold: nav + snapshot --vision) | 3,460ms |
+| Run 2~10 (warm: cache load 9회) | 80ms × 9 = 720ms |
+| 9회 모두 cold 시 추정 | 9 × 3,460 = 31,140ms |
+| 실제 cache 활용 합계 | 3,460 + 720 = 4,180ms |
+| **단축율** | **87% (회당 43배 빠름)** |
+
+자격 차단으로 위젯 추가 액션까지는 도달 불가했으나(사용자 사내플랫폼 계정만 알 수 있음), **재활용 효용의 핵심 신호** 정량 확인.
+
+#### 검증
+
+- `tirno new` 후 `eval "{innerWidth, innerHeight, dpr}"` → `[1920, 1080, 1]` (기존엔 chrome bar 차지로 [1920, 941, 2])
+- `tirno ls` EMULATION 컬럼 → `1920x1080@1x` (default 자동 표시)
+- `tirno emulate --viewport 1280x720` — viewport 변경 후 ls/eval로 적용 확인
+
+#### 한계
+
+- chrome window 자체는 OS-level이라 macOS 경우 chrome bar 일부 화면 차지 — JS innerWidth/Height는 1920x1080 강제됨 (setDeviceMetricsOverride)
+- 사용자가 emulate --viewport로 명시 변경 시 그 값이 우선
+- 기존 세션은 영향 없음 — 새로 만들 때부터 적용
+
+---
+
 ### Phase 6-2e — backend 분류 (local/cloud) + cloud stubs + default paddle (PR #14)
 
 #### 의도
@@ -641,7 +724,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#11](https://github.com/Rockheung/tirno/pull/11) | feat: Phase 6-2d — snapshot --vision 통합 (a11y 못 잡은 영역 OCR로 보강) | merged |
 | [#12](https://github.com/Rockheung/tirno/pull/12) | feat: Phase 6-1b — viewport-aware visual cache | merged |
 | [#13](https://github.com/Rockheung/tirno/pull/13) | fix: commander coercer로 parseInt/parseFloat 직접 사용 시 NaN 버그 (13곳) | merged |
-| [#14](https://github.com/Rockheung/tirno/pull/14) | feat: Phase 6-2e — backend 분류 (local/cloud) + cloud backend stubs + default paddle | open |
+| [#14](https://github.com/Rockheung/tirno/pull/14) | feat: Phase 6-2e — backend 분류 (local/cloud) + cloud backend stubs + default paddle | merged |
+| [#15](https://github.com/Rockheung/tirno/pull/15) | feat: default viewport 1920x1080 + emulate --viewport + tirno 작업 원칙 정책화 | open |
 
 ## 보류된 항목 (다음 phase 후보)
 

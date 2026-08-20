@@ -9,6 +9,7 @@ import { registerPerfCommands } from './commands/perf.js';
 import { registerMultiCommands } from './commands/multi.js';
 import { registerCacheCommands } from './commands/cache.js';
 import { registerVisionCommands } from './commands/vision.js';
+import { registerCdpCommands } from './commands/cdp.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -28,6 +29,7 @@ registerPerfCommands(program);
 registerMultiCommands(program);
 registerCacheCommands(program);
 registerVisionCommands(program);
+registerCdpCommands(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);
