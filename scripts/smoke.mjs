@@ -452,6 +452,12 @@ function main() {
   // 반대쪽 — 페이지가 { __error } 모양을 값으로 돌려주는 것은 실패가 아니다.
   run('eval (__error 모양의 값 → exit 0)', ['eval', '({__error: "값이다"})', ...S],
     { expectMatch: /값이다/ });
+  // 결과를 { threw, value } 로 감싸면서 async 가 죽은 적이 있다 — puppeteer 는 최상위
+  // promise 만 기다리므로 객체 안에 든 것은 {} 로 직렬화된다.
+  run('eval (promise 를 기다린다)', ['eval', 'Promise.resolve(6*7)', ...S],
+    { expectMatch: /^42$/m });
+  run('eval (reject → exit≠0)', ['eval', 'Promise.reject(new Error("나가떨어짐"))', ...S],
+    { expectFail: true, expectMatch: /나가떨어짐/ });
 
   // ── 멀티세션
   run('new (2번째 세션)', ['new', 'smoke2', '--ephemeral', PAGE, ...LAUNCH]);
