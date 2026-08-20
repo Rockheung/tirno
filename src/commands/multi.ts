@@ -40,7 +40,7 @@ export function registerMultiCommands(program: Command): void {
         const totalPixels = width * height;
         const pct = ((mismatch / totalPixels) * 100).toFixed(1);
 
-        const outPath = opts.out ?? `/tmp/wandr-diff-${Date.now()}.png`;
+        const outPath = opts.out ?? `/tmp/tirno-diff-${Date.now()}.png`;
         fs.writeFileSync(outPath, PNG.sync.write(diff));
 
         success(`Diff: ${mismatch} pixels (${pct}%) — ${outPath}`);
@@ -64,9 +64,9 @@ export function registerMultiCommands(program: Command): void {
       }
 
       for (const session of sessions) {
-        info(`[${session.name}] wandr ${cmd} ${args.join(' ')}`);
+        info(`[${session.name}] tirno ${cmd} ${args.join(' ')}`);
         try {
-          // re-execute wandr with -s flag
+          // re-execute tirno with -s flag
           const { execSync } = await import('node:child_process');
           const result = execSync(
             `node ${process.argv[1]} ${cmd} ${args.join(' ')} -s ${session.name}`,

@@ -39,7 +39,7 @@ export function registerPerfCommands(program: Command): void {
           return;
         }
 
-        const outPath = opts.out ?? `/tmp/wandr-trace-${Date.now()}.json`;
+        const outPath = opts.out ?? `/tmp/tirno-trace-${Date.now()}.json`;
         fs.writeFileSync(outPath, buffer);
         success(`Trace saved: ${outPath} (open in chrome://tracing)`);
       } catch (e) {
@@ -68,7 +68,7 @@ export function registerPerfCommands(program: Command): void {
         await cdp.detach();
         browser.disconnect();
 
-        const outPath = opts.out ?? `/tmp/wandr-heap-${Date.now()}.heapsnapshot`;
+        const outPath = opts.out ?? `/tmp/tirno-heap-${Date.now()}.heapsnapshot`;
         fs.writeFileSync(outPath, chunks.join(''));
         success(`Heap snapshot: ${outPath} (open in Chrome DevTools Memory tab)`);
       } catch (e) {
