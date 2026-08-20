@@ -83,7 +83,7 @@ export function registerTrailCommands(program: Command): void {
     );
 
   trail
-    .command('capture <name>')
+    .command('capture')
     .description('[fallback only] 사용자 시연 캡처. 자율 탐색이 모두 실패한 케이스에서만 사용. record listener 활성화.')
     .argument('<name>', 'Trail name (used for filename + replay key)')
     .option('-s, --session <name>', 'Session name')

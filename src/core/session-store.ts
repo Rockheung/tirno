@@ -40,6 +40,13 @@ export interface SessionMetadata {
   wsEndpoint: string;
   userDataDir: string;
   chromeFlags: string[];
+  /**
+   * Only set when `--executable-path` was given. Chrome auto-detection covers
+   * three fixed paths, so a session on Chromium/Brave/Edge is only reproducible
+   * if the choice outlives the launch — `restart` reads it back, otherwise the
+   * session silently comes back on a different browser (or not at all).
+   */
+  executablePath?: string;
   createdAt: string;
   lastAccessedAt: string;
   emulation?: EmulationState;
