@@ -11,13 +11,17 @@ puppeteer-core 기반.
 목표 도달 시도 우선순위 — 위에서 아래로 시도, 마지막은 자존심 굽혀 부탁:
 
 1. **cache lookup** — 결정론, ms 단위
-2. **multi-channel fallback** (selector → a11y → bbox) — 결정론, ms 단위.
-   ocr 채널은 2026-08-19 에 들어냈다 — 아래 "덜어낸 것" 참고
-3. **CDP 직접 분석 + page 자율 시도** — agent가 페이지 구조 뜯어보며 행동경로 발견
-4. **LLM (지능요청) + RAG retrieval** — 비결정론, 비용 있음, 누적된 trail/waypoint를 prompt에 RAG
-5. **사용자 시연 부탁** (`tirno trail capture`) — **마지막 보루**. 위 모두 실패 시 자존심 굽혀 부탁. 부담을 인정하고 명시적으로 요청.
+2. **multi-channel fallback** (selector → a11y → bbox) — 결정론, ms 단위
+3. **CDP 직접 분석 + 자율 시도** — 페이지 구조를 뜯어보며 행동경로를 찾는다
+4. **사용자 시연 부탁** (`tirno trail capture`) — **마지막 보루**. 위 모두 실패 시 자존심 굽혀 부탁. 부담을 인정하고 명시적으로 요청.
 
-`record / replay / trail capture`는 5번에 해당. tirno의 메인 가치는 1~4의 자율 흐름. 메인 흐름이 강해질수록 5번 호출 빈도가 줄어드는 게 self-journaling의 진짜 의의.
+`record / replay / trail capture` 는 4번에 해당. 메인 가치는 1~3의 결정론 흐름이고,
+그게 강해질수록 4번 호출 빈도가 줄어드는 것이 self-journaling 의 진짜 의의다.
+
+**tirno 안에 LLM 은 없다.** 예전 흐름에는 3번과 시연 사이에 "LLM + RAG retrieval" 이
+있었고 `tirno ask` / `tirno explore` 가 그것이었다. 2026-08-19 에 전부 들어냈다 —
+아래 "덜어낸 것" 참고. 지능이 필요한 판단은 **tirno 를 호출하는 쪽**이 한다. 이 도구는
+결정론적인 관측과 조작만 제공하고, 그 경계가 흐려지지 않게 유지한다.
 
 ## tirno 작업 원칙 (불변)
 
@@ -60,8 +64,6 @@ node bin/tirno.js kill test --clean
 - `src/commands/` — CLI 명령. 파일명은 카테고리이지 명령 이름이 아니다 (`inspect.ts` 는
   screenshot/snapshot/console/network 를 등록한다 — `tirno inspect` 라는 명령은 없다)
 - `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash
-- `src/intelligence/` — LLM 백엔드, 임베딩, 재시도·비용 상한. `backends/` 에는 **`claude.ts`
-  하나뿐이다** — openai·gemini 는 파일조차 없고 `dispatcher.ts` 가 던진다
 - `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
 - `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
 - `core/schema.ts` — `tirno schema` 의 생성기. 구조는 commander 트리에서 자동 추출하고,
@@ -76,9 +78,6 @@ node bin/tirno.js kill test --clean
 - chalk: 터미널 컬러
 - pixelmatch + pngjs: 스크린샷 비교
 - lighthouse: `tirno audit`
-- @anthropic-ai/sdk: `tirno ask` / `tirno explore` 의 claude 백엔드.
-  **지능 백엔드는 claude 하나뿐이다** — `--backend openai|gemini` 는 인자로 받지만
-  `dispatcher.ts` 에서 "not yet implemented" 로 던진다
 
 ## 덜어낸 것 (2026-08-19)
 
@@ -93,4 +92,13 @@ node bin/tirno.js kill test --clean
   `@lancedb/lancedb`(92MB)를 `dependencies` 에서 뺐다. 코드는 남아 있고 호출 시점에
   없으면 설치 안내를 던진다 — 그 자리가 플러그인 이음매다.
 
-결과: **233MB, 네이티브 바이너리 0개.** 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).
+**LLM 층 전량 삭제** (같은 날, 별건). `tirno ask` · `tirno explore` · `src/intelligence/` ·
+`tirno auth` · `core/keychain.ts` · `@anthropic-ai/sdk`, 그리고 RAG 부속(`snapshot --embed`,
+`searchSimilar`, `Waypoint.embedding`, lance 백엔드). `explore` 는 8번 실행돼 **한 번도
+완주한 적이 없고**(`explore.end` 0건) 원인은 API 키 부재였다 — 즉 이 층은 검증된 적이
+없다. 지능은 tirno 를 호출하는 쪽이 갖는다.
+
+`~/.tirno/metrics.jsonl` 의 옛 `llm.*` · `explore.*` 줄은 그대로 읽힌다. 집계에서
+빠질 뿐 `aggregate()` 가 깨지지 않는다.
+
+결과: 런타임 의존 **6개**, 엔드포인트 **66개**. 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).

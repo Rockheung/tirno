@@ -49,8 +49,6 @@ export interface Waypoint {
     lastSuccessAt?: string;
   };
 
-  /** Semantic embedding (Float32Array as plain array in JSON). 384d normalized. */
-  embedding?: number[];
 }
 
 /** @deprecated Use Waypoint instead. Old name kept for callers being migrated. */

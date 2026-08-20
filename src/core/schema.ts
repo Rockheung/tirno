@@ -155,15 +155,6 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'trail replay':  { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   'trail rm':      { effects: 'idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
 
-  // ---- intelligence (billed, non-deterministic)
-  'ask':          { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
-  'explore':      { effects: 'non_idempotent', output_kind: 'data', cardinality: 'unbounded' },
-
-  // ---- secrets
-  'auth set':     { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
-  'auth rm':      { effects: 'idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
-  'auth status':  { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
-
   // ---- self-description
   'schema':       { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
 };

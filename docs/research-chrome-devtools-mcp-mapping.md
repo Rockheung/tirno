@@ -151,8 +151,6 @@ slim 모드 3개는 tirno 의 기본 surface 에 그대로 포함.
 - `tirno cache` — URL/viewport 키 visual cache (재현/diff 용)
 - `tirno record` / `tirno replay` — 사용자 동작 캡처 + 재생 (raw CDP trusted events)
 - `tirno trail` — multi-channel fallback 의 trail 저장/replay
-- `tirno explore <goal>` — cache → multi-channel → CDP → LLM 자율 탐색
-- `tirno ask <goal>` — 단발 LLM 질의
 - `tirno emulate --device <preset>` — UA/viewport/dpr 일괄 (mcp 는 분리)
 - `tirno broadcast <cmd>` — 다세션 동시 실행
 - `tirno diff <s1> <s2>` — 두 세션 visual diff

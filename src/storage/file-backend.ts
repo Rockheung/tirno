@@ -42,7 +42,6 @@ async function loadAllRecords(): Promise<WaypointRecord[]> {
         viewport: e.viewport,
         capturedAt: e.capturedAt,
         searchText: buildSearchText(wp),
-        embedding: wp.embedding,
       });
     }
   }
@@ -60,7 +59,6 @@ export class FileWaypointStore implements WaypointStore {
       refId: rec.refId,
       channels: rec.channels,
       matchStats: rec.matchStats,
-      embedding: rec.embedding,
     };
     if (existing) {
       const idx = existing.refs.findIndex(r => r.id === rec.id);
@@ -125,19 +123,6 @@ export class FileWaypointStore implements WaypointStore {
 
   // Linear cosine over all embedded waypoints. OK for thousands; switch to
   // lance backend for larger workloads.
-  async searchSimilar(embedding: Float32Array, topK: number): Promise<WaypointRecord[]> {
-    const all = await loadAllRecords();
-    const scored: Array<{ rec: WaypointRecord; score: number }> = [];
-    for (const r of all) {
-      if (!r.embedding) continue;
-      let s = 0;
-      const n = Math.min(embedding.length, r.embedding.length);
-      for (let i = 0; i < n; i++) s += embedding[i] * r.embedding[i];
-      scored.push({ rec: r, score: s });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, topK).map(x => x.rec);
-  }
 }
 
 export class FileTrailStore implements TrailStore {

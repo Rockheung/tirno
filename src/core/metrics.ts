@@ -10,18 +10,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
+// Only `trail.replay` is emitted today. The rest are read-side: a log written
+// before the LLM layer was removed still carries llm.* / explore.* /
+// embedding.compute lines, and aggregate() must not choke on them — unknown
+// kinds fall through to `totals`.
 export type EventKind =
   | 'cache.hit'
   | 'cache.miss'
   | 'cache.save'
-  | 'embedding.compute'
-  | 'llm.call'
-  | 'llm.retry'
-  | 'llm.fail'
   | 'trail.replay'
-  | 'trail.save'
-  | 'explore.start'
-  | 'explore.end';
+  | 'trail.save';
 
 export interface MetricEvent {
   ts: string;          // ISO timestamp
@@ -71,15 +69,8 @@ export function readAll(): MetricEvent[] {
 export interface Aggregate {
   totals: Record<string, number>;
   cacheHitRate: number | null;
-  llmCostUsd: number;
-  llmCallCount: number;
-  llmRetryCount: number;
-  llmFailCount: number;
-  exploreCount: number;
-  exploreOutcomes: Record<string, number>;
   trailReplayCount: number;
   trailReplaySuccessRate: number | null;
-  embeddingComputeCount: number;
   avgLatencyMs: Record<string, number>;
   windowStart: string | null;
   windowEnd: string | null;
@@ -88,11 +79,7 @@ export interface Aggregate {
 export function aggregate(events: MetricEvent[]): Aggregate {
   const totals: Record<string, number> = {};
   let cacheHits = 0, cacheMisses = 0;
-  let llmCost = 0, llmCalls = 0, llmRetries = 0, llmFails = 0;
-  let exploreCount = 0;
-  const exploreOutcomes: Record<string, number> = {};
   let trailReplays = 0, trailReplaySuccess = 0;
-  let embeddings = 0;
   const latencyByKind: Record<string, { sum: number; n: number }> = {};
   let firstTs: string | null = null;
   let lastTs: string | null = null;
@@ -109,20 +96,9 @@ export function aggregate(events: MetricEvent[]): Aggregate {
     }
     if (e.kind === 'cache.hit') cacheHits++;
     else if (e.kind === 'cache.miss') cacheMisses++;
-    else if (e.kind === 'llm.call') {
-      llmCalls++;
-      if (typeof e.costUsd === 'number') llmCost += e.costUsd;
-    } else if (e.kind === 'llm.retry') llmRetries++;
-    else if (e.kind === 'llm.fail') llmFails++;
-    else if (e.kind === 'explore.end') {
-      exploreCount++;
-      const o = String(e.outcome ?? 'unknown');
-      exploreOutcomes[o] = (exploreOutcomes[o] ?? 0) + 1;
-    } else if (e.kind === 'trail.replay') {
+    else if (e.kind === 'trail.replay') {
       trailReplays++;
       if (e.success === true) trailReplaySuccess++;
-    } else if (e.kind === 'embedding.compute') {
-      embeddings++;
     }
   }
 
@@ -135,15 +111,8 @@ export function aggregate(events: MetricEvent[]): Aggregate {
   return {
     totals,
     cacheHitRate: cacheTotal > 0 ? cacheHits / cacheTotal : null,
-    llmCostUsd: Math.round(llmCost * 10000) / 10000,
-    llmCallCount: llmCalls,
-    llmRetryCount: llmRetries,
-    llmFailCount: llmFails,
-    exploreCount,
-    exploreOutcomes,
     trailReplayCount: trailReplays,
     trailReplaySuccessRate: trailReplays > 0 ? trailReplaySuccess / trailReplays : null,
-    embeddingComputeCount: embeddings,
     avgLatencyMs,
     windowStart: firstTs,
     windowEnd: lastTs,
