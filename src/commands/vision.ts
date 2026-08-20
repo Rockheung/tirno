@@ -3,23 +3,33 @@ import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { recognize, shutdown } from '../vision/ocr.js';
+import type { BackendName } from '../vision/types.js';
 import { success, info, error } from '../output/formatter.js';
+
+const VALID_BACKENDS: BackendName[] = ['tesseract', 'paddle', 'florence'];
 
 export function registerVisionCommands(program: Command): void {
   const vision = program
     .command('vision')
-    .description('OCR / visual extraction (Phase 6-2: tesseract.js backend)');
+    .description('OCR / visual extraction (Phase 6-2)');
 
   vision
     .command('ocr')
     .description('Run OCR on the current page screenshot')
     .option('-s, --session <name>', 'Session name')
-    .option('--lang <lang>', 'Language(s) joined with +. e.g. eng / kor / kor+eng', 'eng')
+    .option('--backend <name>', `OCR backend: ${VALID_BACKENDS.join(' | ')}`, 'tesseract')
+    .option('--lang <lang>', 'Language(s) (tesseract uses + e.g. kor+eng; paddle/florence ignore)', 'eng')
     .option('--full', 'Full page screenshot (default: viewport only)')
     .option('--out <path>', 'Write JSON result to path')
     .option('--min-confidence <n>', 'Filter words below this confidence (0-100)', parseInt, 0)
+    .option('--paddle-models <dir>', 'Directory containing PaddleOCR det/rec/dict for non-default langs')
     .action(async (opts) => {
       try {
+        const backend = opts.backend as BackendName;
+        if (!VALID_BACKENDS.includes(backend)) {
+          throw new Error(`Unknown backend "${backend}". Valid: ${VALID_BACKENDS.join(', ')}`);
+        }
+
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
         const buf = await page.screenshot({
@@ -29,8 +39,18 @@ export function registerVisionCommands(program: Command): void {
         }) as Buffer;
         browser.disconnect();
 
-        info(`Running OCR (lang=${opts.lang}, ${(buf.length / 1024).toFixed(0)}KB)...`);
-        const result = await recognize(buf, { lang: opts.lang });
+        info(`Running OCR (backend=${backend}, lang=${opts.lang}, ${(buf.length / 1024).toFixed(0)}KB)...`);
+
+        const ocrOpts: Record<string, unknown> = { lang: opts.lang };
+        if (backend === 'paddle' && opts.paddleModels) {
+          ocrOpts.models = {
+            detectionPath: `${opts.paddleModels}/det.onnx`,
+            recognitionPath: `${opts.paddleModels}/rec.onnx`,
+            dictionaryPath: `${opts.paddleModels}/dict.txt`,
+          };
+        }
+
+        const result = await recognize(buf, backend, ocrOpts);
         await shutdown();
 
         const filtered = result.words.filter(w => w.confidence >= opts.minConfidence);

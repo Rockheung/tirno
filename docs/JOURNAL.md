@@ -309,6 +309,46 @@ interface CacheEntry {
 
 ---
 
+### Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub (PR #9)
+
+#### 의도
+
+PR #8에서 tesseract 단일 backend로 시작했으나, 원래 합의(Florence-2 + PaddleOCR onnxruntime)가 손상된 상태였음. 사용자 정정에 따라 **backend interface를 plug-in 구조로 정리하고 PaddleOCR + Florence 추가**. tesseract는 옵션으로 잔류.
+
+#### 구현
+
+- `src/vision/types.ts` (신규) — `OcrBackend` interface, `BackendName` union
+- `src/vision/ocr.ts` 재작성 — backend dispatcher. lazy load (사용하지 않는 backend의 native deps는 import 안 됨)
+- `src/vision/backends/tesseract.ts` (신규) — 기존 tesseract 로직 분리. `OcrBackend` 구현
+- `src/vision/backends/paddle.ts` (신규) — `@gutenye/ocr-node` (onnxruntime-node + sharp 기반 PaddleOCR JS port). 영어 default. 한국어 등은 `--paddle-models <dir>` 옵션으로 모델 path 지정. 입력은 임시 파일 경유 (라이브러리 제약)
+- `src/vision/backends/florence.ts` (신규) — stub. 다음 PR에서 `@huggingface/transformers`로 구현. CLI surface는 이번 PR에서 안정화
+- `src/commands/vision.ts` — `--backend tesseract|paddle|florence` 옵션 추가. paddle은 `--paddle-models` 추가 옵션
+- `package.json` — `@gutenye/ocr-node`, `@huggingface/transformers` dependency. basic-ftp transitive vuln도 동시에 fix
+
+#### 검증
+
+- example.com on tesseract — 19개 단어 95%+ confidence (0.46s 두번째 실행)
+- example.com on paddle — 4개 line 100% confidence (2.86s 첫 실행, 모델 로드 포함). `Example Domain`, `Learn more` 등 정확
+- 49/49 tests pass (기존 회귀 없음)
+- florence backend는 호출 시 명확한 "not implemented" 에러
+
+#### backend별 특성 비교
+
+| backend | 단위 | 한국어 | 첫 실행 | 무게 |
+|---|---|---|---|---|
+| tesseract | word | ★★ (lang data download) | ~800ms | ~5MB JS + 10MB/lang |
+| paddle | line | ★ (default 영어, kor은 모델 별도) | ~2.5s | onnxruntime + sharp + 영어 모델 |
+| florence (stub) | TBD | TBD | TBD | TBD (~460MB 예상) |
+
+#### 한계
+
+- paddle 한국어는 모델 별도 download — `--paddle-models <dir>` 옵션으로 지정 (사용자가 PaddleOCR 한국어 det/rec/dict 받아서)
+- paddle 입력이 임시 파일 경유 — `@gutenye/ocr-node` v1.4.x 제약. 향후 ImageRaw 직접 전달 가능
+- florence backend는 stub — Phase 6-2c
+- snapshot 자동 통합(`--vision`)은 별도 PR
+
+---
+
 ### Phase 6-2 — vision OCR backend (PR #8)
 
 #### 의도
@@ -385,7 +425,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#5](https://github.com/Rockheung/tirno/pull/5) | fix: `--enable-automation` flag 제거로 Akamai 봇 차단 우회 | merged |
 | [#6](https://github.com/Rockheung/tirno/pull/6) | feat: Phase 6-1 — URL-keyed visual cache + node:test | merged |
 | [#7](https://github.com/Rockheung/tirno/pull/7) | chore: 프로덕션 마감 — README + packaging + element-info 격리 | merged |
-| [#8](https://github.com/Rockheung/tirno/pull/8) | feat: Phase 6-2 — vision OCR backend (tesseract.js) + IoU helper | open |
+| [#8](https://github.com/Rockheung/tirno/pull/8) | feat: Phase 6-2 — vision OCR backend (tesseract.js) + IoU helper | merged |
+| [#9](https://github.com/Rockheung/tirno/pull/9) | feat: Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub | open |
 
 ## 보류된 항목 (다음 phase 후보)
 

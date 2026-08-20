@@ -43,6 +43,8 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
+    "@gutenye/ocr-node": "^1.4.8",
+    "@huggingface/transformers": "^4.2.0",
     "chalk": "^5.4.1",
     "commander": "^14.0.0",
     "pixelmatch": "^6.0.0",
