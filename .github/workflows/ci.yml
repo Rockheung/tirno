@@ -1,0 +1,35 @@
+name: ci
+
+# 유닛 층 — 매 PR 차단. Chrome 을 띄우지 않으므로 어느 runner 에서든 돈다:
+# lsof 출력 / DevToolsActivePort 본문 / chrome 커맨드라인은 전부 캡처한 문자열이고,
+# 파일을 쓰는 테스트는 mkdtempSync + TIRNO_DIR override 로 격리된다.
+#
+# 그래서 여기서 증명되는 것은 파서와 판정 로직이지 Chrome 의 행동이 아니다.
+# 그쪽은 gate-regression.yml 이 맡는다.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # package.json engines: ">=22". 하한과 현행을 같이 본다.
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
+
+      - run: npm test
