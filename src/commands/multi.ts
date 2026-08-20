@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { intArg, floatArg } from '../util/parsers.js';
+import { floatArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';

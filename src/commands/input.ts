@@ -173,9 +173,9 @@ export function registerInputCommands(program: Command): void {
           // wait for intercept to capture data
           await new Promise(r => setTimeout(r, 150));
           if (dragData) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const data = dragData as any;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             const sendAny = cdp.send.bind(cdp) as any;
             await sendAny('Input.dispatchDragEvent', { type: 'dragEnter', x: tx, y: ty, data });
             await sendAny('Input.dispatchDragEvent', { type: 'dragOver', x: tx, y: ty, data });

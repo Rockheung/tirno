@@ -1,5 +1,5 @@
-// Backend-agnostic OCR types — shared across local (tesseract / paddle /
-// florence) and cloud (claude / openai / gemini) backends.
+// Backend-agnostic OCR types — shared across local (paddle / florence) and
+// cloud (claude / openai / gemini) backends.
 
 export interface OcrWord {
   text: string;
@@ -25,11 +25,11 @@ export interface OcrBackend {
   shutdown(): Promise<void>;
 }
 
-export type LocalBackendName = 'tesseract' | 'paddle' | 'florence';
+export type LocalBackendName = 'paddle' | 'florence';
 export type CloudBackendName = 'claude' | 'openai' | 'gemini';
 export type BackendName = LocalBackendName | CloudBackendName;
 
-export const LOCAL_BACKENDS: LocalBackendName[] = ['tesseract', 'paddle', 'florence'];
+export const LOCAL_BACKENDS: LocalBackendName[] = ['paddle', 'florence'];
 export const CLOUD_BACKENDS: CloudBackendName[] = ['claude', 'openai', 'gemini'];
 export const ALL_BACKENDS: BackendName[] = [...LOCAL_BACKENDS, ...CLOUD_BACKENDS];
 

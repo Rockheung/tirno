@@ -14,7 +14,7 @@ export const geminiBackend: OcrBackend = {
     if (!present) {
       throw new Error(
         `gemini backend requires one of ${ENV_KEYS.join(' / ')} env var. ` +
-        `Real implementation pending — use --backend paddle or tesseract for local OCR.`
+        `Real implementation pending — use --backend paddle for local OCR.`
       );
     }
     throw new Error(

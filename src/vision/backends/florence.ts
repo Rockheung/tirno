@@ -6,7 +6,7 @@
 // (<OCR_WITH_REGION>) is not preserved correctly through tokenize→decode in
 // transformers.js v4 (raw output drops the leading "OC", reading "R_WITH_REGION"),
 // causing post_process_generation to return empty/garbled regions on
-// `onnx-community/Florence-2-base-ft`. Use --backend tesseract or paddle for
+// `onnx-community/Florence-2-base-ft`. Use --backend paddle for
 // production OCR. Configurable via env:
 //   TIRNO_FLORENCE_MODEL=<hf-id>     (default: onnx-community/Florence-2-base-ft)
 //   TIRNO_FLORENCE_DTYPE=q4|q8|fp32  (default: q4)
@@ -92,7 +92,7 @@ export const florenceBackend: OcrBackend = {
 
     const generated_text = tokenizer.batch_decode(generated_ids, { skip_special_tokens: false })[0];
     if (process.env.TIRNO_FLORENCE_DEBUG) {
-      // eslint-disable-next-line no-console
+       
       console.error('[florence raw]', JSON.stringify(generated_text));
     }
     // post_process expects [height, width]

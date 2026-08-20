@@ -1,9 +1,9 @@
 import { Command } from 'commander';
-import { intArg, floatArg } from '../util/parsers.js';
+import { floatArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
-import { writeScreenshot } from '../output/image-writer.js';
+
 import { success, info, error } from '../output/formatter.js';
 
 export function registerPerfCommands(program: Command): void {
