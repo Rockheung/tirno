@@ -597,6 +597,51 @@ MCP → isError=true :: Could not connect to Chrome. …
 9225  리스너 없음 / pid 82569 없음    ← 대장은 살아있는 세션
 ```
 
+### 헤드리스 측정 (2026-08-16, CI 자동화 전제)
+
+Gate 1~4 는 전부 headful 로 측정했다. CI runner 에는 화면이 없으므로 "헤드리스도 같은가"가
+Gate 회귀 잡을 짤 수 있느냐를 가른다. Chrome 151.0.7922.138 · macOS.
+
+```
+--headless=new + --remote-debugging-port=0
+  DevToolsActivePort 있음  "61538\n/devtools/browser/cbc1444b-08e5-42fd-b6a8-778d65ef44c8"
+  curl /json/version → 200  "Browser": "Chrome/151.0.7922.138"
+                            UA: HeadlessChrome/151.0.0.0
+  SIGTERM→SIGKILL 후 파일 잔존
+
+--headless (bare) + --remote-debugging-port=0
+  DevToolsActivePort 있음  "61556\n/devtools/browser/3f22e05c-592d-41e6-96cd-69e29c50e7b5"
+  curl /json/version → 200
+  SIGTERM→SIGKILL 후 파일 잔존
+
+--headless=new + --remote-debugging-port=9411   (대조군)
+  DevToolsActivePort 없음
+  포트는 stderr 로만: "DevTools listening on ws://127.0.0.1:9411/devtools/browser/996a…"
+```
+
+**→ 헤드리스는 특수 케이스가 아니다.** headful 에서 잡은 계약 세 줄(port 0 일 때만 쓴다 /
+종료해도 안 지운다 / 포트는 실제로 서비스된다)이 그대로 성립한다.
+
+**미검증으로 남는 것:**
+
+- **Linux 빌드.** 이건 macOS Chrome 151 의 행동이다. CI runner 는 다른 빌드라 거기서
+  한 번 더 떠야 확정이며, 잡의 첫 실행이 곧 그 측정이 된다.
+- **Gate 3(디렉토리 앵커 MCP 의 재기동 추적)은 이 측정 범위 밖이다.** `chrome-devtools-mcp`
+  를 CI 에 끌어와야 해서 Gate 1·2 보다 무겁다.
+
+**→ 테스트 전략에 대한 함의:** 현재 유닛 테스트 181개는 Chrome 을 띄우지 않는다 —
+`lsof` 출력·`DevToolsActivePort` 본문·chrome 커맨드라인이 전부 이 머신에서 뜬 **캡처
+문자열**이고, 파일을 쓰는 테스트는 `mkdtempSync` + `TIRNO_DIR` override 로 격리된다.
+그래서 `npm ci && npm run build && npm test` 만으로 어느 runner 에서든 돈다. 대신 그
+테스트들이 증명하는 것은 **파서와 판정 로직이지 Chrome 의 행동이 아니다** — Chrome 이
+`DevToolsActivePort` 를 아예 안 쓰게 바뀌어도 181개는 전부 초록인 채 런타임만 죽는다.
+따라서 두 층으로 가른다:
+
+- **유닛 (매 PR, 차단)** — 지금 것 그대로. 빠르고 호스트 무관.
+- **Gate 회귀 (수동 트리거 / 주기 실행, 비차단)** — 진짜 Chrome 을 port 0 로 띄워 Gate 1·2
+  를 재실행하고 실제 출력을 남긴다. PR 을 막는 게 목적이 아니라 Chrome 이 계약을 바꿨다는
+  것을 알리는 게 목적이다.
+
 ---
 
 ## 8. 다음 행동
