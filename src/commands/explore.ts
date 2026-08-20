@@ -201,6 +201,9 @@ export function registerExploreCommand(program: Command): void {
     .option('--retry-threshold <n>', 'Use existing trail if successRate above this', floatArg, 0.5)
     .option('--rag', 'Retrieve nearby waypoints (cosine top-K) and include in LLM prompt')
     .option('--rag-k <n>', 'Top-K nearby waypoints to retrieve', intArg, 5)
+    .option('--max-retries <n>', 'Retry on 429/5xx per LLM call (default 3)', intArg, 3)
+    .option('--timeout-ms <n>', 'Per-LLM-call timeout', intArg, 30000)
+    .option('--cost-cap <usd>', 'Total session cost cap in USD (across all iterations)', floatArg)
     .option('--verbose', 'Per-step LLM reasoning + cost')
     .action(async (goal: string, opts) => {
       try {
@@ -257,18 +260,27 @@ export function registerExploreCommand(program: Command): void {
           }
 
           const askStart = Date.now();
-          const response = await intelligenceAsk(opts.backend as BackendName, {
-            goal,
-            ask: 'next_action',
-            context: {
-              pageUrl: ctx.url,
-              viewport: ctx.viewport,
-              screenshot: ctx.screenshot,
-              a11yDump: ctx.a11yDump,
-              nearbyWaypoints,
+          const response = await intelligenceAsk(
+            opts.backend as BackendName,
+            {
+              goal,
+              ask: 'next_action',
+              context: {
+                pageUrl: ctx.url,
+                viewport: ctx.viewport,
+                screenshot: ctx.screenshot,
+                a11yDump: ctx.a11yDump,
+                nearbyWaypoints,
+              },
+              maxTokens: opts.maxTokens,
             },
-            maxTokens: opts.maxTokens,
-          });
+            {
+              maxRetries: opts.maxRetries,
+              timeoutMs: opts.timeoutMs,
+              costCapUsd: opts.costCap,
+              onRetry: (attempt, err) => warn(`step ${i + 1} retry ${attempt}: ${err.message.slice(0, 80)}`),
+            },
+          );
           const askMs = Date.now() - askStart;
           totalCost += response.usage?.estimatedCostUsd ?? 0;
 
