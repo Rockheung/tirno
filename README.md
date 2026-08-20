@@ -108,6 +108,13 @@ tirno kill mysession
 | `cache load <url> [--mode exact\|urlPath]` | 캐시된 ref + selector + bbox emit |
 | `cache prune [--older-than <days>] [--domain <d>]` | 정리 |
 
+### Vision OCR (Phase 6-2)
+| 명령 | 설명 |
+|---|---|
+| `vision ocr [--lang <eng\|kor\|kor+eng>] [--full] [--out <path>] [--min-confidence <n>]` | tesseract.js로 페이지 OCR. 단어별 bbox + confidence |
+
+backend는 plug-in 구조 — 향후 PaddleOCR / Florence-2 추가 예정.
+
 ### Multi-session
 | 명령 | 설명 |
 |---|---|
