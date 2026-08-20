@@ -218,6 +218,35 @@ npm 가용 후보: mathom / mazarbul / westmarch / bagend / earendil / ithil / i
 
 ---
 
+### Phase 4-hotfix — Akamai 봇 차단 우회 (PR #5)
+
+#### 발견 흐름
+
+쿠팡 검색 가설 검증 미션에서 모든 요청 403 Access Denied. 진단 단계:
+
+1. **헤더 비교** (httpbin.org/headers) — 정상 Chrome과 100% 동일. UA에 HeadlessChrome 없음, sec-ch-ua/sec-fetch-* 다 정상
+2. **JS fingerprint** — `webdriver:false`, `plugins:5`, `languages:ko-KR`, `vendor:"Google Inc."`. 단 `window.chrome.runtime`이 비어있음 (정상 Chrome은 Extension API로 채워짐)
+3. **headless 의심** — 코드 확인: default `headless: false` (실제 headful), screen 2056×1329 retina 정상
+4. **ps cmdline** — puppeteer가 default로 `--enable-automation` 자동 추가 발견
+
+#### 수정
+
+`src/core/chrome-launcher.ts` puppeteer.launch에 `ignoreDefaultArgs: ['--enable-automation']` 한 줄.
+
+#### 검증
+
+- 쿠팡 메인/검색 결과 200 OK 통과 (이전 5회 시도 모두 403)
+- product list 추출 정상 — 비비고/양반/오뚜기/조리고 등
+- example.com regression 없음
+- 흥미로운 점: `chrome.runtime`은 여전히 빈 채로 나오는데도 통과 → flag 자체가 chrome.runtime보다 더 결정적 신호. CDP 측에 "automation enabled" 표시되거나 헤더/proto에 표시되었을 가능성
+
+#### 한계
+
+- `chrome.runtime` 정상화는 이 fix만으로 안 됨 (`--disable-component-extensions-with-background-pages` 등 다른 default flag 영향 추정)
+- TLS fingerprint(JA3)·deeper bot detection에는 별도 stealth plugin 필요. 이번 케이스(쿠팡)는 그 단계까지 안 갔음
+
+---
+
 ## PR 목록
 
 | # | 제목 (실제 머지 시점 기준) | 상태 |
@@ -225,7 +254,8 @@ npm 가용 후보: mathom / mazarbul / westmarch / bagend / earendil / ithil / i
 | [#1](https://github.com/Rockheung/tirno/pull/1) | feat: Phase 4 — emulation 영속화 + DPR + ls 가시화 | merged |
 | [#2](https://github.com/Rockheung/tirno/pull/2) | feat: Phase 5-1 — a11y @ref + scroll + wait 흡수 | merged |
 | [#3](https://github.com/Rockheung/tirno/pull/3) | chore: rename project chromux → wandr | merged |
-| [#4](https://github.com/Rockheung/tirno/pull/4) | docs: 작업 일지 + 리서치 문서화 + wandr → tirno rename | open |
+| [#4](https://github.com/Rockheung/tirno/pull/4) | docs: 작업 일지 + 리서치 문서화 + wandr → tirno rename | merged |
+| [#5](https://github.com/Rockheung/tirno/pull/5) | fix: `--enable-automation` flag 제거로 Akamai 봇 차단 우회 | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
