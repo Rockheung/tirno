@@ -149,6 +149,10 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 - `tirno drift [name] [-- <flags>]` — 선언한 chrome 플래그와 실행 중 프로세스 비교. `--host-resolver-rules` 처럼 기동 때 한 번만 읽는 플래그를 바꿨을 때 "이 세션 재기동 필요한가"에 답한다. 다르면 non-zero 로 끝나므로 스크립트에서 조건으로 쓸 수 있다
 - `tirno cdp <method> [params-json]` — 모든 CDP 명령 raw passthrough (`--browser` flag 로 browser-level 도메인)
 - `tirno cache list/load/prune` — URL/viewport 키 visual cache
+- `tirno schema [--pretty]` — 명령 트리 전체를 JSON 으로. mcp 는 tool 스키마를 프로토콜이
+  주지만 CLI 에는 그런 층이 없어서 만든 것이다. 엔드포인트마다 `effects`(read_only /
+  idempotent / non_idempotent)와 `destructive` 를 달고 나오므로, **실행 전에** 되돌릴 수
+  없는 명령인지 판정할 수 있다. `-- <chrome flags>` 를 받는 명령은 `passthrough` 로 표시된다
 - `tirno record start/stop` + `tirno replay <name>` — 사용자 행동 캡처 + raw CDP trusted events 로 재생 (multi-channel fallback: dom → a11y → bbox → coords)
 - `tirno trail capture/save/list/show/replay/rm` — goal 별 다단계 행동 시퀀스 (multi-channel fallback)
 - `tirno explore <goal>` — 자율 탐색: cache → multi-channel → CDP → LLM → 누적
