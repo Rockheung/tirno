@@ -321,6 +321,7 @@ export function registerSessionCommands(program: Command): void {
         }
 
         const listeners = await collectListeners();
+        let refused = 0;
 
         for (const meta of targets) {
           // The ledger says this pid is ours; observation gets the final word.
@@ -330,6 +331,7 @@ export function registerSessionCommands(program: Command): void {
           const inv = await inspectSession(meta, listeners);
           if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
             error(`Refusing to kill '${meta.name}' — ${inv.ownership}: ${inv.reason}`);
+            refused++;
             continue;
           }
 
@@ -349,6 +351,11 @@ export function registerSessionCommands(program: Command): void {
           if (store.getActive() === meta.name) store.clearActive();
           success(`Killed '${meta.name}' (PID ${meta.pid}${isEphemeral ? ', ephemeral cleaned' : opts.clean ? ', profile cleaned' : ''})`);
         }
+
+        // A refusal is a failure — the browser the caller named is still running.
+        // Exiting 0 tells a script the kill happened, which is the one thing it
+        // must not believe here.
+        if (refused > 0) process.exit(1);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

@@ -102,6 +102,15 @@ export function registerMultiCommands(program: Command): void {
         if (r.stderr) process.stderr.write(r.stderr);
         if (r.failure) error(`[${r.name}] ${r.failure}`);
       }
+
+      // One failed session fails the broadcast. Exiting 0 because the other
+      // seven worked is what makes this command unusable as a gate — the caller
+      // would have to parse the printed output to learn what it already knows.
+      const failed = results.filter(r => r.failure).map(r => r.name);
+      if (failed.length > 0) {
+        error(`${failed.length}/${results.length} failed: ${failed.join(', ')}`);
+        process.exit(1);
+      }
     });
 }
 
