@@ -309,6 +309,72 @@ interface CacheEntry {
 
 ---
 
+### tirno explore — 메인 가치 흐름 (PR #25)
+
+#### 의도
+
+CLAUDE.md에 명시된 가치 흐름의 **결합 명령**:
+
+```
+1. cache lookup (existing trail with same goal + high success-rate → replay)
+2. snapshot 현재 페이지 (multi-channel context)
+3. LLM ask → ProposedAction
+4. action 실행 → step 누적
+5. action.type === 'done' → trail 저장
+6. give_up OR maxSteps 도달 → 사용자 시연 부탁 (마지막 보루)
+```
+
+PR #14 stub부터 #23 LLM 실 구현까지 만든 부품들의 entrypoint.
+
+#### 구현
+
+`src/commands/explore.ts`:
+- 1. trailStore에서 같은 goal + 성공률 >= threshold trail 검색 → 있으면 replay 안내
+- 2~N. iteration loop:
+  - capturePageContext(page) — screenshot + a11y dump + viewport
+  - intelligenceAsk(goal, ...) → ProposedAction
+  - executeAction(page, cdp, action) — type별 (click/fill/press/wait/nav/scroll)
+  - step에 RecordedEvent 기록
+- 5. action.type === 'done' → trail save (`--save <name>` 시 영속)
+- 6. action.type === 'give_up' OR maxSteps → exit 2 + 사용자에게 `tirno trail capture` 안내
+
+#### ProposedAction 확장
+
+`type: 'done' | 'give_up'` 추가. claude prompt에 명시 — goal 달성 시 done, 막혔을 때 give_up.
+
+#### CLI
+
+```bash
+tirno explore "위젯 추가 모달 열기" \
+  [--backend claude]         # intelligence backend
+  [--max-steps 10]           # LLM iteration cap
+  [--save my-trail]          # 성공 시 trail로 영속
+  [--no-cache]               # cache lookup 건너뜀 (강제 LLM)
+  [--retry-threshold 0.5]    # cache trail 신뢰도 (success rate)
+  [--verbose]                # step별 reasoning + cost
+```
+
+매 iteration token cost 누적 → 마지막에 `~$0.0234` 보고. 비용 가시화.
+
+#### 의의
+
+CLAUDE.md "사용자 시연은 마지막 보루" 원칙의 **실행 가능 형태**. 사용자가 `tirno explore "<goal>"` 한 번 부르면:
+- 이전에 성공한 trail 있으면 → 즉시 replay (LLM 호출 0회, 비용 0)
+- 없으면 LLM이 multi-channel 보고 시도 (수초~수분, ~$0.01-0.10)
+- 성공 시 trail 영속 → 다음에는 결정론
+- 실패 시에만 사용자에게 시연 부탁
+
+시간 지날수록 trail 누적 → LLM 호출 빈도 감소 → 사용자 시연 부담 감소. **self-journaling의 진짜 작동 형태**.
+
+#### 한계 / 후속
+
+- `--save`는 마지막 step까지 누적된 actions를 저장. record event format이라 replay 가능하지만 timing은 step 단위 (정확한 ms 아님)
+- nearbyWaypoints RAG retrieval 자동 포함은 #21 (vector 검색 + cosine top-K)
+- LLM retry/streaming/circuit-breaker는 #24
+- 88/88 tests pass
+
+---
+
 ### Storage abstraction + LanceDB backend (PR #24)
 
 #### 의도

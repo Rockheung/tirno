@@ -45,7 +45,9 @@ function buildPrompt(req: IntelligenceRequest): { systemPrompt: string; userText
     'Goal: identify the next concrete UI action to advance towards the user goal.',
     'You receive multi-channel context (a11y tree, attempted waypoints, nearby cached waypoints, optionally a screenshot).',
     'Respond ONLY in this JSON shape (no prose outside the JSON):',
-    '{ "action": { "type": "click|fill|press|wait|nav|scroll", "target": { "selector": "...", "x": N, "y": N, "role": "...", "name": "..." }, "value": "...", "url": "...", "ms": N }, "confidence": 0.0-1.0, "reasoning": "1-3 sentences" }',
+    '{ "action": { "type": "click|fill|press|wait|nav|scroll|done|give_up", "target": { "selector": "...", "x": N, "y": N, "role": "...", "name": "..." }, "value": "...", "url": "...", "ms": N, "scrollY": N }, "confidence": 0.0-1.0, "reasoning": "1-3 sentences" }',
+    'Use type="done" if the goal is already achieved on the current page.',
+    'Use type="give_up" only after multiple failed actions — caller may then ask the user to demonstrate.',
     'Pick selector when stable; if not, give x,y coordinates from the screenshot/bbox; if not, give a11y role+name.',
   ].join('\n');
 

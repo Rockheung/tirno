@@ -35,7 +35,8 @@ export interface IntelligenceRequest {
 }
 
 export interface ProposedAction {
-  type: 'click' | 'fill' | 'press' | 'wait' | 'nav' | 'scroll';
+  /** 'done' = goal reached, no more actions. Other types execute on the page. */
+  type: 'click' | 'fill' | 'press' | 'wait' | 'nav' | 'scroll' | 'done' | 'give_up';
   /** Best target identifier — selector OR coordinates OR a11y description */
   target?: {
     selector?: string;
@@ -47,6 +48,7 @@ export interface ProposedAction {
   value?: string;       // fill / press
   url?: string;         // nav
   ms?: number;          // wait
+  scrollY?: number;     // scroll
   reason?: string;
 }
 
