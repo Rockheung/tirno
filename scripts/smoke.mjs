@@ -406,6 +406,12 @@ function main() {
     { expectFail: true, expectMatch: /not found/ });
   run('kill (없는 세션 → exit≠0)', ['kill', 'nosuch'],
     { expectFail: true, expectMatch: /not found/ });
+  // 페이지 안에서 던진 예외도 실패다. exit 0 이면 스크립트는 $? 로 알 방법이 없다.
+  run('eval (페이지 예외 → exit≠0)', ['eval', 'window.__nope.boom()', ...S],
+    { expectFail: true, expectMatch: /boom|undefined/ });
+  // 반대쪽 — 페이지가 { __error } 모양을 값으로 돌려주는 것은 실패가 아니다.
+  run('eval (__error 모양의 값 → exit 0)', ['eval', '({__error: "값이다"})', ...S],
+    { expectMatch: /값이다/ });
 
   // ── 멀티세션
   run('new (2번째 세션)', ['new', 'smoke2', '--ephemeral', PAGE, ...LAUNCH]);
@@ -417,6 +423,30 @@ function main() {
     { timeout: 120_000, expectMatch: /가 나 \(ok\)/ });
   check('broadcast 가 두 세션 모두에 닿았다', bc.out.includes('[smoke]') && bc.out.includes('[smoke2]'),
     bc.out.slice(0, 80));
+  // 자식 하나가 실패하면 broadcast 도 실패다 — 죽은 pid 를 장부에 얹어 확인한다.
+  // 나머지 일곱이 성공했다고 exit 0 이면 이 명령은 게이트로 쓸 수 없다.
+  fs.writeFileSync(path.join(ROOT, 'sessions', 'deadsess.json'), JSON.stringify({
+    name: 'deadsess', port: 59999, pid: 999999, userDataDir: path.join(ROOT, 'nope'),
+    wsEndpoint: 'ws://127.0.0.1:59999/devtools/browser/x', chromeFlags: [],
+    createdAt: new Date().toISOString(), lastAccess: new Date().toISOString(), headless: true,
+  }));
+  run('broadcast (자식 하나 실패 → exit≠0)', ['broadcast', 'eval', '1+1'],
+    { timeout: 120_000, expectFail: true, expectMatch: /1\/\d+ failed: deadsess/ });
+  fs.rmSync(path.join(ROOT, 'sessions', 'deadsess.json'), { force: true });
+
+  // 소유권 거부도 실패다 — 호출자가 지목한 브라우저가 아직 돌고 있다.
+  // 이 세션의 pid 는 스모크 자신이다: 살아 있고, 그 포트는 아무도 안 듣는다 → foreign.
+  // 그래서 이 검사는 종료코드와 함께 "남의 프로세스를 안 죽였다"까지 증명한다
+  // — 죽였다면 스모크가 여기서 사라진다.
+  fs.writeFileSync(path.join(ROOT, 'sessions', 'notours.json'), JSON.stringify({
+    name: 'notours', port: 59998, pid: process.pid, userDataDir: path.join(ROOT, 'nope'),
+    wsEndpoint: 'ws://127.0.0.1:59998/devtools/browser/x', chromeFlags: [],
+    createdAt: new Date().toISOString(), lastAccess: new Date().toISOString(), headless: true,
+  }));
+  run('kill (소유권 거부 → exit≠0)', ['kill', 'notours'],
+    { expectFail: true, expectMatch: /Refusing to kill 'notours'/ });
+  fs.rmSync(path.join(ROOT, 'sessions', 'notours.json'), { force: true });
+
   run('kill smoke2', ['kill', 'smoke2', '--clean']);
 
   // ── screencast
