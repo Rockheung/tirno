@@ -1,15 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { underRoot } from './paths.js';
 
-const REFS_DIR = path.join(os.homedir(), '.tirno', 'refs');
+function refsDir(): string {
+  return underRoot('refs');
+}
 
 function ensureDir(): void {
-  fs.mkdirSync(REFS_DIR, { recursive: true });
+  fs.mkdirSync(refsDir(), { recursive: true });
 }
 
 function refPath(session: string): string {
-  return path.join(REFS_DIR, `${session}.json`);
+  return path.join(refsDir(), `${session}.json`);
 }
 
 export interface RefMap {

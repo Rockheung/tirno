@@ -373,7 +373,13 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 | `TIRNO_METRICS` | (없음) | `0` 이면 메트릭 기록 끔 |
 | `TIRNO_METRICS_FILE` | `<루트>/metrics.jsonl` | 메트릭 로그 위치 |
 
-`TIRNO_DIR` 은 테스트가 실제 `~/.tirno` 와 격리되는 수단이기도 하다.
+`TIRNO_DIR` 하나로 위 표의 **모든** 경로가 옮겨간다 — 테스트와 스모크가 실제 `~/.tirno`
+와 격리되는 수단이 이것이다. 저장소별 변수는 루트보다 우선하므로, 하나만 다른 곳에 두고
+싶을 때 쓴다.
+
+`test/paths.test.ts` 와 스모크의 격리 검사가 이 약속을 지킨다 — 저장소 하나라도 루트 밖으로
+새면 실패한다. 예전에는 새는 저장소가 있었고, 그래서 스모크의 `cache prune` 이 매 실행마다
+사용자의 실제 캐시를 비웠다.
 
 ## 개발
 
