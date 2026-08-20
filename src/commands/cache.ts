@@ -87,11 +87,18 @@ export function registerCacheCommands(program: Command): void {
 
   cache
     .command('prune')
-    .description('Remove old cache entries')
+    .description('Remove cache entries older than N days (or --all)')
     .option('--older-than <days>', 'Remove entries older than N days', intArg)
+    .option('--all', 'Remove every entry, however recent')
     .option('--domain <d>', 'Limit to domain')
     .action((opts) => {
       try {
+        // No cutoff used to mean "everything", under a description that said
+        // "old" — one word away from emptying the journal this tool exists to
+        // keep. `gc` already refuses to delete profiles without --older-than.
+        if (opts.olderThan === undefined && !opts.all) {
+          throw new Error('Specify --older-than <days>, or --all to remove every entry');
+        }
         const { removed } = visualCache.prune({
           olderThanDays: opts.olderThan,
           domain: opts.domain,

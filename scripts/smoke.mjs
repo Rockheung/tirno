@@ -167,7 +167,15 @@ function main() {
   run('nav', ['nav', PAGE, ...S]);
   check('nav 가 실제로 그 URL 에 있다', q('location.href') === PAGE, `실측: ${q('location.href')}`);
   run('reload', ['reload', ...S]);
-  run('reload --hard', ['reload', '--hard', ...S]);
+  // --hard 는 선언만 돼 있고 opts.hard 를 읽는 코드가 없었다. 이 검사가 지키는 것은
+  // 딱 여기까지다 — 플래그가 받아들여지고 문서가 다시 적재된다. **캐시를 실제로
+  // 우회했는지는 못 본다**: file:// 에는 캐시가 없고, https 로 재봐도 navigation
+  // transferSize 는 일반 reload 와 갈리지 않았다(618/618/300, 원 서버 헤더에 좌우됨).
+  // 우회 자체는 CDP 호출(Page.reload{ignoreCache:true})을 읽어 확인했다.
+  execFileSync('node', [TIRNO, 'eval', 'window.__survives = 1', ...S], { env, stdio: 'ignore' });
+  run('reload --hard', ['reload', '--hard', ...S], { expectMatch: /cache bypassed/ });
+  check('reload --hard 가 문서를 다시 적재했다', q('typeof window.__survives') === 'undefined',
+    `실측: ${q('typeof window.__survives')}`);
   run('pages', ['pages', ...S]);
   run('pages --json', ['pages', '--json', ...S]);
   run('new-tab', ['new-tab', 'about:blank', ...S]);
@@ -343,11 +351,16 @@ function main() {
   try { cacheEntry = JSON.parse(cacheLoad.out); } catch { /* ignore */ }
   check('cache load 왕복 (snapshot 이 쓴 것을 그대로 읽는다)', cacheEntry?.url === PAGE,
     cacheLoad.out.slice(0, 80));
-  // load 는 찾는 file:// 항목을 list 는 숨긴다(domain 이 빈 문자열). 실측된 결함 — src 는 안 고친다.
+  // load 가 찾는 항목은 list 에도 나와야 한다 — 적어놓고 못 꺼내는 캐시는 캐시가 아니다.
   const cl = run('cache list (file:// 항목)', ['cache', 'list']);
-  check('cache list 가 file:// 항목도 보여준다', cl.out.includes('smoke-page'),
-    `list 출력에 없음 (load 는 찾는데): ${cl.out.trim().split('\n')[0]}`,
-    { known: 'cache list 가 domain="" 항목을 숨긴다' });
+  // PATH 열은 50자에서 잘려 파일명으로 못 찾고, 뷰포트로 찾으면 example.com 행이 대신
+  // 통과한다. file:// 항목의 표지는 DOMAIN 이 비어 있다는 것 하나뿐이다.
+  check('cache list 가 file:// 항목도 보여준다',
+    cl.out.split('\n').some(l => /^\s+│/.test(l)),
+    `DOMAIN 이 빈 행이 없음 (load 는 찾는데): ${cl.out.trim().split('\n').length}줄`);
+  // 무인자 prune 은 나이 검사 없이 전량을 지웠다 — 설명은 "old" 였다. 이제 거부한다.
+  run('cache prune (무인자 → exit≠0)', ['cache', 'prune'],
+    { expectFail: true, expectMatch: /--older-than|--all/ });
   run('cache prune --older-than', ['cache', 'prune', '--older-than', '0']);
   // prune 0일 = 전부 삭제 — 지워졌다는 말이 아니라 다시 못 읽는 것으로 판정한다.
   run('cache load (prune 후 miss)', ['cache', 'load', PAGE], { expectFail: true });
@@ -497,9 +510,10 @@ function main() {
     // --executable-path 는 메타에 저장돼 restart 가 물려받아야 한다 — 잃으면 다른 브라우저로 되살린다.
     check('restart 가 --executable-path 를 물려받았다', fixedMeta?.executablePath === CHROME_BIN,
       `실측: ${fixedMeta?.executablePath ?? '(없음)'}`);
-    // group 은 kill --group / broadcast --group 의 대상 선정 근거다. 실측된 결함 — src 는 안 고친다.
+    // group 은 kill --group / broadcast --group 의 대상 선정 근거다 — 잃으면 그 세션이
+    // 자기가 속한 그룹 작업에서 조용히 빠진다.
     check('restart 가 --group 태그를 물려받았다', fixedMeta?.group === 'smokegrp',
-      `실측: ${fixedMeta?.group ?? '(없음)'}`, { known: 'restart 가 group 을 메타에서 떨군다' });
+      `실측: ${fixedMeta?.group ?? '(없음)'}`);
     run('kill (고정 포트 세션)', ['kill', 'smokefixed', '--clean']);
     // kill --clean 뒤 같은 이름은 즉시 다시 쓸 수 있어야 한다 — 장부 잔재가 남으면 여기서 걸린다.
     run('new (같은 이름 재사용)', ['new', 'smokefixed', '--ephemeral', ...LAUNCH]);

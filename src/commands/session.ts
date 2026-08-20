@@ -134,6 +134,10 @@ export function registerSessionCommands(program: Command): void {
         name,
         port: opts.port,
         chromeFlags,
+        // Not inherited from `existing`, unlike `restart`. `--force` discards the
+        // old chrome flags outright — the message that sends people here says
+        // "re-create with new flags" — so inheriting only the binary would leave
+        // the session half-respecified.
         executablePath: opts.executablePath,
         headless: opts.headless,
         userDataDir: userDataDirOverride,
@@ -177,7 +181,8 @@ export function registerSessionCommands(program: Command): void {
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
       const bootUrl: string | undefined = positionalUrl(rawArgs, dashDashIdx, urlArg) ?? opts.url;
-      // delegate to `new --force` semantics inline (avoid extra subprocess)
+      // `new --force` semantics inline (no extra subprocess), except that this
+      // is the same session coming back: executablePath and group carry over.
       try {
         let existing: store.SessionMetadata | null = null;
         try { existing = store.get(name); } catch { /* none */ }
@@ -202,8 +207,15 @@ export function registerSessionCommands(program: Command): void {
           userDataDir: userDataDirOverride,
           bootUrl,
         });
-        if (opts.group) store.update(name, { group: opts.group });
-        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
+        // The group tag survives a restart. `kill --group` and `broadcast --group`
+        // select on it, so dropping it silently takes the session out of every
+        // group operation the caller set it up for.
+        //
+        // `headless` deliberately does not survive: there is no `--no-headless`,
+        // so inheriting it would leave no way back to a headful browser.
+        const group = opts.group ?? existing?.group;
+        if (group) store.update(name, { group });
+        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${group ? `, group: ${group}` : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
