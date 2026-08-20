@@ -5,7 +5,7 @@ name: ci
 # 파일을 쓰는 테스트는 mkdtempSync + TIRNO_DIR override 로 격리된다.
 #
 # 그래서 여기서 증명되는 것은 파서와 판정 로직이지 Chrome 의 행동이 아니다.
-# 그쪽은 gate-regression.yml 이 맡는다.
+# 명령이 실제로 도는가는 아래 smoke 잡이 본다 — 진짜 Chrome 위에서, 같은 PR 게이트로.
 
 on:
   push:
@@ -37,3 +37,30 @@ jobs:
       - run: npm run lint -- --max-warnings 0
 
       - run: npm test
+
+  # 유닛이 닿지 않는 층 — 명령이 실제로 도는가. 유닛 183건은 종료코드 계약도,
+  # 옵션 배선도, 페이지 상태 변화도 보지 못한다. 오늘까지 이 하네스가 잡은 회귀는
+  # 전부 유닛이 초록인 채로 지나간 것들이다.
+  #
+  # 그래서 손 dispatch 가 아니라 PR 게이트다. 손으로 돌려야 하는 검사는 안 돌아간다.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Chrome 확인
+        run: google-chrome --version || google-chrome-stable --version
+
+      # 전 명령 스모크. CI 컨테이너에서는 chrome 샌드박스가 뜨지 않는다.
+      - name: 전 명령 스모크
+        env:
+          CHROME_FLAGS: '--no-sandbox --disable-dev-shm-usage'
+        run: node scripts/smoke.mjs

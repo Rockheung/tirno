@@ -190,6 +190,9 @@ tirno broadcast nav https://example.com --group wall
 | `node scripts/smoke.mjs` | 명령이 **실제로 도는가**. 종료코드만이 아니라 출력·파일·페이지 상태까지 재독한다 | 188건 · 56s |
 | `npm run lint` | eslint | — |
 
+**둘 다 PR 게이트다** — `ci.yml` 이 유닛과 스모크를 같이 돌리고, 하나라도 깨지면 PR 이 빨간불이 된다.
+(`gate-regression.yml` 은 Chrome 의 관측된 행동이 여전한지 보는 별건이고, 수동 트리거다.)
+
 스모크는 크롬을 실제로 띄우고 네트워크를 쓴다(`audit` 이 http(s) 만 받는다). `TIRNO_DIR` 을
 임시 디렉터리로 격리하므로 당신의 `~/.tirno` 는 건드리지 않는다 — 그걸 검사 자체로 못 박아 뒀다.
 
