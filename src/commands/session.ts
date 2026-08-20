@@ -426,6 +426,10 @@ export function registerSessionCommands(program: Command): void {
 
       if (opts.all) info(`running: ${d.cmdline}`);
 
+      for (const c of d.unverifiable) {
+        info(`unreadable  ${c.flag}: declared ${c.expected ?? '(no value)'} — the running command line shows only "${c.actual ?? ''}", because a value containing " --" cannot be read back from it. Not reported as drift.`);
+      }
+
       if (!d.hasDrift) {
         success(`'${target}' matches its ${d.expectedSource === 'ledger' ? 'declared flags' : 'expected flags'}`);
         return;
@@ -438,15 +442,25 @@ export function registerSessionCommands(program: Command): void {
         info(`changed  ${c.flag}: expected ${c.expected ?? '(no value)'}, running ${c.actual ?? '(no value)'}`);
       }
 
-      // Chrome reads flags like --host-resolver-rules once at launch, so there
-      // is no way to reconcile this without restarting. That is cheap here:
-      // the OS picks the port, the profile (and its logins) persists, and a
-      // directory-anchored MCP reconnects on its next tool call.
+      // The suggestion has to rebuild the session, not just its chrome flags.
+      // Headless-ness, the ephemeral profile and the boot URL are not in
+      // chromeFlags, and restart defaults each one off: pasting a command
+      // without them turns a headless session headful, and turns an ephemeral
+      // one into a profile directory under ~/.tirno/profiles that nothing will
+      // clean up. --remote-debugging-port stays out on purpose — port 0 is
+      // tirno's to pick, and it is what makes the profile anchorable.
       const flags = d.expected
         .filter(f => f.startsWith('--') && !f.startsWith('--remote-debugging-port'))
         .map(drift.shellQuoteFlag);
+      const bootUrl = meta.chromeFlags.find(f => !f.startsWith('--'));
+      const parts = [`tirno restart ${target}`];
+      if (bootUrl) parts.push(bootUrl);
+      if (/(?:^|\s)--headless(?:[=\s]|$)/.test(d.cmdline ?? '')) parts.push('--headless');
+      if (meta.userDataDir.startsWith(os.tmpdir())) parts.push('--ephemeral');
+      if (meta.group) parts.push(`--group ${meta.group}`);
+      if (flags.length) parts.push(`-- ${flags.join(' ')}`);
       error(`'${target}' has drifted. Chrome only reads these at launch — restart to apply:`);
-      info(`  tirno restart ${target}${flags.length ? ` -- ${flags.join(' ')}` : ''}`);
+      info(`  ${parts.join(' ')}`);
       process.exit(1);
     } catch (e) {
       error((e as Error).message);

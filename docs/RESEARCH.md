@@ -253,3 +253,63 @@ agent-browser `chat`은 **Vercel AI Gateway 전용**:
 - [steel-dev/awesome-web-agents](https://github.com/steel-dev/awesome-web-agents)
 - [Browser Use vs Stagehand comparison — Skyvern](https://www.skyvern.com/blog/browser-use-vs-stagehand-which-is-better/)
 - [Best Browser Agents 2026 — Firecrawl](https://www.firecrawl.dev/blog/best-browser-agents)
+
+---
+
+## 2026-08-18 재조사 — CLI + 스킬로 Chrome 을 부리는 흐름
+
+> **근거 수준 주의.** tirno 는 소스를 읽고 실행해 확인했고, 아래 도구들은 **README 수준**에서만
+> 확인했다. 비대칭이 비교를 tirno 에 유리하게 기울인다 — 남의 도구는 광고하는 것만,
+> tirno 는 약점까지 보이기 때문이다.
+
+"별도 브라우저를 만들지 않고 얇은 CLI + 스킬로 진짜 Chrome 을 CDP 로 부린다"는 발상은
+이제 붐빈다. MCP 대신 CLI 를 고른 것도 tirno 만의 선택이 아니다.
+
+| 도구 | 인터페이스 | 붙기/띄우기 | 격리 단위 | 런타임 |
+|---|---|---|---|---|
+| **tirno** | CLI + 스킬 | 띄운다 | 프로세스(세션) | Node + 무거운 deps |
+| [pasky/chrome-cdp-skill](https://github.com/pasky/chrome-cdp-skill) | CLI + 스킬 | **붙기만** | 탭당 상주 데몬 | **Node 22, 설치 0** |
+| [pengelbrecht/chrome-debug-skill](https://github.com/pengelbrecht/chrome-debug-skill) | CLI + 스킬 | 띄운다 | 포트+프로필 | Python 단일파일(uv), macOS 전용 |
+| [shaun0927/openchrome](https://github.com/shaun0927/openchrome) | MCP + CLI | 붙는다 | **탭 20레인 ~300MB** | Node |
+| [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp) | MCP | 둘 다 | 프로필(`--isolated`) | Node |
+
+### tirno 가 혼자인 것
+
+- **소유권 판정** — pid+port+profile 3중 일치. 어느 도구에도 대응물이 없다.
+  chrome-debug-skill 의 `stop` 은 "프로필 경로가 맞는 것 전부"를 죽인다.
+- **drift** — 선언 대비 실행 중 프로세스 비교. 없다.
+- **`gc`** — 장부만 지우고 프로필은 지킨다. 없다.
+- **`stall`** — 렌더러 밖에서 메인스레드 포화 측정. 없다.
+
+### tirno 가 지는 것
+
+- **설치 비용** — chrome-cdp-skill 은 Node 22 하나에 `npm install` 조차 없다.
+  tirno 는 lancedb·transformers·lighthouse 에 네이티브 바이너리까지 끌고 온다.
+- **연결 모델** — chrome-cdp-skill 은 탭당 상주 데몬이라 재연결 비용이 없다.
+  tirno 는 one-shot 이라 명령마다 붙는다(실측 0.1~0.3s).
+- **병렬 비용** — OpenChrome 은 한 Chrome 에 20레인. tirno 는 세션 = 프로세스다.
+  다만 이건 트레이드오프다 — 세션별 `--host-resolver-rules`·프록시·프로필 격리는
+  탭으로는 안 된다.
+- **복구 지능** — OpenChrome 의 7단계 폭포(a11y → CSS → 좌표 → JS → 키보드 → raw 마우스
+  → 사람)와 3층 서킷브레이커가 tirno 의 multi-channel fallback 보다 구체적이다.
+- **표면적** — chrome-devtools-mcp 는 59 tool. 힙 13종·PWA·확장까지 있다.
+
+### chrome-devtools-mcp 를 의존성으로 삼지 않는 이유
+
+Chrome DevTools 팀의 공식 MCP 다. 통째로 안는 대신 **앵커로 합성한다**:
+
+```bash
+npx chrome-devtools-mcp --auto-connect --user-data-dir=~/.tirno/anchors/main
+```
+
+- **소유권이 뒤집힌다.** 그쪽은 자기가 말 거는 브라우저를 자기가 소유하려 한다(직접 띄우고
+  `~/.cache/chrome-devtools-mcp/chrome-profile` 에 자기 프로필을 둔다). 한 브라우저에 주인이
+  둘이면 그게 바로 `inventory.ts` 가 `ambiguous` 로 잡아 손대기를 거부하는 상태다.
+- **모양이 안 맞는다.** MCP 응답은 LLM 이 읽으라고 토큰 최적화된 텍스트다. 가치 흐름 1번은
+  구조화된 데이터를 ms 단위로 요구한다.
+- **Chrome 에 용접된다.** 힙·PWA·확장은 본성상 Chrome 전용이라, 받아들일수록
+  [multi-browser](./research-multi-browser.md) 추상화의 부채가 된다.
+- **비용.** one-shot CLI 가 명령마다 Node 서브프로세스와 JSON-RPC 핸드셰이크를 치른다.
+
+앵커로 합성하면 사용자는 59 tool 과 tirno 의 세션 층을 동시에 갖고, 둘 중 누구도 상대를
+소유하지 않는다.

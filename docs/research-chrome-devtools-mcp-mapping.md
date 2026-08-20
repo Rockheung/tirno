@@ -9,17 +9,18 @@
 |---|---|---|---|---|
 | Navigation | 7 | 6 | 1 (`get_tab_id`) | 0 |
 | Input | 10 | 9 | 1 (`handle_dialog` — 자동) | 0 |
-| Emulation | 2 | 2 (viewport/network/cpu/device) | 보강 (geolocation/UA/colorScheme) | 0 |
-| Network | 2 | 1 | 1 (`get_network_request` 본문) | 0 |
-| Performance | 3 | 1 | — | 2 (`stop_trace` 분리, `analyze_insight`) |
-| Debugging | 8 | 5 | 1 (`get_console_message`) | 2 (`screencast_*`, `lighthouse_audit`) |
-| Memory | 4 | 1 | — | 3 (load/details/getNodes) |
+| Emulation | 2 | 2 (viewport/network/cpu/device/UA/colorScheme/geolocation) | — | 0 |
+| Network | 2 | 2 (`network` / `network show <id>`) | — | 0 |
+| Performance | 3 | 3 (`trace start` / `trace stop` / `trace insight`) | — | 0 |
+| Debugging | 8 | 8 (`console --show <id>` / `audit` / `screencast start`·`stop` 포함) | — | 0 |
+| Memory | 4 | 3 (`memory` / `memory load` / `memory details`) | — | 1 (`get_nodes_by_class`) |
 | Extensions | 5 | 0 | 5 (`Extensions.*` raw) | — |
 | Third-Party / WebMCP | 4 | 0 | — | 4 (실험적, off-by-default) |
 | Slim build (3) | 3 | 3 | — | 0 |
-| **합계** | **48** | **28** | **8** | **11 (대부분 실험적)** |
+| **합계** | **48** | **36** | **7** | **5 (실험적·off-by-default)** |
 
-핵심 — tirno 의 메인 가치 흐름(자율 탐색/cache/multi-channel/LLM)을 위한 **실용 surface 는 100% 커버**. `screencast`/`lighthouse`/`memory.load_*` 같은 보조 도구는 사용자 지적 시 추가 검토.
+핵심 — 실용 surface 는 전부 덮었다. 남은 5건은 `get_nodes_by_class` 와 mcp 에서도 off-by-default 인
+실험 도구(third-party / WebMCP)뿐이다.
 
 ---
 
@@ -160,8 +161,27 @@ slim 모드 3개는 tirno 의 기본 surface 에 그대로 포함.
 
 ## tirno 의 보강 영역 (gap, mcp 가 가진 것)
 
-| 갭 | 영향 | 보강 비용 |
-|---|---|---|
+**2026-08-18 재확인: 아래 9건은 전부 닫혔다.** wave 1~4 (#36 · #37 · #38 · #40) 가
+받았고, 현행 CLI 로 실행해 확인했다.
+
+| 갭 | 현행 |
+|---|---|
+| `wait_for` text 기반 | `tirno wait-for --text <s>` |
+| `emulate --user-agent` / `--color-scheme` | 둘 다 플래그로 존재 |
+| `emulate geolocation` | `tirno emulate --geolocation` |
+| `fill_form` 배치 | `tirno fill` 이 배열 인자를 받는다 |
+| `lighthouse_audit` | `tirno audit` |
+| `screencast_*` | `tirno screencast start` / `stop` |
+| `performance_analyze_insight` | `tirno trace insight <path>` — LCP / FCP / CLS / long task |
+| `get_console_message` 단건 | `tirno console --show <id>` |
+| `get_network_request` 본문 | `tirno network show <id>` |
+
+남은 것은 둘뿐이다:
+
+- **`get_nodes_by_class`** — `tirno memory` 는 capture · `load` · `details` 까지다.
+- **third-party / WebMCP 4건** — mcp 에서도 off-by-default 인 실험 도구.
+
+---|---|---|
 | `wait_for` text 기반 | 흔한 패턴 | 낮음 — `--text <s>` 옵션 추가 |
 | `emulate --user-agent` / `--color-scheme` | 자주 쓰임 | 낮음 — flag 추가 |
 | `emulate geolocation` (+ permissions) | 위치 기반 사이트 테스트 | 중간 — Browser.grantPermissions 같이 |

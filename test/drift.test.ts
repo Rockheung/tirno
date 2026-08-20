@@ -155,3 +155,44 @@ test('real drift is still reported when a start URL is present', () => {
   assert.equal(report.hasDrift, true);
   assert.deepEqual(report.changed[0], { flag: '--window-size', expected: '1920,1080', actual: '800,600' });
 });
+
+// ------------------------------------------- values parseFlags cannot read back
+
+// A value carrying " --" is cut at that boundary, so the running command line
+// can only ever show its prefix. Reporting that as drift sends the caller into a
+// restart loop: relaunching reproduces the same command line and the same
+// verdict. It has to read as unverifiable, and unverifiable is not drift.
+test('a declared value containing " --" is unverifiable, not drift', () => {
+  const cmdline = '/x/chrome --user-agent=tirno --probe --window-size=800,600';
+  const declared = ['--user-agent=tirno --probe', '--window-size=800,600'];
+  const report = diffFlags(declared, parseFlags(stripPositionals(cmdline, declared)));
+
+  assert.equal(report.hasDrift, false);
+  assert.equal(report.changed.length, 0);
+  assert.deepEqual(report.unverifiable, [
+    { flag: '--user-agent', expected: 'tirno --probe', actual: 'tirno' },
+  ]);
+});
+
+// The prefix is the whole claim: if even that disagrees, the flag really did
+// change and must not hide behind the parser's limitation.
+test('a differing prefix is still real drift', () => {
+  const cmdline = '/x/chrome --user-agent=other --probe';
+  const declared = ['--user-agent=tirno --probe'];
+  const report = diffFlags(declared, parseFlags(stripPositionals(cmdline, declared)));
+
+  assert.equal(report.hasDrift, true);
+  assert.equal(report.unverifiable.length, 0);
+  assert.deepEqual(report.changed[0], { flag: '--user-agent', expected: 'tirno --probe', actual: 'other' });
+});
+
+// An unreadable flag must not drag the readable ones down with it.
+test('unverifiable and real drift are reported side by side', () => {
+  const cmdline = '/x/chrome --user-agent=tirno --probe --window-size=800,600';
+  const declared = ['--user-agent=tirno --probe', '--window-size=1920,1080'];
+  const report = diffFlags(declared, parseFlags(stripPositionals(cmdline, declared)));
+
+  assert.equal(report.hasDrift, true);
+  assert.equal(report.unverifiable.length, 1);
+  assert.deepEqual(report.changed[0], { flag: '--window-size', expected: '1920,1080', actual: '800,600' });
+});

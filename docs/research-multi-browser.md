@@ -2,7 +2,9 @@
 
 > tirno 가 puppeteer-core CDP로 Chrome 지원 중. Firefox / Safari / WebKit 추가 가능 여부 + 비용 + 결정 분기점.
 
-조사 시점: 2026-05-07.
+조사 시점: 2026-05-07 · 상태: **미착수.** 아래 권장(Firefox 를 WebDriver BiDi 로)은 아직
+반영되지 않았고, tirno 는 현재 Chrome 전용이다. `puppeteer-core ^24` 라는 전제는 2026-08-18
+기준 그대로다.
 
 ---
 

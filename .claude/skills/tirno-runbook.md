@@ -202,6 +202,16 @@ tirno ls                      # 남은 게 없는지
 - `audit --mode timespan` 은 미구현이다.
 - 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜨거나
   캐시된 페이지면 `cache load <url>` 이 ref + selector + bbox 를 준다.
+- `tirno nav` 는 실패하면 **exit 1** 이다. `&&` / `||` 로 분기해도 된다. 단, 파이프 뒤에서
+  종료코드를 읽으면 파이프 마지막 명령의 것을 읽는다 — `nav ... > /dev/null; echo $?` 로 재라.
+- **`--group` 없는 `tirno broadcast` 는 모든 세션에 간다.** 남의 세션이 떠 있는 머신에서는
+  항상 `--group` 을 붙일 것.
+- `tirno ls --flags` 는 **80자에서 자른다.** 플래그 원문이 필요하면 `tirno export <name>`.
+- `tirno drift` 가 `unreadable` 로 보고하는 플래그가 있다. 값에 `" --"` 가 들어가면
+  실행 중 커맨드라인(`ps` 출력)에서 되읽을 수 없어서다 — 예: `--user-agent="tirno --probe"`.
+  **이건 drift 가 아니다.** 재기동해도 같은 판정이 나오므로 고치려 들지 말 것.
+- `snapshot` 출력에서 조작 대상을 `grep textbox|button` 으로 찾으면 **`InlineTextBox` 가 대량으로
+  걸려 정작 `searchbox`·`button` 이 묻힌다.** `@ref` 가 붙은 줄만 걸러라 — `grep -E '^@[0-9]+'`.
 
 ## 작업을 마치며
 
