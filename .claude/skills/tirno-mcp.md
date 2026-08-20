@@ -11,6 +11,8 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 ## 일반 원칙
 
 - tirno 는 multi-session — 먼저 `tirno new <name> [url]` 로 세션을 띄우고, 이후 모든 명령은 active 세션에 작용한다. 명시 세션은 `--session <name>` 또는 `-s <name>`.
+- **mcp 와 tirno 를 같이 쓸 거면 mcp 를 포트가 아니라 디렉토리에 물린다.** `npx chrome-devtools-mcp --auto-connect --user-data-dir=~/.tirno/anchors/main` 로 한 번 설정해 두면, tirno 가 Chrome 을 재기동해 포트가 바뀌어도 mcp 가 다음 tool 호출에서 알아서 따라온다(연결마다 `<dir>/DevToolsActivePort` 를 다시 읽는다). 앵커 조작은 `tirno anchor set/ls/rm`. 자세한 것은 `/tirno` skill 의 "앵커" 절.
+- **`--browser-url http://127.0.0.1:9222` 방식은 쓰지 않는다.** 9222+ 는 공용 대역이라 남의 앱이 점유하고 있어도 포트 번호만 맞으면 붙는다 — 프로덕션 DB 프록시 탭을 쥔 Electron 앱에 CDP 제어권을 넘긴 사고가 실제로 이 경로였다. 앵커 방식은 ws 경로의 browser UUID 가 인스턴스를 식별해 남의 브라우저에는 404 로 튕긴다.
 - snapshot 의 `@N` ref 가 mcp 의 `uid` 와 동등 — `tirno snapshot` 후 즉시 `tirno click @5` 처럼 사용 가능. snapshot 출력이 새로 갱신되면 이전 ref 는 stale.
 - chrome 를 띄우는 명령(`tirno new`, `tirno restart`)은 Bash 호출 시 timeout 10s 이상 명시.
 - 직접 매핑이 없으면 `tirno cdp <method> [params-json]` 로 raw CDP passthrough — 거의 모든 mcp tool 의 fallback 경로.
@@ -141,19 +143,21 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 
 다음은 mcp 에 매핑이 없지만 tirno 에서만 제공하는 고유 기능. 작업 흐름에 적극 활용:
 
-- `tirno new <name> [url]` / `tirno restart` / `tirno ls` / `tirno attach` / `tirno kill` — 다세션 관리
+- `tirno new <name> [url]` / `tirno restart` / `tirno ls` / `tirno attach` / `tirno kill` — 다세션 관리. `tirno ls` 의 `OWNER` 는 장부가 아니라 관측(`ours|foreign|ambiguous|ghost`)이고, `kill` 은 `foreign`/`ambiguous` 를 거부한다
+- `tirno anchor ls/set/rm` — 브라우저 MCP 가 물릴 디렉토리 앵커. `--evict` 로 이전 브라우저를 같이 정리해 붙어 있던 MCP 를 새 쪽으로 재연결시킨다
+- `tirno gc [--dry-run] [--older-than <days>]` — 낡은 장부·잔존 `DevToolsActivePort` 정리. 브라우저는 절대 죽이지 않고, 앵커·active·살아있는 프로필은 남긴다
+- `tirno drift [name] [-- <flags>]` — 선언한 chrome 플래그와 실행 중 프로세스 비교. `--host-resolver-rules` 처럼 기동 때 한 번만 읽는 플래그를 바꿨을 때 "이 세션 재기동 필요한가"에 답한다. 다르면 non-zero 로 끝나므로 스크립트에서 조건으로 쓸 수 있다
 - `tirno cdp <method> [params-json]` — 모든 CDP 명령 raw passthrough (`--browser` flag 로 browser-level 도메인)
 - `tirno cache list/load/prune` — URL/viewport 키 visual cache
 - `tirno vision ocr` — multi-channel OCR 추출
 - `tirno record start/stop` + `tirno replay <name>` — 사용자 행동 캡처 + raw CDP trusted events 로 재생 (multi-channel fallback: dom → a11y → bbox → coords)
 - `tirno trail capture/save/list/show/replay/rm` — goal 별 다단계 행동 시퀀스 (multi-channel fallback)
 - `tirno explore <goal>` — 자율 탐색: cache → multi-channel → CDP → LLM → 누적
-- `tirno ask <goal>` — 단발 LLM 질의 (Anthropic Claude / OpenAI / Gemini, RAG 옵션)
+- `tirno ask <goal>` — 단발 LLM 질의. **지능 백엔드는 claude 하나뿐이다** — `--backend openai|gemini` 는 인자로 받지만 `dispatcher.ts` 에서 "not yet implemented" 로 던진다. `tirno auth set` 은 셋 다 받지만 그건 키 보관일 뿐이다
 - `tirno auth set/rm/status` — OS keychain 기반 API key 관리 (env var 우선)
 - `tirno broadcast <cmd> [args...]` — 다세션 동시 실행
 - `tirno diff <s1> <s2>` — 두 세션 visual diff (pixelmatch)
 - `tirno stats` — `~/.tirno/metrics.jsonl` 집계 (cache hit, llm cost, trail success rate 등)
-- `tirno inspect <selector>` — 단일 element 의 a11y/dom/bbox 정보
 
 ---
 
@@ -221,6 +225,7 @@ tirno trail replay "로그인 후 대시보드 이동"
 6. **`get_nodes_by_class` (heap)** — class UID 별 instance 추적 미구현. `memory details` aggregate 만
 7. **Extensions 5종** (`install/uninstall/list/reload/trigger`) — `tirno cdp Extensions.*` raw passthrough만
 8. **Third-party / WebMCP 4종** (`list/execute_3p_developer_tools`, `list/execute_webmcp_tools`) — `tirno eval "window.__dtmcp.*"` 우회
+9. **단일 element 의 a11y/dom/bbox 조회** — `tirno inspect <selector>` 라는 명령은 **없다**(`src/commands/inspect.ts` 는 screenshot/snapshot/console/network 를 등록하는 모듈 파일이지 명령이 아니다). `tirno snapshot` 으로 트리 전체를 뜨고 `@N` 을 쓰거나, 이미 캐시된 페이지면 `tirno cache load <url>` 이 ref + selector + bbox 를 emit 한다
 
 > 위 모든 항목은 `tirno cdp <method> [params-json]` 로 raw CDP 호출 가능. 특정 영역만 자주 쓰면 별도 wrapper PR 검토.
 
@@ -243,6 +248,7 @@ tirno trail replay "로그인 후 대시보드 이동"
 ## 참조 파일 (repo 내)
 
 - `docs/research-chrome-devtools-mcp-mapping.md` — mcp tool 별 검증 결과 + 갭 분석 (이 skill 의 기반)
+- `docs/plan-anchor-broker.md` — 앵커·소유권 설계와 Gate 실측 기록 (§7 에 실제 출력)
 - `docs/research-multi-browser.md` — Firefox/Safari/WebKit 지원 가능성
 - `CLAUDE.md` — tirno 의 가치 흐름 / 작업 원칙
 - `.mcp.json` — 검증용 chrome-devtools-mcp 설정 (자동 npx 실행)

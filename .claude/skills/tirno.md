@@ -12,7 +12,7 @@ Multi-session browser automation CLI on raw CDP.
 ## 설치
 
 ```bash
-cd ~/rockheung/chromux
+cd ~/rockheung/tirno
 npm install && npm run build
 npm link   # 또는 PATH에 bin/ 추가
 ```
@@ -20,12 +20,15 @@ npm link   # 또는 PATH에 bin/ 추가
 ## 세션 관리
 
 ```bash
-tirno new <name> [-- chrome-flags...]    # Chrome 세션 생성
-tirno ls [--json]                         # 세션 목록 (EMULATION 컬럼 포함)
-tirno attach <name>                       # 활성 세션 설정
-tirno kill <name|--all> [--clean]         # 세션 종료
-tirno rename <old> <new>                  # 세션 이름 변경
-tirno export <name>                       # 세션 설정 JSON 출력
+tirno new <name> [url] [-- chrome-flags...]  # Chrome 세션 생성
+tirno restart <name> [url] [-- flags...]     # 죽이고 새 플래그로 재생성
+tirno ls [--json] [--flags]                  # 세션 목록 (STATUS + OWNER 컬럼)
+tirno attach <name>                          # 활성 세션 설정
+tirno kill <name|--all> [--clean]            # 세션 종료 (foreign/ambiguous 는 거부)
+tirno rename <old> <new>                     # 세션 이름 변경
+tirno export <name>                          # 세션 설정 JSON 출력
+tirno gc [--dry-run] [--older-than <days>]   # 낡은 장부·잔존 파일 정리
+tirno drift [name] [-- <flags>]              # 선언한 플래그 vs 실행 중 프로세스
 ```
 
 세션 = 독립된 Chrome 프로세스. 각각 고유한 포트, user-data-dir, Chrome 플래그를 가짐.
@@ -62,7 +65,7 @@ tirno close-tab <pageId>           # 탭 닫기
 tirno screenshot [--out path] [--full] [--format png|jpeg|webp]
 tirno snapshot [--verbose]         # a11y 트리. 노드마다 @N ref 부여, ~/.tirno/refs/<session>.json에 저장
 tirno console [--type error|warn]  # 콘솔 메시지 (stateless 한계 — 캡처 시점만)
-tirno network [--type xhr|fetch]   # 네트워크 요청 (reload 후 2초간 캡처)
+tirno network [--type xhr|fetch]   # 네트워크 요청 (reload 하고 networkidle2 까지 캡처)
 ```
 
 ### 입력
@@ -121,19 +124,79 @@ tirno broadcast <command> [args]    # 모든 세션에 명령 실행
 - PID, port, wsEndpoint, userDataDir, chromeFlags, createdAt, lastAccessedAt
 - emulation: { device, viewport, network, cpu }
 
-`~/.tirno/profiles/<name>/` — 세션별 Chrome 프로필 디렉토리.
+**장부는 기동 시점의 주장이지 사실이 아니다.** `port` 와 `wsEndpoint` 는 캐시 힌트로,
+Chrome 이 재기동하면 (새 포트·새 browser UUID 로) 낡는다. 살아있는 값은
+`profiles/<name>/DevToolsActivePort` 이고 연결은 그쪽을 먼저 읽는다. 고정 포트로 띄운
+레거시 세션은 그 파일이 없어 `wsEndpoint` 로 폴백한다.
+
+`~/.tirno/profiles/<name>/` — 세션별 Chrome 프로필 디렉토리. **로그인된 브라우저 세션이다.**
+`~/.tirno/anchors/<name>` — 브라우저 MCP 가 가리키는 심링크 (→ profiles/<세션>).
 `~/.tirno/active` — 현재 활성 세션 이름.
 `~/.tirno/refs/<name>.json` — snapshot에서 부여된 @ref → backendDOMNodeId 매핑.
 
-## 포트 할당
+`TIRNO_DIR` 로 이 트리 전체를 옮길 수 있다(테스트용).
 
-기본 범위 9222-9322. 기존 세션과 충돌 없이 자동 할당.
-`--port <n>` 옵션으로 지정 가능.
+## 포트 — OS 가 준다
+
+기본은 `--remote-debugging-port=0`. **포트를 tirno 가 고르지 않는다.** OS 가 빈 포트를
+주고, Chrome 이 그 값을 `~/.tirno/profiles/<name>/DevToolsActivePort` 에 쓴다. 9222+ 는
+공용 대역이라 다른 앱이 점유하는 일이 흔한데, 그 충돌 부류가 통째로 사라진다.
+
+`--port <n>` 은 레거시 고정 포트 경로다. 이때 Chrome 은 `DevToolsActivePort` 를
+**쓰지 않으므로** 그 세션은 앵커 대상이 될 수 없다(`tirno new` 가 경고한다).
+
+## 앵커 — 브라우저 MCP 는 포트가 아니라 디렉토리를 가리킨다
+
+```bash
+tirno anchor ls [--json]                  # 앵커 목록 + 가리키는 대상 + 그게 우리 것인지
+tirno anchor set <anchor> <session> [--evict]   # 앵커를 세션 프로필로 돌린다
+tirno anchor rm <anchor>                  # 심링크만 제거 (프로필은 안 건드림)
+```
+
+`~/.tirno/anchors/<name>` 은 세션 프로필을 가리키는 심링크다. 브라우저 MCP 를 **한 번만**
+이렇게 물려두면 된다:
+
+```
+npx chrome-devtools-mcp --auto-connect --user-data-dir=~/.tirno/anchors/main
+```
+
+MCP 는 연결할 때마다 `<dir>/DevToolsActivePort` 를 다시 읽는다. 그래서 Chrome 을 재기동해
+포트가 바뀌어도 **MCP 재시작 없이** 따라온다. `--evict` 는 앵커가 이전에 가리키던 Chrome 을
+같이 죽여, 이미 붙어 있는 MCP 가 새 쪽으로 재연결하게 만든다.
+
+앵커는 `active`(CLI 의 활성 세션)와 **별개다.** `tirno attach` 로 CLI 세션을 바꿔도 남의
+MCP 가 조용히 다른 브라우저로 옮겨가지 않는다.
+
+## 소유권 — 장부가 아니라 관측
+
+`tirno ls` 의 `STATUS` 는 장부의 pid 가 살아있는지이고, `OWNER` 는 **실제로 관측한 결과**다.
+
+| OWNER | 뜻 |
+|---|---|
+| `ours` | pid 생존 ∧ 그 pid 가 그 포트를 LISTEN ∧ user-data-dir 이 이 세션 것 — 셋 다 일치 |
+| `foreign(<앱이름>)` | 그 포트를 남이 쥐고 있다. 점유자 이름을 같이 보여준다 |
+| `ambiguous` | 한 포트에 리스너가 둘 이상(예: 옛 chrome 이 IPv4, 새 chrome 이 IPv6) |
+| `ghost` | 리스너가 없다. 장부만 남은 것 |
+
+셋이 다 맞아야 `ours` 다. 하나만으로는 안 되는 이유 — pid 는 재사용되고, 포트는 무관한
+프로세스가 물려받고, 커맨드 이름이 같다고 같은 프로필을 연 것은 아니다.
+
+`foreign`/`ambiguous` 는 **표시만 하고 절대 자동으로 손대지 않는다.** `tirno kill` 도
+거부한다(`gc` 로 장부 항목만 지울 수 있다 — 프로세스와 프로필은 그대로 둔다).
 
 ## 주의사항
 
 - Chrome이 설치되어 있어야 함 (`/Applications/Google Chrome.app` 또는 `--executable-path`)
 - `tirno kill`은 Chrome 프로세스만 종료. `--clean`으로 프로필 디렉토리도 삭제.
-- `tirno ls`에서 `dead` 상태 세션은 Chrome이 이미 종료된 것. `tirno kill <name>`으로 정리.
+- `tirno ls`의 `dead`(STATUS)와 `ghost`(OWNER)는 다른 말이다. `dead` 는 장부의 pid 가
+  없다는 것이고, `ghost` 는 그 포트에 리스너가 아예 없다는 것. **`dead` 인데 OWNER 가
+  `foreign` 이면 그 포트는 남이 쓰고 있다** — 그 세션에 붙거나 죽이려 하면 안 된다.
+- 정리는 `tirno gc`. 기본은 되돌릴 수 있는 것만(장부 항목, 잔존 `DevToolsActivePort`)
+  치우고 브라우저는 절대 죽이지 않는다. 프로필 삭제는 `--older-than <days>` 를 줘야 하고
+  고아 프로필만 대상이다 — 앵커가 걸린 것, active, 살아있는 것은 남는다. 먼저 `--dry-run`.
+- 라우팅 설정을 바꿨는데 반영이 안 되면 `tirno drift`. `--host-resolver-rules` 같은 플래그는
+  Chrome 이 기동 때 한 번만 읽으므로 재기동 외에는 방법이 없다. 지금 원하는 플래그를
+  `-- <flags>` 로 주면 그 기준으로 비교한다. 재기동은 싸다 — 포트는 OS 가 새로 주고,
+  프로필(로그인)은 남고, 디렉토리 앵커를 쓰는 MCP 는 다음 호출에서 알아서 따라온다.
 - 명령마다 CDP 연결 → 실행 → 연결 해제. Chrome은 독립 실행 유지.
 - @ref는 snapshot 직후에만 유효. 페이지가 바뀌면 snapshot 다시.
