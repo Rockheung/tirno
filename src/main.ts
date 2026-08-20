@@ -12,6 +12,7 @@ import { registerVisionCommands } from './commands/vision.js';
 import { registerCdpCommands } from './commands/cdp.js';
 import { registerRecordCommands } from './commands/record.js';
 import { registerReplayCommand } from './commands/replay.js';
+import { registerTrailCommands } from './commands/trail.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -34,6 +35,7 @@ registerVisionCommands(program);
 registerCdpCommands(program);
 registerRecordCommands(program);
 registerReplayCommand(program);
+registerTrailCommands(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);

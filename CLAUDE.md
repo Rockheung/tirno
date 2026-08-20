@@ -6,6 +6,18 @@ tirno — Multi-session browser automation CLI on raw CDP.
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다.
 puppeteer-core 기반.
 
+## tirno 가치 흐름 (불변)
+
+목표 도달 시도 우선순위 — 위에서 아래로 시도, 마지막은 자존심 굽혀 부탁:
+
+1. **cache lookup** — 결정론, ms 단위
+2. **multi-channel fallback** (selector → a11y → bbox → ocr text) — 결정론, ms 단위
+3. **CDP 직접 분석 + page 자율 시도** — agent가 페이지 구조 뜯어보며 행동경로 발견
+4. **LLM (지능요청) + RAG retrieval** — 비결정론, 비용 있음, 누적된 trail/waypoint를 prompt에 RAG
+5. **사용자 시연 부탁** (`tirno trail capture`) — **마지막 보루**. 위 모두 실패 시 자존심 굽혀 부탁. 부담을 인정하고 명시적으로 요청.
+
+`record / replay / trail capture`는 5번에 해당. tirno의 메인 가치는 1~4의 자율 흐름. 메인 흐름이 강해질수록 5번 호출 빈도가 줄어드는 게 self-journaling의 진짜 의의.
+
 ## tirno 작업 원칙 (불변)
 
 - **삽질을 통해 성공 경로를 기록.** 첫 시도 실패 시 다양한 우회로를 끝까지 시도하되, 발견한 사실(성공/실패 모두)은 cache/journal에 기록한다.
