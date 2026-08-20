@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as recStore from '../core/record-store.js';
+import * as store from '../core/session-store.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 
 interface ClientRecState {
@@ -21,7 +22,7 @@ export function registerRecordCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .action(async (opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
         await page.evaluate(() => {
           const w = window as unknown as { __tirno_rec: ClientRecState; __tirno_rec_flush?: () => void };
@@ -34,6 +35,9 @@ export function registerRecordCommands(program: Command): void {
         });
         const url = page.url();
         browser.disconnect();
+        // Remember where this began. The page-side buffer cannot tell us later:
+        // it is per-origin localStorage, so a flow that navigates leaves it behind.
+        store.update(meta.name, { recording: { startUrl: url, startedAt: new Date().toISOString() } });
         success(`Recording on ${url} — interact with the page, then "tirno record stop"`);
       } catch (e) {
         error((e as Error).message);
@@ -49,7 +53,7 @@ export function registerRecordCommands(program: Command): void {
     .option('--json', 'Print events as raw JSON instead of summary')
     .action(async (opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
         const result = await page.evaluate(() => {
           const w = window as unknown as { __tirno_rec: ClientRecState; __tirno_rec_flush?: () => void };
@@ -71,12 +75,31 @@ export function registerRecordCommands(program: Command): void {
 
         if (!result) throw new Error('No recording state on page');
 
+        // Where the recording began, not where it ended — replay navigates to
+        // this before replaying, and a flow that moved would otherwise start on
+        // its own last page.
+        const startUrl = meta.recording?.startUrl ?? url;
+        store.update(meta.name, { recording: undefined });
+
+        // The recorder's buffer is per-origin localStorage. Cross an origin and
+        // it is left behind on the old one, so stop finds a clean slate and has
+        // nothing to report. Say that out loud — "0 events" on its own reads as
+        // "you did not touch anything".
+        if (result.events.length === 0) {
+          const origin = (u: string) => { try { return new URL(u).origin; } catch { return u; } };
+          if (origin(startUrl) !== origin(url)) {
+            info(`Recording started on ${origin(startUrl)} and ended on ${origin(url)} — events are buffered per origin, so anything before the jump was lost.`);
+          } else {
+            info('No events were captured — was anything actually interacted with?');
+          }
+        }
+
         if (opts.save) {
           recStore.save({
             name: opts.save,
             capturedAt: new Date().toISOString(),
             durationMs: result.durationMs,
-            startUrl: url,
+            startUrl,
             events: result.events,
           });
           success(`Saved "${opts.save}" — ${result.events.length} events, ${result.durationMs}ms`);
