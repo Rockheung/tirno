@@ -74,6 +74,13 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   // navigate round-trip.
   if (opts.bootUrl) args.push(opts.bootUrl);
 
+  // puppeteer assumes the browser dies with the process that launched it, and
+  // wires that up three ways: SIGINT/SIGTERM/SIGHUP handlers, and a `process`
+  // 'exit' listener that is not behind any option. A tirno session has to
+  // outlive the CLI invocation that created it, so all three have to go — the
+  // signal handlers by option, the exit listener by hand below.
+  const exitListenersBefore = new Set(process.listeners('exit'));
+
   const browser = await puppeteer.launch({
     executablePath,
     headless: opts.headless ?? false,
@@ -85,15 +92,36 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     ignoreDefaultArgs: ['--enable-automation', '--remote-debugging-port'],
     pipe: false,
     defaultViewport: null,
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
   });
 
-  const pid = browser.process()?.pid;
+  const chromeProcess = browser.process();
+  const pid = chromeProcess?.pid;
   if (!pid) throw new Error('Failed to get Chrome PID');
 
   const wsEndpoint = browser.wsEndpoint();
 
   // disconnect without closing — Chrome stays running
   browser.disconnect();
+
+  // Whatever puppeteer added is its browser-killing listener; anything that was
+  // already there belongs to the caller and stays.
+  for (const listener of process.listeners('exit')) {
+    if (!exitListenersBefore.has(listener)) process.removeListener('exit', listener);
+  }
+
+  // Chrome is a child of this process, and node keeps the event loop alive for
+  // a live child handle and its stdio pipes. Without this the command never
+  // returns — and killing it to get the shell back takes Chrome with it.
+  // The stdio streams are typed as plain Readable/Writable but are net.Socket
+  // at runtime (stdio: 'pipe'), so unref is there. Unref rather than destroy —
+  // a destroyed read end gives Chrome EPIPE on its next stderr write.
+  for (const stream of [chromeProcess.stdin, chromeProcess.stdout, chromeProcess.stderr]) {
+    (stream as { unref?: () => void } | null)?.unref?.();
+  }
+  chromeProcess.unref();
 
   // With port 0 the requested port is not the real one. DevToolsActivePort is
   // what chrome itself wrote, and it is the same file a directory-anchored MCP
