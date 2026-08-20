@@ -309,6 +309,73 @@ interface CacheEntry {
 
 ---
 
+### Observability — metrics + tirno stats (PR #29)
+
+#### 의도
+
+production-grade tool은 자기 자신을 측정해야. 무엇이 비싸고, 무엇이 자주 실패하고, cache hit이 진짜 쌓이고 있는지 — 외부 모니터링 없이 즉시 확인.
+
+#### 구현
+
+`src/core/metrics.ts`:
+- 모든 events JSONL append-only → `~/.tirno/metrics.jsonl`
+- `TIRNO_METRICS=0` opt-out, `TIRNO_METRICS_FILE=path` override
+- 로컬에만 쓰기 — 외부 전송 없음
+- EventKind: `cache.hit / cache.miss / cache.save / embedding.compute / llm.call / llm.retry / llm.fail / trail.replay / trail.save / explore.start / explore.end`
+- 모든 event에 `ts` + 옵션 `ms` (latency)
+
+emit 통합:
+- `dispatcher.ask`: 매 LLM 호출에 `llm.call` (backend, ms, tokens, costUsd, hasScreenshot, a11yLines, ragHits, confidence). 실패 시 `llm.fail`. retry 시 `llm.retry`
+- `explore`: `explore.start`, `cache.hit/miss`, `explore.end` (outcome, steps, costUsd, ms)
+- `trail replay`: `trail.replay` (success, channelStats)
+
+#### `tirno stats`
+
+```
+# events: 142
+# window: 2026-05-07T... → 2026-05-07T...
+
+ METRIC                │ VALUE
+ cache hit rate        │ 73.2%
+ LLM calls             │ 38
+ LLM cost              │ $0.0142
+ LLM retries           │ 2
+ LLM fails             │ 0
+ explore runs          │ 12
+   outcome: done       │ 9
+   outcome: cache_hit  │ 2
+   outcome: max_steps  │ 1
+ trail replays         │ 24
+ trail replay success  │ 95.8%
+
+ EVENT          │ COUNT │ LATENCY
+ llm.call       │ 38    │ 2341ms avg
+ cache.hit      │ 41    │ -
+ cache.miss     │ 15    │ -
+ ...
+```
+
+옵션: `--json`, `--since <iso>`.
+
+#### 의의
+
+self-journaling이 진짜 누적 가치 갖고 있는지 정량 확인. 시간 지나면서:
+- cache hit rate ↑ 추세 → 자율 탐색 강화
+- LLM 호출 빈도 / 비용 ↓ 추세 → 사용자 부담 ↓
+- trail replay 성공률 → trail 영속의 신뢰도
+
+이 metrics가 tirno 가치 흐름의 정량 지표.
+
+#### 한계 / 후속
+
+- 단일 머신 metrics. multi-machine 집계는 외부 시스템 (OTLP exporter 등) — 향후
+- linear scan으로 aggregate. 매우 큰 log는 chunk by date
+- prometheus / opentelemetry 통합은 별도 task
+
+97/97 tests pass.
+
+---
+
 ### Security — API key keychain (PR #28)
 
 #### 의도

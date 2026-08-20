@@ -5,6 +5,7 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import * as trailStore from '../core/trail-store.js';
 import type { RecordedEvent } from '../core/record-store.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
+import { emit as metric } from '../core/metrics.js';
 import type { Page } from 'puppeteer-core';
 
 interface ClientRecState {
@@ -302,6 +303,7 @@ export function registerTrailCommands(program: Command): void {
 
         const success_ok = count === t.steps.length;
         trailStore.recordRun(name, success_ok, channelStats);
+        metric('trail.replay', { name, goal: t.goal, steps: t.steps.length, executed: count, success: success_ok, channelStats });
 
         const breakdown = Object.entries(channelStats).map(([k, v]) => `${k}:${v}`).join(' ');
         success(`Replayed trail "${name}" — ${count}/${t.steps.length} steps at ${speed}x${breakdown ? ` [${breakdown}]` : ''}`);

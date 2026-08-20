@@ -15,6 +15,7 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { ask as intelligenceAsk } from '../intelligence/dispatcher.js';
 import type { BackendName, ProposedAction } from '../intelligence/types.js';
 import { embed, buildEmbedText } from '../intelligence/embedding.js';
+import { emit as metric } from '../core/metrics.js';
 import { getTrailStore, getWaypointStore } from '../storage/index.js';
 import type { Waypoint } from '../core/visual-cache.js';
 import type { Trail, TrailStep } from '../core/trail-store.js';
@@ -216,15 +217,21 @@ export function registerExploreCommand(program: Command): void {
           return u;
         })());
 
+        const exploreStart = Date.now();
+        metric('explore.start', { goal, startUrl });
+
         // 1. cache lookup — existing trail with same goal + high success rate
         if (opts.cache !== false) {
           const candidates = await trailStore.query({ goal, minSuccessRate: opts.retryThreshold, limit: 1 });
           if (candidates.length > 0) {
             const t = candidates[0];
             info(`cache hit: trail "${t.name}" (${t.matchStats?.successCount}/${t.matchStats?.runCount} success). Use "tirno trail replay ${t.name}" to run it.`);
+            metric('cache.hit', { goal, trailName: t.name });
+            metric('explore.end', { goal, outcome: 'cache_hit', ms: Date.now() - exploreStart });
             success(`explore done via cache (no LLM call). Trail: ${t.name}`);
             return;
           }
+          metric('cache.miss', { goal });
         }
 
         // 2..N. iteration loop
@@ -323,6 +330,9 @@ export function registerExploreCommand(program: Command): void {
         browser.disconnect();
 
         // 5/6. save trail (or instruct user to capture)
+        const totalMs = Date.now() - exploreStart;
+        metric('explore.end', { goal, outcome, steps: steps.length, costUsd: totalCost, ms: totalMs });
+
         if (outcome === 'done' && opts.save) {
           const trail: Trail = {
             name: opts.save,
@@ -334,6 +344,7 @@ export function registerExploreCommand(program: Command): void {
             matchStats: { runCount: 1, successCount: 1, lastRunAt: new Date().toISOString() },
           };
           await trailStore.save(trail);
+          metric('trail.save', { name: opts.save, goal, steps: steps.length });
           success(`Goal reached. Trail "${opts.save}" saved (${steps.length} steps, ~$${totalCost.toFixed(4)})`);
         } else if (outcome === 'done') {
           success(`Goal reached (${steps.length} actions, ~$${totalCost.toFixed(4)}). Use --save <name> to persist.`);

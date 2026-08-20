@@ -7,6 +7,7 @@ import type {
   BackendName,
 } from './types.js';
 import { withResilience, type ResilienceOptions } from './resilience.js';
+import { emit } from '../core/metrics.js';
 
 const BACKENDS: Record<BackendName, () => Promise<IntelligenceBackend>> = {
   claude: async () => (await import('./backends/claude.js')).claudeBackend,
@@ -37,7 +38,33 @@ export async function ask(
   if (!b.available) {
     throw new Error(`${backend} intelligence backend not available — check API key env var.`);
   }
-  return withResilience(() => b.ask(req), resilience);
+  const start = Date.now();
+  try {
+    const res = await withResilience(() => b.ask(req), {
+      ...resilience,
+      onRetry: (attempt, err) => {
+        emit('llm.retry', { backend, attempt, errorPreview: err.message.slice(0, 100) });
+        if (resilience?.onRetry) resilience.onRetry(attempt, err);
+      },
+    });
+    emit('llm.call', {
+      backend,
+      ms: Date.now() - start,
+      goal: req.goal,
+      ask: req.ask,
+      inputTokens: res.usage?.inputTokens,
+      outputTokens: res.usage?.outputTokens,
+      costUsd: res.usage?.estimatedCostUsd,
+      hasScreenshot: !!req.context.screenshot,
+      a11yLines: req.context.a11yDump?.split('\n').length ?? 0,
+      ragHits: req.context.nearbyWaypoints?.length ?? 0,
+      confidence: res.confidence,
+    });
+    return res;
+  } catch (e) {
+    emit('llm.fail', { backend, ms: Date.now() - start, error: (e as Error).message.slice(0, 200) });
+    throw e;
+  }
 }
 
 export { resetSessionState, getSessionCost } from './resilience.js';
