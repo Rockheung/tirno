@@ -1,15 +1,15 @@
 {
-  "name": "chromux",
+  "name": "wandr",
   "version": "0.1.0",
-  "description": "tmux-style Chrome DevTools Protocol CLI",
+  "description": "Multi-session browser automation CLI on raw CDP",
   "type": "module",
   "bin": {
-    "chromux": "./bin/chromux.js"
+    "wandr": "./bin/wandr.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node bin/chromux.js"
+    "start": "node bin/wandr.js"
   },
   "dependencies": {
     "chalk": "^5.4.1",

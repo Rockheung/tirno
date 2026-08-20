@@ -2,9 +2,9 @@
 
 ## 프로젝트 개요
 
-chromux — tmux-style Chrome DevTools Protocol CLI.
+wandr — Multi-session browser automation CLI on raw CDP.
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다.
-MCP 없이 puppeteer-core로 CDP를 직접 사용.
+puppeteer-core 기반.
 
 ## 빌드
 
@@ -16,17 +16,17 @@ npm run build    # tsc → dist/
 ## 테스트
 
 ```bash
-node bin/chromux.js new test -- --no-proxy-server
-node bin/chromux.js nav https://example.com
-node bin/chromux.js screenshot --out /tmp/test.png
-node bin/chromux.js kill test
+node bin/wandr.js new test -- --no-proxy-server
+node bin/wandr.js nav https://example.com
+node bin/wandr.js screenshot --out /tmp/test.png
+node bin/wandr.js kill test
 ```
 
 ## 구조
 
-- `src/core/` — 세션 저장, 포트 할당, Chrome 실행/연결, 프로세스 관리
+- `src/core/` — 세션 저장, 포트 할당, Chrome 실행/연결, 프로세스 관리, ref store
 - `src/commands/` — CLI 명령 (session, nav, inspect, input, eval, emulate, perf, multi)
-- `src/cdp/` — 페이지 리졸버, CDP 유틸리티
+- `src/cdp/` — 페이지 리졸버, emulation, dom-actions
 - `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
 - `src/util/` — 에러 타입
 

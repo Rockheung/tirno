@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const REFS_DIR = path.join(os.homedir(), '.chromux', 'refs');
+const REFS_DIR = path.join(os.homedir(), '.wandr', 'refs');
 
 function ensureDir(): void {
   fs.mkdirSync(REFS_DIR, { recursive: true });
@@ -39,7 +39,7 @@ export function resolveRef(session: string, refExpr: string): number {
   if (!m) throw new Error(`Not a ref: ${refExpr}`);
   const refs = load(session);
   const id = refs[m[1]];
-  if (id === undefined) throw new Error(`Unknown ref ${refExpr}. Run "chromux snapshot" first.`);
+  if (id === undefined) throw new Error(`Unknown ref ${refExpr}. Run "wandr snapshot" first.`);
   return id;
 }
 

@@ -12,8 +12,8 @@ import { error } from './output/formatter.js';
 const program = new Command();
 
 program
-  .name('chromux')
-  .description('tmux-style Chrome DevTools Protocol CLI')
+  .name('wandr')
+  .description('Multi-session browser automation CLI on raw CDP')
   .version('0.1.0');
 
 registerSessionCommands(program);
