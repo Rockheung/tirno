@@ -50,13 +50,44 @@ export function registerInputCommands(program: Command): void {
   program
     .command('fill')
     .description('Clear and type into an input element by selector or @ref')
-    .argument('<target>', 'CSS selector or @N ref from snapshot')
-    .argument('<value>', 'Value to fill')
+    .argument('[target]', 'CSS selector or @N ref from snapshot (omit when --batch)')
+    .argument('[value]', 'Value to fill (omit when --batch)')
     .option('-s, --session <name>', 'Session name')
-    .action(async (target: string, value: string, opts) => {
+    .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},...]')
+    .action(async (target: string | undefined, value: string | undefined, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
+
+        if (opts.batch) {
+          let entries: Array<{ target: string; value: string }>;
+          try {
+            const parsed = JSON.parse(opts.batch);
+            if (!Array.isArray(parsed)) throw new Error('expected array');
+            entries = parsed;
+          } catch (e) {
+            throw new Error(`--batch invalid JSON: ${(e as Error).message}`);
+          }
+          for (const entry of entries) {
+            if (!entry.target || typeof entry.value !== 'string') {
+              throw new Error(`--batch entries need {target, value}`);
+            }
+            if (refStore.isRef(entry.target)) {
+              const backendId = refStore.resolveRef(meta.name, entry.target);
+              await fillByRef(page, backendId, entry.value);
+            } else {
+              await page.click(entry.target, { count: 3 });
+              await page.type(entry.target, entry.value);
+            }
+          }
+          browser.disconnect();
+          success(`Filled ${entries.length} field${entries.length === 1 ? '' : 's'}`);
+          return;
+        }
+
+        if (!target || value === undefined) {
+          throw new Error('Provide <target> <value> or --batch <json>');
+        }
 
         if (refStore.isRef(target)) {
           const backendId = refStore.resolveRef(meta.name, target);
@@ -253,9 +284,10 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('wait-for')
-    .description('Wait for a selector to appear or for network idle')
+    .description('Wait for a selector, text, or network idle')
     .argument('[selector]', 'CSS selector to wait for')
     .option('-s, --session <name>', 'Session name')
+    .option('--text <text>', 'Wait until any of the given texts appears in document.body.innerText (comma-separated for any-of)')
     .option('--network-idle', 'Wait for network idle instead of a selector')
     .option('--timeout <ms>', 'Max wait time', intArg, 30000)
     .action(async (selector: string | undefined, opts) => {
@@ -267,12 +299,27 @@ export function registerInputCommands(program: Command): void {
           await page.waitForNetworkIdle({ timeout: opts.timeout });
           browser.disconnect();
           success('Network idle');
-        } else {
-          if (!selector) throw new Error('Provide a selector or use --network-idle');
-          await page.waitForSelector(selector, { timeout: opts.timeout });
-          browser.disconnect();
-          success(`Selector visible: ${selector}`);
+          return;
         }
+        if (opts.text) {
+          const needles = opts.text.split(',').map((s: string) => s.trim()).filter(Boolean);
+          if (needles.length === 0) throw new Error('--text needs at least one non-empty string');
+          await page.waitForFunction(
+            (texts: string[]) => {
+              const body = document.body?.innerText ?? '';
+              return texts.some(t => body.includes(t));
+            },
+            { timeout: opts.timeout, polling: 200 },
+            needles,
+          );
+          browser.disconnect();
+          success(`Text visible: ${needles.join(' | ')}`);
+          return;
+        }
+        if (!selector) throw new Error('Provide a selector, --text, or --network-idle');
+        await page.waitForSelector(selector, { timeout: opts.timeout });
+        browser.disconnect();
+        success(`Selector visible: ${selector}`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

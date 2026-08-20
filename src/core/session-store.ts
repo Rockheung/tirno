@@ -8,6 +8,9 @@ export interface EmulationState {
   viewport?: { width: number; height: number; deviceScaleFactor: number; mobile: boolean };
   network?: string;
   cpu?: number;
+  userAgent?: string;
+  colorScheme?: 'light' | 'dark' | 'no-preference';
+  geolocation?: { latitude: number; longitude: number; accuracy: number };
 }
 
 export interface SessionMetadata {

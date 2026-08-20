@@ -18,6 +18,10 @@ export function registerEmulateCommand(program: Command): void {
     .option('--network <profile>', 'Network preset (slow-3g|fast-3g|4g|offline)')
     .option('--cpu <rate>', 'CPU throttle rate (e.g. 4 = 4x slowdown)', floatArg)
     .option('--dpr <n>', 'Device pixel ratio override', floatArg)
+    .option('--user-agent <ua>', 'User-Agent override (empty string clears)')
+    .option('--color-scheme <scheme>', 'prefers-color-scheme: light|dark|no-preference')
+    .option('--geolocation <coords>', 'Geolocation override "<lat>,<lng>" (e.g. "37.5,127.0")')
+    .option('--geolocation-accuracy <m>', 'Geolocation accuracy radius in meters (default 50)', floatArg)
     .option('--reset', 'Clear all emulation overrides')
     .option('--list-devices', 'List available device presets')
     .action(async (opts) => {
@@ -95,9 +99,34 @@ export function registerEmulateCommand(program: Command): void {
           applied.push(`dpr=${opts.dpr}x`);
         }
 
+        if (opts.userAgent !== undefined) {
+          nextEmu.userAgent = opts.userAgent;
+          applied.push(opts.userAgent === '' ? 'user-agent=cleared' : `user-agent=${opts.userAgent.slice(0, 40)}${opts.userAgent.length > 40 ? '…' : ''}`);
+        }
+
+        if (opts.colorScheme !== undefined) {
+          if (!['light', 'dark', 'no-preference'].includes(opts.colorScheme)) {
+            throw new Error(`--color-scheme must be light|dark|no-preference, got "${opts.colorScheme}"`);
+          }
+          nextEmu.colorScheme = opts.colorScheme;
+          applied.push(`color-scheme=${opts.colorScheme}`);
+        }
+
+        if (opts.geolocation !== undefined) {
+          const m = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/.exec(opts.geolocation);
+          if (!m) throw new Error(`--geolocation must be "<lat>,<lng>", got "${opts.geolocation}"`);
+          const accuracy = opts.geolocationAccuracy ?? 50;
+          nextEmu.geolocation = {
+            latitude: Number(m[1]),
+            longitude: Number(m[2]),
+            accuracy,
+          };
+          applied.push(`geolocation=${m[1]},${m[2]} ±${accuracy}m`);
+        }
+
         if (applied.length === 0) {
           browser.disconnect();
-          throw new Error('No emulation options provided. Use --device, --network, --cpu, --reset, or --list-devices');
+          throw new Error('No emulation options provided. Use --device, --viewport, --network, --cpu, --user-agent, --color-scheme, --geolocation, --reset, or --list-devices');
         }
 
         await applyEmulation(page, nextEmu);
