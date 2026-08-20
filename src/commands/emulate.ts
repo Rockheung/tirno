@@ -3,13 +3,9 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
 import { KnownDevices } from 'puppeteer-core';
-
-const NETWORK_PRESETS: Record<string, { download: number; upload: number; latency: number }> = {
-  'slow-3g': { download: 500 * 1024 / 8, upload: 500 * 1024 / 8, latency: 400 },
-  'fast-3g': { download: 1.6 * 1024 * 1024 / 8, upload: 750 * 1024 / 8, latency: 150 },
-  '4g': { download: 4 * 1024 * 1024 / 8, upload: 3 * 1024 * 1024 / 8, latency: 20 },
-  'offline': { download: 0, upload: 0, latency: 0 },
-};
+import * as store from '../core/session-store.js';
+import type { EmulationState } from '../core/session-store.js';
+import { applyEmulation, clearEmulation, getDevice, getNetworkPreset, networkPresetNames } from '../cdp/emulation.js';
 
 export function registerEmulateCommand(program: Command): void {
   program
@@ -19,6 +15,8 @@ export function registerEmulateCommand(program: Command): void {
     .option('--device <name>', 'Device preset (e.g. "iPhone 14")')
     .option('--network <profile>', 'Network preset (slow-3g|fast-3g|4g|offline)')
     .option('--cpu <rate>', 'CPU throttle rate (e.g. 4 = 4x slowdown)', parseFloat)
+    .option('--dpr <n>', 'Device pixel ratio override', parseFloat)
+    .option('--reset', 'Clear all emulation overrides')
     .option('--list-devices', 'List available device presets')
     .action(async (opts) => {
       if (opts.listDevices) {
@@ -28,39 +26,69 @@ export function registerEmulateCommand(program: Command): void {
       }
 
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
+
+        if (opts.reset) {
+          await clearEmulation(page);
+          browser.disconnect();
+          store.update(meta.name, { emulation: undefined });
+          success('Emulation: cleared');
+          return;
+        }
+
+        const nextEmu: EmulationState = { ...(meta.emulation ?? {}) };
         const applied: string[] = [];
 
         if (opts.device) {
-          const device = KnownDevices[opts.device as keyof typeof KnownDevices];
+          const device = getDevice(opts.device);
           if (!device) throw new Error(`Unknown device: ${opts.device}. Use --list-devices`);
-          await page.emulate(device);
+          nextEmu.device = opts.device;
+          nextEmu.viewport = {
+            width: device.viewport.width,
+            height: device.viewport.height,
+            deviceScaleFactor: device.viewport.deviceScaleFactor ?? 1,
+            mobile: device.viewport.isMobile ?? false,
+          };
           applied.push(`device=${opts.device}`);
         }
 
         if (opts.network) {
-          const preset = NETWORK_PRESETS[opts.network.toLowerCase()];
-          if (!preset) throw new Error(`Unknown network: ${opts.network}. Options: ${Object.keys(NETWORK_PRESETS).join(', ')}`);
-          const cdp = await page.createCDPSession();
-          await cdp.send('Network.emulateNetworkConditions', {
-            offline: opts.network === 'offline',
-            downloadThroughput: preset.download,
-            uploadThroughput: preset.upload,
-            latency: preset.latency,
-          });
-          await cdp.detach();
+          if (!getNetworkPreset(opts.network)) {
+            throw new Error(`Unknown network: ${opts.network}. Options: ${networkPresetNames().join(', ')}`);
+          }
+          nextEmu.network = opts.network;
           applied.push(`network=${opts.network}`);
         }
 
-        if (opts.cpu) {
-          const cdp = await page.createCDPSession();
-          await cdp.send('Emulation.setCPUThrottlingRate', { rate: opts.cpu });
-          await cdp.detach();
+        if (opts.cpu !== undefined) {
+          nextEmu.cpu = opts.cpu;
           applied.push(`cpu=${opts.cpu}x`);
         }
 
+        if (opts.dpr !== undefined) {
+          // DPR requires a viewport context — preserve any existing one (from device or prior --dpr),
+          // otherwise capture the current window size as the baseline.
+          let base = nextEmu.viewport;
+          if (!base) {
+            const size = await page.evaluate(() => ({
+              w: window.innerWidth,
+              h: window.innerHeight,
+            }));
+            base = { width: size.w, height: size.h, deviceScaleFactor: 1, mobile: false };
+          }
+          nextEmu.viewport = { ...base, deviceScaleFactor: opts.dpr };
+          applied.push(`dpr=${opts.dpr}x`);
+        }
+
+        if (applied.length === 0) {
+          browser.disconnect();
+          throw new Error('No emulation options provided. Use --device, --network, --cpu, --reset, or --list-devices');
+        }
+
+        await applyEmulation(page, nextEmu);
         browser.disconnect();
+        store.update(meta.name, { emulation: nextEmu });
         success(`Emulation: ${applied.join(', ')}`);
       } catch (e) {
         error((e as Error).message);

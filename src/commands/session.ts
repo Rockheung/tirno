@@ -63,18 +63,31 @@ export function registerSessionCommands(program: Command): void {
         const marker = s.name === active ? '*' : ' ';
         const status = alive ? 'running' : 'dead';
         const proxy = s.chromeFlags.find(f => f.startsWith('--proxy'))?.split('=')[1] ?? 'direct';
+        const emu = s.emulation;
+        const parts: string[] = [];
+        if (emu?.device) {
+          const vp = emu.viewport;
+          parts.push(vp ? `${emu.device} (${vp.width}x${vp.height}@${vp.deviceScaleFactor}x)` : emu.device);
+        } else if (emu?.viewport) {
+          const vp = emu.viewport;
+          parts.push(`${vp.width}x${vp.height}@${vp.deviceScaleFactor}x`);
+        }
+        if (emu?.network) parts.push(`net:${emu.network}`);
+        if (emu?.cpu) parts.push(`cpu:${emu.cpu}x`);
+        const emulation = parts.length ? parts.join(', ') : '-';
         return [
           marker,
           s.name,
           String(s.port),
           status,
           proxy,
+          emulation,
           s.lastAccessedAt.slice(0, 19).replace('T', ' '),
         ];
       });
 
       console.log(formatTable(
-        ['', 'NAME', 'PORT', 'STATUS', 'PROXY', 'LAST ACCESS'],
+        ['', 'NAME', 'PORT', 'STATUS', 'PROXY', 'EMULATION', 'LAST ACCESS'],
         rows
       ));
     });
