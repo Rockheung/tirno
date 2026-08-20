@@ -48,6 +48,7 @@
     "@anthropic-ai/sdk": "^0.95.0",
     "@gutenye/ocr-node": "^1.4.8",
     "@huggingface/transformers": "^4.2.0",
+    "@lancedb/lancedb": "^0.27.2",
     "chalk": "^5.4.1",
     "commander": "^14.0.0",
     "pixelmatch": "^6.0.0",

@@ -309,6 +309,59 @@ interface CacheEntry {
 
 ---
 
+### Storage abstraction + LanceDB backend (PR #24)
+
+#### 의도
+
+production 가정 — JSON 파일 + sha1 hash 단순 storage는 수만+ waypoints / 다중 사용자 / vector 검색 요구사항에 부족. backend 추상화 + LanceDB(embedded production-grade) 도입.
+
+#### 구조
+
+```
+src/storage/
+  types.ts         WaypointStore / TrailStore / WaypointRecord / Filters
+  index.ts         backend factory (TIRNO_STORAGE_BACKEND env)
+  file-backend.ts  기존 visual-cache + trail-store wrapper (default)
+  lance-backend.ts @lancedb/lancedb (embedded vector DB)
+```
+
+#### Selection
+
+- `TIRNO_STORAGE_BACKEND=file` (default) — backward compat
+- `TIRNO_STORAGE_BACKEND=lance` — LanceDB
+
+lance backend는 lazy-load — file 사용자는 native binary 안 거침. (단 install 시점에 binary download — npm publish 후 사용자 install 부담)
+
+#### File backend
+
+- 기존 visual-cache + trail-store JSON 파일 layer 그대로 wrap
+- query는 linear scan + in-memory filter (수천 entry까지 OK)
+- 모든 operation에 backward-compat 유지
+
+#### Lance backend
+
+- 테이블: `waypoints`, `trails`
+- 위치: `~/.tirno/lance/` (`TIRNO_LANCE_DIR` override)
+- waypoints flat schema — channels를 row 컬럼으로 평탄화 (role, name, selector, bbox*, ocrText, embedding…)
+- `embedding` 컬럼 — 384차원 (`TIRNO_EMBEDDING_DIM` override). 다음 PR(#20)에서 채움.
+- searchSimilar()로 cosine top-K — 다음 PR(#21)에서 RAG retrieval에 사용
+
+#### 검증
+
+- file backend 8 케이스 unit test — save/get/query (domain/role/search/limit) / delete / trail filter (goal, minSuccessRate)
+- 88/88 tests pass
+- lance backend는 native binary 검증은 사용자 환경에서 (CI에서 실제 lance 회귀는 별도 PR)
+
+#### 한계 / 후속
+
+- lance native binary는 macOS arm64/x64, Linux x64 지원. Windows는 추가 검증 필요
+- file → lance migration 명령은 #22
+- embedding 자동 채움은 #20
+- vector RAG retrieval은 #21
+- 기존 inspect/cache 명령들이 file backend 직접 호출 — 점진적으로 storage layer로 마이그레이션
+
+---
+
 ### 지능요청 — Anthropic Claude Vision backend (PR #23)
 
 #### 의도
