@@ -309,6 +309,40 @@ interface CacheEntry {
 
 ---
 
+### Phase 6-1b — viewport-aware visual cache (PR #12)
+
+#### 의도
+
+bbox/refs는 **viewport에 종속**. 같은 URL이라도 desktop 1200×800에서 본 layout과 모바일 390×844에서 본 layout은 완전히 다른 좌표 → 한 entry로 덮어쓰면 layout journaling으로서 의미 없음. viewport 정보가 cache의 본질이라는 사용자 정정에 따라 재설계.
+
+#### 변경
+
+- **저장 구조**: `<domain>/<sha1(urlPath)>/<wxh@dpr>.json` — URL 디렉토리 + viewport 별 파일. 같은 URL 다른 viewport는 별개 file로 공존
+- **`CacheEntry.viewport` required** (이전 optional). bbox/refs를 신뢰하려면 viewport 알아야 함
+- **`Viewport` 타입 export** + `viewportKey` / `parseViewportKey` 헬퍼 (`1200x800@2` 형식)
+- **`lookup(url, { viewport?, mode? })`**: viewport 명시 시 정확 매칭 (없으면 null), 미명시 시 디렉토리 안 가장 최근 mtime entry 반환. 시그니처가 옵션 객체로 변경
+- **`cache list`**: VIEWPORT 컬럼 추가
+- **`cache load`**: `--viewport <wxh@dpr>` 옵션 추가
+- **`prune`**: 디렉토리 트래버스 + 빈 디렉토리 정리 + legacy flat layout(이전 형식)도 정리
+
+#### 검증
+
+- example.com을 desktop(1200×829@2) → emulate iPhone 14 → mobile(390×663@3)로 두 번 snapshot
+- `cache list` — viewport별 별개 entry 두 row 표시
+- `cache load --viewport 1200x829@2` → RootWebArea (0,0 **1200x829**)
+- `cache load --viewport 390x663@3` → RootWebArea (0,0 **390x663**)
+- `cache load --viewport 1920x1080@1` → "No cached entry" (정확)
+- viewport 미지정 → 가장 최근(mobile) 반환
+- 58/58 tests pass (49 + 9 신규: viewport 분리, parseViewportKey, 디렉토리 구조)
+
+#### 한계
+
+- 마이그레이션 없음 — 기존 entry는 prune으로 정리 후 재캡처 (toy 단계)
+- viewport "근사 매칭"은 안 함 — 정확한 wxh@dpr 일치만. 같은 device classification(desktop/tablet/mobile) 매칭은 향후
+- legacy flat layout(`<hash>.json`)이 발견되면 prune이 정리하지만 lookup은 디렉토리만 봄
+
+---
+
 ### Phase 6-2d — snapshot --vision 통합 (PR #11)
 
 #### 의도
@@ -509,7 +543,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#8](https://github.com/Rockheung/tirno/pull/8) | feat: Phase 6-2 — vision OCR backend (tesseract.js) + IoU helper | merged |
 | [#9](https://github.com/Rockheung/tirno/pull/9) | feat: Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub | merged |
 | [#10](https://github.com/Rockheung/tirno/pull/10) | feat: Phase 6-2c — Florence-2 backend (experimental, output decoding 한계) | merged |
-| [#11](https://github.com/Rockheung/tirno/pull/11) | feat: Phase 6-2d — snapshot --vision 통합 (a11y 못 잡은 영역 OCR로 보강) | open |
+| [#11](https://github.com/Rockheung/tirno/pull/11) | feat: Phase 6-2d — snapshot --vision 통합 (a11y 못 잡은 영역 OCR로 보강) | merged |
+| [#12](https://github.com/Rockheung/tirno/pull/12) | feat: Phase 6-1b — viewport-aware visual cache | open |
 
 ## 보류된 항목 (다음 phase 후보)
 

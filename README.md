@@ -101,12 +101,14 @@ tirno kill mysession
 | `memory` | heap snapshot |
 | `diff <s1> <s2>` | 두 세션 시각 diff (pixelmatch) |
 
-### Visual cache (Phase 6-1)
+### Visual cache (Phase 6-1, viewport-aware)
 | 명령 | 설명 |
 |---|---|
-| `cache list [--domain <d>] [--limit <n>]` | URL key별 캐시 entry 목록 |
-| `cache load <url> [--mode exact\|urlPath]` | 캐시된 ref + selector + bbox emit |
+| `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록 |
+| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>]` | 캐시된 ref + selector + bbox emit. viewport 미지정 시 가장 최근 |
 | `cache prune [--older-than <days>] [--domain <d>]` | 정리 |
+
+저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
 
 ### Vision OCR (Phase 6-2)
 | 명령 | 설명 |
