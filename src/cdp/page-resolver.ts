@@ -33,23 +33,75 @@ export async function getInteractivePage(browser: Browser): Promise<Page> {
   return page;
 }
 
-export async function getPageById(browser: Browser, pageId: number): Promise<Page> {
-  const pages = await browser.pages();
-  if (pageId < 0 || pageId >= pages.length) {
-    throw new Error(`Page ${pageId} not found (${pages.length} pages)`);
+/**
+ * A tab's handle, short enough to type: the first 8 hex of CDP's targetId.
+ *
+ * The position in `browser.pages()` is NOT a handle. `tirno pages` and
+ * `tirno close-tab` are separate processes, so anything that opens or closes a
+ * tab in between renumbers every row — and the number the user typed then means
+ * a different tab. Chrome puts a new tab at index 0, so this is the common case,
+ * not a corner: it closed the wrong tab during a smoke run. targetId does not
+ * move for the life of the tab.
+ */
+export async function pageHandle(page: Page): Promise<string> {
+  const cdp = await page.createCDPSession();
+  try {
+    const { targetInfo } = await cdp.send('Target.getTargetInfo') as { targetInfo: { targetId: string } };
+    return targetInfo.targetId.slice(0, 8).toLowerCase();
+  } finally {
+    await cdp.detach();
   }
-  return pages[pageId];
 }
 
-export async function listPages(browser: Browser): Promise<Array<{ id: number; url: string; title: string }>> {
+export interface PageEntry {
+  /** stable handle — see pageHandle */
+  id: string;
+  url: string;
+  title: string;
+}
+
+export async function listPages(browser: Browser): Promise<PageEntry[]> {
   const pages = await browser.pages();
-  const result = [];
-  for (let i = 0; i < pages.length; i++) {
+  const result: PageEntry[] = [];
+  for (const page of pages) {
     result.push({
-      id: i,
-      url: pages[i].url(),
-      title: await pages[i].title(),
+      id: await pageHandle(page),
+      url: page.url(),
+      title: await page.title(),
     });
   }
   return result;
+}
+
+/**
+ * Resolve a handle to its tab. A prefix is enough as long as it picks out one
+ * tab; an ambiguous or unknown handle is an error rather than a guess, because
+ * the callers close and switch tabs.
+ */
+export async function getPageByHandle(browser: Browser, handle: string): Promise<Page> {
+  const wanted = handle.trim().toLowerCase();
+  if (!wanted) throw new Error('Empty page id — run `tirno pages` for the list');
+
+  // Four characters minimum. A handle is hex, so an all-digit prefix like
+  // '0176' is perfectly valid and must not be mistaken for an index — but a
+  // bare '0' or '2' is almost certainly someone (or some old script) still
+  // passing a position, and matching that as a prefix would close whichever tab
+  // happened to start with that digit.
+  if (wanted.length < 4) {
+    throw new Error(
+      /^\d+$/.test(wanted)
+        ? `'${handle}' looks like a positional index. Page ids are stable handles now — run \`tirno pages\` and use the ID column.`
+        : `Page id '${handle}' is too short — give at least 4 characters from \`tirno pages\`.`
+    );
+  }
+
+  const pages = await browser.pages();
+  const matches: Page[] = [];
+  for (const page of pages) {
+    if ((await pageHandle(page)).startsWith(wanted)) matches.push(page);
+  }
+
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) throw new Error(`No page with id '${handle}' (${pages.length} open) — run \`tirno pages\``);
+  throw new Error(`Page id '${handle}' matches ${matches.length} tabs — use more characters`);
 }

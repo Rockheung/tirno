@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
-import { getActivePage, listPages } from '../cdp/page-resolver.js';
+import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
 import { formatTable, success, error } from '../output/formatter.js';
 
 export function registerNavCommands(program: Command): void {
@@ -105,7 +105,7 @@ export function registerNavCommands(program: Command): void {
         }
 
         const rows = pages.map(p => [
-          String(p.id),
+          p.id,
           p.title.slice(0, 40) || '(untitled)',
           p.url.slice(0, 80),
         ]);
@@ -118,19 +118,16 @@ export function registerNavCommands(program: Command): void {
 
   program
     .command('select')
-    .description('Select a page/tab by ID')
-    .argument('<pageId>', 'Page ID', intArg)
+    .description('Select a page/tab by its ID from `tirno pages`')
+    .argument('<pageId>', 'Page ID (stable handle, prefix is enough)')
     .option('-s, --session <name>', 'Session name')
-    .action(async (pageId: number, opts) => {
+    .action(async (pageId: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
-        const pages = await browser.pages();
-        if (pageId < 0 || pageId >= pages.length) {
-          throw new Error(`Page ${pageId} not found (${pages.length} pages)`);
-        }
-        await pages[pageId].bringToFront();
+        const page = await getPageByHandle(browser, pageId);
+        await page.bringToFront();
         browser.disconnect();
-        success(`Selected page ${pageId}: ${pages[pageId].url()}`);
+        success(`Selected page ${pageId}: ${page.url()}`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
@@ -159,18 +156,15 @@ export function registerNavCommands(program: Command): void {
 
   program
     .command('close-tab')
-    .description('Close a tab by ID')
-    .argument('<pageId>', 'Page ID', intArg)
+    .description('Close a tab by its ID from `tirno pages`')
+    .argument('<pageId>', 'Page ID (stable handle, prefix is enough)')
     .option('-s, --session <name>', 'Session name')
-    .action(async (pageId: number, opts) => {
+    .action(async (pageId: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
-        const pages = await browser.pages();
-        if (pageId < 0 || pageId >= pages.length) {
-          throw new Error(`Page ${pageId} not found`);
-        }
-        const url = pages[pageId].url();
-        await pages[pageId].close();
+        const page = await getPageByHandle(browser, pageId);
+        const url = page.url();
+        await page.close();
         browser.disconnect();
         success(`Closed tab ${pageId}: ${url}`);
       } catch (e) {

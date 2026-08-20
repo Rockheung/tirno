@@ -25,7 +25,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | mcp tool | tirno 명령 | 비고 |
 |---|---|---|
 | `list_pages` | `tirno pages` | ID/title/URL 테이블, `--json` 가능 |
-| `select_page` | `tirno select <id>` | bringToFront 는 `tirno cdp Target.activateTarget` |
+| `select_page` | `tirno select <id>` | ID 는 `tirno pages` 의 안정 핸들(CDP targetId 앞 8자리). 위치 인덱스가 아니라 탭이 열리고 닫혀도 안 바뀐다 |
 | `close_page` | `tirno close-tab <id>` | — |
 | `new_page` | `tirno new-tab <url>` 또는 `tirno new <name> <url>` | 새 탭(같은 세션) vs 새 세션 — 의도에 맞게 |
 | `navigate_page type=url` | `tirno nav <url>` | — |
