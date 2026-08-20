@@ -36,19 +36,33 @@ npm run build    # tsc → dist/
 ## 테스트
 
 ```bash
-node bin/tirno.js new test -- --no-proxy-server
+npm test    # tsc -p tsconfig.test.json → node --test (유닛)
+```
+
+유닛 테스트는 **Chrome 을 띄우지 않는다.** `lsof` 출력·`DevToolsActivePort` 본문·chrome
+커맨드라인은 전부 캡처한 문자열이고, 파일을 쓰는 테스트는 `mkdtempSync` + `TIRNO_DIR`
+override 로 실제 `~/.tirno` 와 격리된다. 그래서 빠르고 호스트에 무관하지만, 증명하는 것은
+**파서·판정 로직이지 Chrome 의 행동이 아니다** — 그쪽은 스모크로 확인한다:
+
+```bash
+node bin/tirno.js new test --headless --ephemeral
 node bin/tirno.js nav https://example.com
 node bin/tirno.js screenshot --out /tmp/test.png
-node bin/tirno.js kill test
+node bin/tirno.js kill test --clean
 ```
 
 ## 구조
 
-- `src/core/` — 세션 저장, 포트 할당, Chrome 실행/연결, 프로세스 관리, ref store
-- `src/commands/` — CLI 명령 (session, nav, inspect, input, eval, emulate, perf, multi)
-- `src/cdp/` — 페이지 리졸버, emulation, dom-actions
+- `src/core/` — 세션 저장, Chrome 실행/연결, 프로세스 관리, ref store, 그리고 앵커 브로커
+  (`anchor-store` · `inventory`(소유권 판정) · `devtools-port` · `gc` · `drift` · `path-guard`)
+- `src/commands/` — CLI 명령. 파일명은 카테고리이지 명령 이름이 아니다 (`inspect.ts` 는
+  screenshot/snapshot/console/network 를 등록한다 — `tirno inspect` 라는 명령은 없다)
+- `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash
+- `src/intelligence/` — LLM 백엔드(claude/openai/gemini), 임베딩, 재시도·비용 상한
+- `src/vision/` — OCR 백엔드와 a11y 증강
+- `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
 - `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
-- `src/util/` — 에러 타입
+- `src/util/` — 에러 타입, 인자 파서
 
 ## 의존성
 
@@ -56,3 +70,9 @@ node bin/tirno.js kill test
 - commander: CLI 프레임워크
 - chalk: 터미널 컬러
 - pixelmatch + pngjs: 스크린샷 비교
+- lighthouse: `tirno audit`
+- @anthropic-ai/sdk: `tirno ask` / `tirno explore` 의 claude 백엔드.
+  **지능 백엔드는 claude 하나뿐이다** — `--backend openai|gemini` 는 인자로 받지만
+  `dispatcher.ts` 에서 "not yet implemented" 로 던진다
+- @gutenye/ocr-node + @huggingface/transformers: OCR·임베딩 (가치 흐름 2·4번)
+- @lancedb/lancedb: waypoint 벡터 검색 (RAG)
