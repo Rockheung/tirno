@@ -37,8 +37,19 @@ export function registerAuditCommand(program: Command): void {
         } else {
           // Hit the chrome /json endpoint to read current URL — avoids opening
           // a puppeteer connection just to read href.
+          //
+          // Pick the same page the rest of the CLI acts on: the LAST content
+          // target, skipping about:blank. Taking the first one audited a blank
+          // tab the moment a session had two of them (lighthouse then dies with
+          // INVALID_URL). Keep this in step with getActivePage.
           const r = await fetch(`http://localhost:${meta.port}/json`).then(r => r.json() as Promise<Array<{ type: string; url: string }>>);
-          const page = r.find(t => t.type === 'page' && !t.url.startsWith('chrome://'));
+          const targets = r.filter(t =>
+            t.type === 'page' &&
+            !t.url.startsWith('chrome://') &&
+            !t.url.startsWith('devtools://') &&
+            t.url !== 'about:blank'
+          );
+          const page = targets[targets.length - 1] ?? r.find(t => t.type === 'page');
           if (!page) throw new Error('No page target — pass [url] explicitly');
           url = page.url;
         }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { parseFlags } from '../src/core/inventory.js';
-import { diffFlags, shellQuoteFlag } from '../src/core/drift.js';
+import { diffFlags, shellQuoteFlag, stripPositionals } from '../src/core/drift.js';
 
 // plan-anchor-broker.md §3 Stage 5 — declared flags vs the running process.
 
@@ -123,4 +123,35 @@ test('an embedded single quote does not break out of the quoting', () => {
   const quoted = shellQuoteFlag(`--proxy-bypass-list=a'b c`);
   const out = execFileSync('sh', ['-c', `printf '%s\\n' ${quoted}`], { encoding: 'utf8' });
   assert.equal(out, `--proxy-bypass-list=a'b c\n`);
+});
+
+// ------------------------------------------------ start URLs vs flag values
+
+test('a start URL does not glue itself onto the preceding flag', () => {
+  const cmdline = '/x/chrome --window-size=1920,1080 --window-position=0,0 file:///tmp/page.html';
+  const declared = ['--window-size=1920,1080', '--window-position=0,0', 'file:///tmp/page.html'];
+  const flags = parseFlags(stripPositionals(cmdline, declared));
+  assert.equal(flags.get('--window-position'), '0,0');
+  assert.equal(diffFlags(declared, flags).hasDrift, false);
+});
+
+test('a value that legitimately contains spaces survives', () => {
+  const cmdline = '/x/chrome --host-resolver-rules=MAP example.com 127.0.0.1 https://example.com';
+  const declared = ['--host-resolver-rules=MAP example.com 127.0.0.1', 'https://example.com'];
+  const flags = parseFlags(stripPositionals(cmdline, declared));
+  assert.equal(flags.get('--host-resolver-rules'), 'MAP example.com 127.0.0.1');
+  assert.equal(diffFlags(declared, flags).hasDrift, false);
+});
+
+test('no positionals declared — the command line is untouched', () => {
+  const cmdline = '/x/chrome --headless --window-size=800,600';
+  assert.equal(stripPositionals(cmdline, ['--headless', '--window-size=800,600']), cmdline);
+});
+
+test('real drift is still reported when a start URL is present', () => {
+  const cmdline = '/x/chrome --window-size=800,600 https://example.com';
+  const declared = ['--window-size=1920,1080', 'https://example.com'];
+  const report = diffFlags(declared, parseFlags(stripPositionals(cmdline, declared)));
+  assert.equal(report.hasDrift, true);
+  assert.deepEqual(report.changed[0], { flag: '--window-size', expected: '1920,1080', actual: '800,600' });
 });

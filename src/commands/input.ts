@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
-import { getActivePage } from '../cdp/page-resolver.js';
+import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
 import { clickByRef, fillByRef } from '../cdp/dom-actions.js';
 import * as refStore from '../core/ref-store.js';
@@ -28,7 +28,7 @@ export function registerInputCommands(program: Command): void {
     .action(async (target: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const page = await getInteractivePage(browser);
 
         // "x,y" coordinate form — dispatch raw CDP mouse events (trusted click).
         const coordMatch = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/.exec(target);
@@ -79,7 +79,7 @@ export function registerInputCommands(program: Command): void {
     .action(async (target: string | undefined, value: string | undefined, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const page = await getInteractivePage(browser);
 
         if (opts.batch) {
           let entries: Array<{ target: string; value: string }>;
@@ -177,7 +177,7 @@ export function registerInputCommands(program: Command): void {
     .action(async (selector: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const page = await getInteractivePage(browser);
 
         await page.hover(selector);
 
@@ -207,7 +207,7 @@ export function registerInputCommands(program: Command): void {
         };
 
         const { browser } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const page = await getInteractivePage(browser);
 
         // native HTML5 drag intercept path (selector OR coord — drag with
         // CDP intercept gives the page the trusted dataTransfer it needs)
