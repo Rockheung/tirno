@@ -32,6 +32,23 @@ function summarizeFlags(flags: string[]): string {
   return joined.length > 80 ? joined.slice(0, 77) + '...' : joined;
 }
 
+/**
+ * Everything after `--` is meant for chrome, but commander hands those args to
+ * the action as operands too, so the first chrome flag also lands in `[url]`
+ * (`tirno new x -- --no-proxy-server` recorded `url: --no-proxy-server` and
+ * passed the flag to chrome twice). A positional url only counts when it
+ * appeared before the separator.
+ */
+export function positionalUrl(
+  rawArgs: string[],
+  dashDashIdx: number,
+  urlArg: string | undefined,
+): string | undefined {
+  if (urlArg === undefined) return undefined;
+  const beforeSeparator = dashDashIdx >= 0 ? rawArgs.slice(0, dashDashIdx) : rawArgs;
+  return beforeSeparator.includes(urlArg) ? urlArg : undefined;
+}
+
 export function registerSessionCommands(program: Command): void {
   const newCmd = program
     .command('new')
@@ -56,7 +73,7 @@ export function registerSessionCommands(program: Command): void {
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
       // positional [url] takes precedence; --url stays as backward-compat alias.
-      const bootUrl: string | undefined = urlArg ?? opts.url;
+      const bootUrl: string | undefined = positionalUrl(rawArgs, dashDashIdx, urlArg) ?? opts.url;
 
       // wish A — same-name re-run handling
       let existing: store.SessionMetadata | null = null;
@@ -133,7 +150,7 @@ export function registerSessionCommands(program: Command): void {
       const rawArgs = process.argv;
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
-      const bootUrl: string | undefined = urlArg ?? opts.url;
+      const bootUrl: string | undefined = positionalUrl(rawArgs, dashDashIdx, urlArg) ?? opts.url;
       // delegate to `new --force` semantics inline (avoid extra subprocess)
       try {
         let existing: store.SessionMetadata | null = null;
