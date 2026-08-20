@@ -15,6 +15,7 @@ import { registerReplayCommand } from './commands/replay.js';
 import { registerTrailCommands } from './commands/trail.js';
 import { registerAskCommand } from './commands/ask.js';
 import { registerExploreCommand } from './commands/explore.js';
+import { registerAuthCommands } from './commands/auth.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -40,6 +41,7 @@ registerReplayCommand(program);
 registerTrailCommands(program);
 registerAskCommand(program);
 registerExploreCommand(program);
+registerAuthCommands(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);
