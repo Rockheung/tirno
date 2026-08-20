@@ -5,7 +5,30 @@ import { ChromeNotRunning, NoActiveSession, SessionNotOwned } from '../util/erro
 import { getActivePage } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
 
+/**
+ * Attach to a session's browser and prepare its pages (dialog auto-dismiss,
+ * unload neutralisation, the recorder, stored emulation).
+ *
+ * That preparation runs code *in the renderer*, which is fine everywhere except
+ * when the renderer is the thing under investigation: on a page whose main
+ * thread is pinned, the injection queues behind it and the command does not
+ * return until the page frees up. Use connectWithoutPageSetup for anything that
+ * has to keep working while a page is wedged.
+ */
 export async function connect(sessionName?: string): Promise<{ browser: Browser; meta: store.SessionMetadata }> {
+  return connectSession(sessionName, true);
+}
+
+/**
+ * Same ownership checks and the same browser, but nothing is evaluated in the
+ * page. Diagnostics use this: measuring a stalled renderer must not begin by
+ * waiting on that renderer.
+ */
+export async function connectWithoutPageSetup(sessionName?: string): Promise<{ browser: Browser; meta: store.SessionMetadata }> {
+  return connectSession(sessionName, false);
+}
+
+async function connectSession(sessionName: string | undefined, prepare: boolean): Promise<{ browser: Browser; meta: store.SessionMetadata }> {
   const name = sessionName ?? store.getActive();
   if (!name) throw new NoActiveSession();
 
@@ -203,10 +226,12 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
       for (const p of await browser.pages()) await attachToPage(p);
     } catch { /* best-effort */ }
   };
-  await attachAll();
-  browser.on('targetcreated', () => { attachAll().catch(() => {}); });
+  if (prepare) {
+    await attachAll();
+    browser.on('targetcreated', () => { attachAll().catch(() => {}); });
+  }
 
-  if (meta.emulation) {
+  if (prepare && meta.emulation) {
     try {
       const page = await getActivePage(browser);
       await applyEmulation(page, meta.emulation);

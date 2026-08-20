@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
-import { connect } from '../core/chrome-connector.js';
+import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as store from '../core/session-store.js';
 
@@ -104,22 +104,57 @@ export function registerPerfCommands(program: Command): void {
     .option('--json', 'Output the samples and summary as JSON')
     .action(async (opts) => {
       try {
-        const { browser } = await connect(opts.session);
-        const page = await getActivePage(browser);
-        const rendererCdp = await page.createCDPSession();
+        // Deliberately not `connect`: its page setup evaluates in the renderer,
+        // so on a wedged page this command would block before taking a single
+        // sample — and then report the calm that followed. Measured: a page
+        // locked from load made a 5s window take 22s and come back "idle".
+        const { browser } = await connectWithoutPageSetup(opts.session);
+
+        // Not getActivePage: that goes through browser.pages(), where puppeteer
+        // builds a Page object per target, and the initialisation waits on the
+        // renderer — measured at 17s on a page locked from load, after which the
+        // samples describe the calm that followed. Target metadata comes from
+        // the browser process, so picking one this way stays instant.
+        const pageTargets = browser.targets().filter(t => t.type() === 'page');
+        const content = pageTargets.filter(t => {
+          const u = t.url();
+          return !u.startsWith('chrome://') && !u.startsWith('devtools://') && u !== 'about:blank';
+        });
+        const target = content[content.length - 1] ?? pageTargets[0];
+        if (!target) throw new Error('No page in this session to watch');
+
+        const rendererCdp = await target.createCDPSession();
         // Layer 3 lives on the browser target, on its own socket. That is the
         // whole point: a renderer can be pinned at 100% while the browser
         // process answers in milliseconds, and the gap between the two is what
         // proves the renderer is the problem rather than the machine.
         const browserCdp = await browser.target().createCDPSession();
 
-        // Counters accumulate from `enable`, so the first read is the baseline
-        // and every later one is a delta against it.
-        await rendererCdp.send('Performance.enable');
+        const RTT_CAP_MS = 2000;
 
-        const readMetrics = async (): Promise<Record<string, number>> => {
-          const { metrics } = await rendererCdp.send('Performance.getMetrics') as { metrics: Array<{ name: string; value: number }> };
-          return Object.fromEntries(metrics.map(m => [m.name, m.value]));
+        // Every call below goes to the renderer, and on a wedged page a renderer
+        // call does not fail — it waits. `Performance.enable` was awaited here
+        // and took 55s on a page locked at load, so the command sat out the whole
+        // stall and then described the calm afterwards. Nothing renderer-bound
+        // may be awaited without a deadline.
+        const withCap = async <T>(p: Promise<T>): Promise<T | null> => {
+          let timer: NodeJS.Timeout | undefined;
+          const cap = new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), RTT_CAP_MS); });
+          try { return await Promise.race([p, cap]); }
+          catch { return null; }
+          finally { if (timer) clearTimeout(timer); }
+        };
+
+        // Counters accumulate from `enable`, so the first successful read is the
+        // baseline. Fire and forget: if the thread is pinned this lands whenever
+        // it frees up, and until then the readings simply say "unknown" instead
+        // of holding the whole command hostage.
+        void rendererCdp.send('Performance.enable').catch(() => {});
+
+        const readMetrics = async (): Promise<Record<string, number> | null> => {
+          const res = await withCap(rendererCdp.send('Performance.getMetrics') as Promise<{ metrics: Array<{ name: string; value: number }> }>);
+          if (!res || !res.metrics.length) return null;
+          return Object.fromEntries(res.metrics.map(m => [m.name, m.value]));
         };
 
         // A round trip has to wait behind whatever is already queued on the main
@@ -130,7 +165,6 @@ export function registerPerfCommands(program: Command): void {
         // reporting while the page is stuck — would hang on the very case it
         // exists for. Timing out is not a failed sample; it is the strongest
         // reading there is, so it counts as at least the cap.
-        const RTT_CAP_MS = 2000;
         const rtt = async (send: () => Promise<unknown>): Promise<number> => {
           const t0 = Date.now();
           let timer: NodeJS.Timeout | undefined;
@@ -144,12 +178,17 @@ export function registerPerfCommands(program: Command): void {
             if (timer) clearTimeout(timer);
           }
         };
+        const pctLabel = (v: number) => Number.isNaN(v) ? '   ?' : `${v}%`;
         const rttLabel = (ms: number) =>
           ms === Number.POSITIVE_INFINITY ? `no answer in ${RTT_CAP_MS}ms` : Number.isNaN(ms) ? 'error' : `${ms}ms`;
 
         const samples: Array<{ t: number; rendererRttMs: number; browserRttMs: number; taskPct: number; scriptPct: number; layoutPct: number; stylePct: number }> = [];
         let prev = await readMetrics();
         let prevAt = Date.now();
+        // A tick with no counters is not zero load — it is no reading. Saying
+        // "task 0%" there would be the same lie as the one this command exists
+        // to catch.
+        const UNKNOWN = Number.NaN;
         const started = Date.now();
         const windowMs = opts.window * 1000;
 
@@ -162,7 +201,8 @@ export function registerPerfCommands(program: Command): void {
           const now = await readMetrics();
           const at = Date.now();
           const span = (at - prevAt) / 1000;
-          const pct = (k: string) => span > 0 ? ((now[k] ?? 0) - (prev[k] ?? 0)) / span * 100 : 0;
+          const haveDelta = now !== null && prev !== null && span > 0;
+          const pct = (k: string) => haveDelta ? ((now![k] ?? 0) - (prev![k] ?? 0)) / span * 100 : UNKNOWN;
           const s = {
             t: Number(((at - started) / 1000).toFixed(1)),
             rendererRttMs,
@@ -173,12 +213,12 @@ export function registerPerfCommands(program: Command): void {
             stylePct: Number(pct('RecalcStyleDuration').toFixed(1)),
           };
           samples.push(s);
-          prev = now; prevAt = at;
+          if (now !== null) { prev = now; prevAt = at; }
           if (!opts.json) {
             console.log(
               `  ${String(s.t).padStart(5)}s  renderer=${rttLabel(s.rendererRttMs).padStart(18)}` +
-              `  browser=${rttLabel(s.browserRttMs).padStart(6)}  task=${String(s.taskPct).padStart(5)}%` +
-              `  script=${String(s.scriptPct).padStart(5)}%  layout=${String(s.layoutPct).padStart(5)}%  style=${String(s.stylePct).padStart(5)}%`
+              `  browser=${rttLabel(s.browserRttMs).padStart(6)}  task=${pctLabel(s.taskPct).padStart(6)}` +
+              `  script=${pctLabel(s.scriptPct).padStart(6)}  layout=${pctLabel(s.layoutPct).padStart(6)}  style=${pctLabel(s.stylePct).padStart(6)}`
             );
           }
         }
@@ -193,6 +233,9 @@ export function registerPerfCommands(program: Command): void {
           const v = Number(s[k]);
           return Number.isNaN(v) ? m : Math.max(m, v);
         }, 0);
+        // If no tick ever produced counters, saying "task 0%" would claim a
+        // measurement that never happened — the renderer was too busy to answer.
+        const gotCounters = samples.some(x => !Number.isNaN(x.taskPct));
         const taskMax = max('taskPct');
         const rendererMax = max('rendererRttMs');
         const browserMax = max('browserRttMs');
@@ -213,7 +256,7 @@ export function registerPerfCommands(program: Command): void {
         // Naming a culprit on an idle page is noise dressed as a finding — a
         // layout share of 0.3% is not thrashing, it is a page doing nothing.
         // Only apportion blame once there is load worth apportioning.
-        const blame = taskMax < 50
+        const blame = !gotCounters || taskMax < 50
           ? null
           : scriptMax >= layoutMax + styleMax
             ? 'script (JS logic)'
@@ -232,7 +275,11 @@ export function registerPerfCommands(program: Command): void {
         if (rendererMax >= 200 && browserMax < rendererMax / 4) {
           info('the browser kept answering while the renderer did not — this page, not the machine');
         }
-        info(`worst second: task ${taskMax}% (script ${scriptMax}%, layout ${layoutMax}%, style ${styleMax}%)`);
+        if (gotCounters) {
+          info(`worst second: task ${taskMax}% (script ${scriptMax}%, layout ${layoutMax}%, style ${styleMax}%)`);
+        } else {
+          info('counters unavailable — the renderer never answered long enough to read them');
+        }
         success(blame ? `${verdict} · biggest share: ${blame}` : verdict);
       } catch (e) {
         error((e as Error).message);
