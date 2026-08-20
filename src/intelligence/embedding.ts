@@ -15,11 +15,23 @@ export const EMBEDDING_DIM = 384;
 
 type Extractor = (text: string | string[], opts?: any) => Promise<{ data: Float32Array | number[] }>;
 
+// Resolved at runtime, not by tsc: the package is deliberately not installed,
+// so a literal specifier would fail the build for everyone who does not want it.
+const OPTIONAL_MODULE = '@huggingface/transformers';
+
 let cached: Extractor | null = null;
 
 async function getExtractor(): Promise<Extractor> {
   if (cached) return cached;
-  const tx = await import('@huggingface/transformers');
+  // Not a dependency — 588MB of ONNX runtime for a path that is off by default
+  // (`snapshot --embed` / `explore --rag`). Install it to turn embeddings on.
+  const tx = await import(/* @vite-ignore */ OPTIONAL_MODULE).catch(() => {
+    throw new Error(
+      'Embeddings need @huggingface/transformers, which tirno does not install.\n' +
+      '  npm i -g @huggingface/transformers    (~588MB with onnxruntime)\n' +
+      'Everything except `snapshot --embed` and `explore --rag` works without it.'
+    );
+  });
   const cacheDir = process.env.TIRNO_MODELS_DIR
     ? path.join(process.env.TIRNO_MODELS_DIR, 'embeddings')
     : path.join(os.homedir(), '.tirno', 'models', 'embeddings');

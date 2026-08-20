@@ -18,7 +18,7 @@ async function realProgram(): Promise<Command> {
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
     ['emulate', 'registerEmulateCommand'], ['perf', 'registerPerfCommands'],
     ['multi', 'registerMultiCommands'], ['cache', 'registerCacheCommands'],
-    ['vision', 'registerVisionCommands'], ['cdp', 'registerCdpCommands'],
+    ['cdp', 'registerCdpCommands'],
     ['record', 'registerRecordCommands'], ['replay', 'registerReplayCommand'],
     ['trail', 'registerTrailCommands'], ['ask', 'registerAskCommand'],
     ['explore', 'registerExploreCommand'], ['auth', 'registerAuthCommands'],

@@ -149,7 +149,6 @@ slim 모드 3개는 tirno 의 기본 surface 에 그대로 포함.
 - `tirno ls` / `tirno attach <name>` — 세션 관리 + 활성 세션 전환
 - `tirno cdp <method> [params]` — 모든 CDP 명령 raw passthrough (mcp 는 정의된 tool 만)
 - `tirno cache` — URL/viewport 키 visual cache (재현/diff 용)
-- `tirno vision ocr` — multi-channel OCR
 - `tirno record` / `tirno replay` — 사용자 동작 캡처 + 재생 (raw CDP trusted events)
 - `tirno trail` — multi-channel fallback 의 trail 저장/replay
 - `tirno explore <goal>` — cache → multi-channel → CDP → LLM 자율 탐색

@@ -141,7 +141,6 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'cache list':   { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'cache load':   { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
   'cache prune':  { effects: 'non_idempotent', output_kind: 'data', cardinality: 'unbounded', destructive: true },
-  'vision ocr':   { effects: 'idempotent', output_kind: 'data', cardinality: 'unbounded' },
 
   'record start': { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
   'record stop':  { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },

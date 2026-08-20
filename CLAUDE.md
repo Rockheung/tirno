@@ -11,7 +11,8 @@ puppeteer-core 기반.
 목표 도달 시도 우선순위 — 위에서 아래로 시도, 마지막은 자존심 굽혀 부탁:
 
 1. **cache lookup** — 결정론, ms 단위
-2. **multi-channel fallback** (selector → a11y → bbox → ocr text) — 결정론, ms 단위
+2. **multi-channel fallback** (selector → a11y → bbox) — 결정론, ms 단위.
+   ocr 채널은 2026-08-19 에 들어냈다 — 아래 "덜어낸 것" 참고
 3. **CDP 직접 분석 + page 자율 시도** — agent가 페이지 구조 뜯어보며 행동경로 발견
 4. **LLM (지능요청) + RAG retrieval** — 비결정론, 비용 있음, 누적된 trail/waypoint를 prompt에 RAG
 5. **사용자 시연 부탁** (`tirno trail capture`) — **마지막 보루**. 위 모두 실패 시 자존심 굽혀 부탁. 부담을 인정하고 명시적으로 요청.
@@ -61,8 +62,6 @@ node bin/tirno.js kill test --clean
 - `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash
 - `src/intelligence/` — LLM 백엔드, 임베딩, 재시도·비용 상한. `backends/` 에는 **`claude.ts`
   하나뿐이다** — openai·gemini 는 파일조차 없고 `dispatcher.ts` 가 던진다
-- `src/vision/` — OCR 백엔드와 a11y 증강. 실제로 도는 것은 로컬 `paddle` 이고,
-  `claude`·`openai`·`gemini` 는 파일은 있으나 전부 stub 이다 (`florence` 는 실험)
 - `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
 - `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
 - `core/schema.ts` — `tirno schema` 의 생성기. 구조는 commander 트리에서 자동 추출하고,
@@ -80,5 +79,18 @@ node bin/tirno.js kill test --clean
 - @anthropic-ai/sdk: `tirno ask` / `tirno explore` 의 claude 백엔드.
   **지능 백엔드는 claude 하나뿐이다** — `--backend openai|gemini` 는 인자로 받지만
   `dispatcher.ts` 에서 "not yet implemented" 로 던진다
-- @gutenye/ocr-node + @huggingface/transformers: OCR·임베딩 (가치 흐름 2·4번)
-- @lancedb/lancedb: waypoint 벡터 검색 (RAG)
+
+## 덜어낸 것 (2026-08-19)
+
+설치가 974MB 였고 그중 ~740MB 가 **이 머신에서 한 번도 실행되지 않은 경로**였다.
+근거는 추정이 아니라 흔적이다 — `~/.tirno/lance/` 는 생성조차 안 됐고, visual-cache
+3건 중 embedding 이 든 것도 `ocrText` 가 든 것도 0건이었다.
+
+- **OCR 전량 삭제** (`src/vision/`, `tirno vision`, `snapshot --vision*`).
+  `@gutenye/ocr-node` 가 `onnxruntime-node` 259MB 를 끌고 왔고, `florence` 백엔드는
+  자기 소스에 고장났다고 적혀 있었다. 되살릴 때는 플러그인으로 붙인다.
+- **임베딩·벡터검색은 선택 의존으로 강등.** `@huggingface/transformers`(588MB)와
+  `@lancedb/lancedb`(92MB)를 `dependencies` 에서 뺐다. 코드는 남아 있고 호출 시점에
+  없으면 설치 안내를 던진다 — 그 자리가 플러그인 이음매다.
+
+결과: **233MB, 네이티브 바이너리 0개.** 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).
