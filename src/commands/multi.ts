@@ -66,19 +66,41 @@ export function registerMultiCommands(program: Command): void {
         return;
       }
 
-      for (const session of sessions) {
-        info(`[${session.name}] tirno ${cmd} ${args.join(' ')}`);
+      // execFile, not exec: the argv reaches the child untouched. A command
+      // string handed to a shell loses every argument containing a space, quote
+      // or paren — `broadcast eval "a.b(1)"` died in the shell without ever
+      // reaching a page — and gives the shell whatever metacharacter was typed.
+      const { execFile } = await import('node:child_process');
+      const { promisify } = await import('node:util');
+      const run = promisify(execFile);
+
+      // Concurrent, which is what this command is for. Each child drives a
+      // different browser over its own CDP connection, so they do not contend;
+      // running them in sequence charged the caller N × (connect + act +
+      // disconnect) for work that has no ordering between sessions.
+      const results = await Promise.all(sessions.map(async session => {
         try {
-          // re-execute tirno with -s flag
-          const { execSync } = await import('node:child_process');
-          const result = execSync(
-            `node ${process.argv[1]} ${cmd} ${args.join(' ')} -s ${session.name}`,
+          const { stdout, stderr } = await run(
+            process.execPath,
+            [process.argv[1], cmd, ...args, '-s', session.name],
             { encoding: 'utf-8', timeout: 30000 }
           );
-          process.stdout.write(result);
+          return { name: session.name, stdout, stderr, failure: null as string | null };
         } catch (e) {
-          error(`[${session.name}] ${(e as Error).message}`);
+          // Node puts the child's stderr in the error message, so a failed
+          // session still reports why.
+          return { name: session.name, stdout: '', stderr: '', failure: (e as Error).message };
         }
+      }));
+
+      // Printed in session order, not completion order. Concurrent writes
+      // interleave into something no one can read, and a stable order is what
+      // makes the output worth piping somewhere.
+      for (const r of results) {
+        info(`[${r.name}] tirno ${cmd} ${args.join(' ')}`);
+        if (r.stdout) process.stdout.write(r.stdout);
+        if (r.stderr) process.stderr.write(r.stderr);
+        if (r.failure) error(`[${r.name}] ${r.failure}`);
       }
     });
 }
