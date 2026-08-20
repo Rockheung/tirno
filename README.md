@@ -153,7 +153,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `nav <url>` | URL로 이동 |
 | `reload` / `back` / `forward` | 페이지 이력 제어 |
-| `pages` / `select <pageId>` / `new-tab [url]` / `close-tab <pageId>` | 탭 제어 |
+| `pages` / `select <id>` / `new-tab [url]` / `close-tab <id>` | 탭 제어. ID 는 CDP targetId 앞 8자리로, 탭이 열리고 닫혀도 안 바뀐다(위치 인덱스가 아니다). 4자 이상이면 접두사로도 된다 |
 
 ### 검사
 | 명령 | 설명 |

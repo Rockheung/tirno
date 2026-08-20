@@ -53,11 +53,15 @@ tirno new mobile -- --window-size=375,812
 tirno nav <url> [-s session]       # URL 이동
 tirno reload [--hard]              # 새로고침
 tirno back / forward               # 히스토리
-tirno pages [--json]               # 탭 목록
-tirno select <pageId>              # 탭 선택
+tirno pages [--json]               # 탭 목록 (ID 는 안정 핸들)
+tirno select <id>                  # 탭 선택
 tirno new-tab [url]                # 새 탭
-tirno close-tab <pageId>           # 탭 닫기
+tirno close-tab <id>               # 탭 닫기
 ```
+
+탭 ID 는 **위치 인덱스가 아니다.** CDP targetId 앞 8자리라 탭이 열리고 닫혀도 그 탭을
+가리킨다 — `pages` 로 받은 ID 를 나중에 `close-tab` 에 넣어도 그 사이 다른 탭이 열렸다고
+엉뚱한 탭이 닫히지 않는다. 4자 이상이면 접두사로도 지정된다.
 
 ### 조사
 
