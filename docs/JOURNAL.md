@@ -247,6 +247,68 @@ npm 가용 후보: mathom / mazarbul / westmarch / bagend / earendil / ithil / i
 
 ---
 
+### Phase 6-1 — URL-keyed visual cache (PR #6)
+
+#### 의도
+
+같은 페이지를 다시 만났을 때 a11y/스크린샷 분석을 처음부터 다시 하지 않도록, **URL key로 snapshot을 캐시**하고 재사용. 스크린샷 자체는 perceptual hash(64bit dHash)로 압축한 뒤 폐기. vision backend 통합은 Phase 6-2.
+
+#### URL key 정책
+
+- `urlPath` = `path + query + hash` (origin만 제거)
+- `?q=미역국`과 `?q=라면`은 의도적으로 별개 entry — 사용자 결정. 같은 path 묶기는 향후 user pattern으로
+- 매칭 순서: `exact` (full URL) → `urlPath` (origin 무시)
+
+#### 구현
+
+- `src/core/visual-cache.ts` (신규) — `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>.json`. save/lookup/list/prune
+- `src/cdp/screenshot-hash.ts` (신규) — dHash. PNG → 9x8 grayscale → 인접 비교 64bit
+- `src/cdp/element-info.ts` (신규) — `DOM.getBoxModel`로 bbox, `Runtime.callFunctionOn`으로 안정 selector(id / data-testid / aria-label / name) 추출
+- `src/commands/inspect.ts` — `snapshot` 종료 시 자동 적재. 흐름: AXTree → screenshot(viewport) → 각 ref마다 elementInfo (Promise.all) → detach → dHash → save. `--no-cache`로 opt-out
+- `src/commands/cache.ts` (신규) — `cache list/load/prune`
+- `test/visual-cache.test.ts`, `test/screenshot-hash.test.ts` (신규) — node:test 러너 도입. `tsconfig.test.json`로 분리 빌드(`dist-test/`). 의존성 0 (Node 22 내장). 23 케이스 통과
+- `TIRNO_CACHE_DIR` 환경변수로 캐시 디렉토리 override 지원 — 테스트 격리용
+
+#### 데이터 구조
+
+```ts
+interface CacheEntry {
+  url: string;
+  urlPath: string;
+  domain: string;
+  capturedAt: string;
+  visualFp: string;
+  viewport?: { w, h, dpr };
+  refs: Array<{
+    refId: string;     // @1, @2 ...
+    role: string;
+    name: string;
+    selector?: string;
+    bbox?: { x, y, w, h };
+    backendId?: number;
+  }>;
+}
+```
+
+#### 검증
+
+- example.com snapshot → 자동 적재. `cache load`로 8개 ref + bbox 정상 emit. selector 없음(예상대로 — id/aria-label 없는 단순 페이지)
+- google `?q=foo` vs `?q=bar` → urlPath 다르므로 별개 entry. visualFp 다름(`01442000` vs `01002020`)
+- google 검색에서 selector 잘 추출 — `#gsr`, `#searchform`, `#APjFqb`(검색창), `[aria-label="지우기"]`, `[aria-label="음성 검색"]` 등
+- `--no-cache` flag로 opt-out 정상
+- `cache prune --domain <d>` 정상
+
+#### 한계 (PR에 명시)
+
+- selector best-effort — id/data-testid/aria-label/name 없으면 selector 없이 ref+bbox만
+- visualFp는 viewport 한 장 (fullPage 아님) — 스크롤해야 보이는 영역 변화엔 둔감
+- bbox는 capture 시점 viewport 기준 — 페이지 reflow/lazy-load 시 stale
+- URL pattern 매칭(`/products/:id?*`)은 향후. 현재는 exact / urlPath만
+- vision 보강(canvas, image-as-text, custom widget)은 Phase 6-2
+- `nav --recall` 같은 자동 emit은 별도
+
+---
+
 ## PR 목록
 
 | # | 제목 (실제 머지 시점 기준) | 상태 |
@@ -255,7 +317,8 @@ npm 가용 후보: mathom / mazarbul / westmarch / bagend / earendil / ithil / i
 | [#2](https://github.com/Rockheung/tirno/pull/2) | feat: Phase 5-1 — a11y @ref + scroll + wait 흡수 | merged |
 | [#3](https://github.com/Rockheung/tirno/pull/3) | chore: rename project chromux → wandr | merged |
 | [#4](https://github.com/Rockheung/tirno/pull/4) | docs: 작업 일지 + 리서치 문서화 + wandr → tirno rename | merged |
-| [#5](https://github.com/Rockheung/tirno/pull/5) | fix: `--enable-automation` flag 제거로 Akamai 봇 차단 우회 | open |
+| [#5](https://github.com/Rockheung/tirno/pull/5) | fix: `--enable-automation` flag 제거로 Akamai 봇 차단 우회 | merged |
+| [#6](https://github.com/Rockheung/tirno/pull/6) | feat: Phase 6-1 — URL-keyed visual cache + node:test | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
