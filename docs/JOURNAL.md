@@ -309,6 +309,43 @@ interface CacheEntry {
 
 ---
 
+### record/replay nav 손실 보강 (PR #19)
+
+#### 문제
+
+PR #16의 record는 page reload / SPA route change 시 inject script가 새 document에 다시 실행되며 `window.__tirno_rec.events`가 초기화 — 사용자가 nav를 일으키는 click을 했다면 그 후 events 모두 손실.
+
+#### 해결: localStorage 영속
+
+- 매 event push 시 `localStorage['__tirno_rec_state']`에 debounced (200ms) flush
+- `pagehide` / `visibilitychange(hidden)`에서 sync flush — 페이지 사라지기 직전 마지막 events 보존
+- inject 시점에 localStorage에서 `recording / startTs / events` 복원
+- `record start`에서 sync flush — 첫 reload 전에 이미 recording=true 영속
+- `record stop`에서 events 회수 후 in-memory + localStorage 모두 clear
+
+#### 검증
+
+```
+record start
+click (100,200)        # 1번째
+nav https://example.com  # page reload — 이전엔 여기서 events 초기화
+click (300,400)        # 2번째 (reload된 page에서)
+record stop
+→ 2 events captured  ← 둘 다 살아남음
+```
+
+#### 한계
+
+- localStorage는 per-origin. **cross-origin nav 시 다른 origin의 events 회수 불가** (다른 localStorage 영역) — daemon 모드(별도 task)가 long-term fix
+- localStorage 5-10MB 제약 (chrome 기준) — 매우 긴 record는 chunk 분할 필요. 현재는 단순 가정
+- `beforeunload`는 NEUTRALIZE_UNLOAD에서 차단되어 listener 등록 불가 → `pagehide`로 대체
+
+#### `window.__tirno_rec_flush` 노출
+
+inject script가 `window.__tirno_rec_flush()`를 글로벌로 노출 — record start/stop이 evaluate에서 동기 호출하여 timing race 방지.
+
+---
+
 ### record/replay — 사용자 행동 캡처 + raw CDP 재현 (PR #16)
 
 #### 의도

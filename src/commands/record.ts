@@ -17,18 +17,20 @@ export function registerRecordCommands(program: Command): void {
 
   rec
     .command('start')
-    .description('Begin recording; events are collected on the page side')
+    .description('Begin recording; events are collected on the page side and persisted in localStorage so SPA route changes / page reloads survive')
     .option('-s, --session <name>', 'Session name')
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
         await page.evaluate(() => {
-          const w = window as unknown as { __tirno_rec: ClientRecState };
+          const w = window as unknown as { __tirno_rec: ClientRecState; __tirno_rec_flush?: () => void };
           if (!w.__tirno_rec) throw new Error('record install missing — reconnect session');
           w.__tirno_rec.events = [];
           w.__tirno_rec.startTs = Date.now();
           w.__tirno_rec.recording = true;
+          // sync persist immediately so a reload before any event still finds recording=true
+          if (w.__tirno_rec_flush) w.__tirno_rec_flush();
         });
         const url = page.url();
         browser.disconnect();
@@ -50,14 +52,18 @@ export function registerRecordCommands(program: Command): void {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
         const result = await page.evaluate(() => {
-          const w = window as unknown as { __tirno_rec: ClientRecState };
+          const w = window as unknown as { __tirno_rec: ClientRecState; __tirno_rec_flush?: () => void };
           if (!w.__tirno_rec) return null;
           w.__tirno_rec.recording = false;
+          const events = w.__tirno_rec.events.slice();
+          // clear in-memory + localStorage so the next start is clean
+          w.__tirno_rec.events = [];
+          w.__tirno_rec.startTs = 0;
+          if (w.__tirno_rec_flush) w.__tirno_rec_flush();
+          try { localStorage.removeItem('__tirno_rec_state'); } catch { /* ignore */ }
           return {
-            events: w.__tirno_rec.events,
-            durationMs: w.__tirno_rec.events.length > 0
-              ? w.__tirno_rec.events[w.__tirno_rec.events.length - 1].t
-              : 0,
+            events,
+            durationMs: events.length > 0 ? events[events.length - 1].t : 0,
           };
         });
         const url = page.url();

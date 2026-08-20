@@ -44,12 +44,29 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
     };
   `;
 
-  // Recording listener — captures user input events into window.__tirno_rec.
+  // Recording listener — captures user input events into window.__tirno_rec
+  // and persists to localStorage so page reload / SPA route changes survive.
   // Inactive by default; tirno record start/stop toggles via __tirno_rec.recording.
-  // Replay (raw CDP Input.dispatchMouseEvent) also fires these events but
-  // recording flag is checked, so replays don't double-record unless explicitly on.
+  //
+  // Persistence model:
+  // - localStorage key '__tirno_rec_state' holds { recording, startTs, events }
+  // - on inject (each new document) we restore from localStorage if present
+  // - every event push schedules a debounced flush (200ms or on pagehide)
+  // - record start clears events; record stop reads then clears
+  //
+  // Limits:
+  // - localStorage is per-origin; cross-origin nav loses its in-flight buffer
+  //   for that origin. record stop currently reads only the active page's
+  //   localStorage. Daemon mode (separate task) is the long-term fix.
   const RECORD_INSTALL = `
     if (!window.__tirno_rec) {
+      const STORAGE_KEY = '__tirno_rec_state';
+      let restored = null;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) restored = JSON.parse(raw);
+      } catch (_) { /* localStorage may be blocked (e.g. file://) */ }
+
       const bestSelector = (el) => {
         if (!el || el.nodeType !== 1) return null;
         if (el.id && /^[A-Za-z][\\w-]*$/.test(el.id)) return '#' + el.id;
@@ -61,7 +78,30 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
         if (name && el.tagName) return el.tagName.toLowerCase() + '[name=' + JSON.stringify(name) + ']';
         return null;
       };
-      const rec = window.__tirno_rec = { events: [], recording: false, startTs: 0 };
+
+      const rec = window.__tirno_rec = {
+        events: (restored && Array.isArray(restored.events)) ? restored.events : [],
+        recording: !!(restored && restored.recording),
+        startTs: (restored && typeof restored.startTs === 'number') ? restored.startTs : 0,
+      };
+
+      let flushTimer = null;
+      const flushNow = () => {
+        flushTimer = null;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            recording: rec.recording,
+            startTs: rec.startTs,
+            events: rec.events,
+          }));
+        } catch (_) { /* quota / blocked */ }
+      };
+      const scheduleFlush = () => {
+        if (flushTimer != null) return;
+        flushTimer = setTimeout(flushNow, 200);
+      };
+      window.__tirno_rec_flush = flushNow;
+
       const log = (type, e) => {
         if (!rec.recording) return;
         const t = e.target;
@@ -76,11 +116,20 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
           value: e.target && (e.target.value !== undefined ? e.target.value : null),
           bbox: r ? { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) } : null,
         });
+        scheduleFlush();
       };
+
       addEventListener('click', e => log('click', e), { capture: true, passive: true });
       addEventListener('keydown', e => log('keydown', e), { capture: true, passive: true });
       addEventListener('input', e => log('input', e), { capture: true, passive: true });
       addEventListener('scroll', () => log('scroll', { clientX: 0, clientY: 0, target: document.scrollingElement }), { capture: true, passive: true });
+
+      // best-effort flush before page tears down. (beforeunload is filtered by
+      // NEUTRALIZE_UNLOAD; pagehide + visibilitychange cover SPA + reload + tab close.)
+      addEventListener('pagehide', flushNow, { capture: true });
+      addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flushNow();
+      }, { capture: true });
     }
   `;
 
