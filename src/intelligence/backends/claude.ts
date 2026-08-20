@@ -10,6 +10,7 @@ import type {
   IntelligenceResponse,
   ProposedAction,
 } from '../types.js';
+import * as keychain from '../../core/keychain.js';
 
 const ENV_KEY = 'ANTHROPIC_API_KEY';
 const DEFAULT_MODEL = process.env.TIRNO_CLAUDE_MODEL ?? 'claude-haiku-4-5';
@@ -30,12 +31,12 @@ let cachedClient: AnthropicClient | null = null;
 
 async function getClient(): Promise<AnthropicClient> {
   if (cachedClient) return cachedClient;
-  const apiKey = process.env[ENV_KEY];
-  if (!apiKey) throw new Error(`${ENV_KEY} env var not set`);
+  const k = keychain.get(ENV_KEY);
+  if (!k.value) throw new Error(`${ENV_KEY} not found in env or keychain. Set via "tirno auth set anthropic" or export the env var.`);
   const mod = await import('@anthropic-ai/sdk');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Anthropic = (mod.default ?? (mod as any).Anthropic) as new (opts: { apiKey: string }) => AnthropicClient;
-  cachedClient = new Anthropic({ apiKey });
+  cachedClient = new Anthropic({ apiKey: k.value });
   return cachedClient;
 }
 
@@ -104,7 +105,7 @@ function parseResponse(text: string): { action?: ProposedAction; steps?: Propose
 export const claudeBackend: IntelligenceBackend = {
   name: 'claude vision',
   get available(): boolean {
-    return !!process.env[ENV_KEY];
+    return !!keychain.get(ENV_KEY).value;
   },
 
   async ask(req: IntelligenceRequest): Promise<IntelligenceResponse> {

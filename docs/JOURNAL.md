@@ -309,6 +309,52 @@ interface CacheEntry {
 
 ---
 
+### Security — API key keychain (PR #28)
+
+#### 의도
+
+API key를 env / dotfile에 두면 shell history / process listing / 백업 누출 위험. OS keychain으로 옮기되 env가 우선이라 기존 호환.
+
+#### 구현
+
+`src/core/keychain.ts`:
+- macOS: `/usr/bin/security` (built-in)
+- Linux: `secret-tool` (libsecret-tools)
+- Windows: 미지원 (env-only fallback)
+- service: `tirno`, account: env var 이름 (e.g. `ANTHROPIC_API_KEY`)
+- get / set / remove / list — 모두 spawnSync, npm dep 0
+
+`get(name)` 우선순위: env → keychain → null. `KeychainResult.source`가 'env' / 'keychain' / null.
+
+#### CLI
+
+```bash
+tirno auth set anthropic       # 입력 hidden
+tirno auth status              # 모든 provider 한눈에
+tirno auth rm gemini
+```
+
+`auth status` 출력:
+```
+ PROVIDER  │ ENV VAR           │ SOURCE   │ PREFIX    │ BACKEND
+ anthropic │ ANTHROPIC_API_KEY │ keychain │ sk-ant-…  │ Claude
+ openai    │ OPENAI_API_KEY    │ env      │ sk-****… │ GPT-4o
+```
+
+#### Backend 통합
+
+`backends/claude.ts`가 `process.env[ENV_KEY]` 직접 참조 → `keychain.get(ENV_KEY)`로. `available` getter도 동일. openai/gemini stub도 후속 PR에서 같은 패턴.
+
+#### 한계 / 후속
+
+- Windows keychain 미지원 — wincred / DPAPI 통합 필요
+- macOS list는 `security dump-keychain` awk 파싱 — flaky. 향후 별도 metadata 파일 운영
+- **sensitive 영역 redaction** (스크린샷 마스킹 / OCR 제외)은 분리된 task #30. password input 자동 제외 등.
+
+97/97 tests pass. (resilience 9 + 기존)
+
+---
+
 ### LLM backend production 수준 — retry/timeout/cost cap/circuit breaker (PR #27)
 
 #### 의도
