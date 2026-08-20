@@ -7,16 +7,51 @@ function cacheDir(): string {
   return process.env.TIRNO_CACHE_DIR ?? path.join(os.homedir(), '.tirno', 'visual-cache');
 }
 
-export interface CacheRef {
-  refId: string;
-  role: string;
-  name: string;
-  selector?: string;
-  bbox?: { x: number; y: number; w: number; h: number };
-  backendId?: number;
-  source?: 'a11y' | 'vision';  // default 'a11y' for back-compat
-  confidence?: number;          // populated for vision-sourced refs
+export interface Bbox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
+
+// Multi-channel waypoint — one element identified across as many channels
+// as we could capture. Lookup tries channels in order of past success.
+export interface Waypoint {
+  id: string;                          // stable id within entry — usually refId
+  refId?: string;                      // a11y ref like "@7"
+
+  channels: {
+    a11y?: {
+      role: string;
+      name: string;
+      backendId?: number;
+      description?: string;
+    };
+    dom?: {
+      selector: string;                // best-effort stable selector
+      tagName?: string;
+      xpath?: string;                  // future
+    };
+    visual?: {
+      bbox: Bbox;                      // capture-time viewport coords
+      visualFp?: string;               // e.g. dHash of element region
+      ocrText?: string;                // OCR text within / near bbox
+      ocrConf?: number;                // 0-100
+    };
+  };
+
+  // Match history — populated by replay / lookup attempts. Helps reorder
+  // channel try-order on next attempt.
+  matchStats?: {
+    successCount: number;
+    failureCount: number;
+    successByChannel: Partial<Record<'dom' | 'a11y' | 'visual.bbox' | 'visual.ocr', number>>;
+    lastSuccessAt?: string;
+  };
+}
+
+/** @deprecated Use Waypoint instead. Old name kept for callers being migrated. */
+export type CacheRef = Waypoint;
 
 export interface Viewport {
   w: number;
@@ -24,14 +59,17 @@ export interface Viewport {
   dpr: number;
 }
 
+export const ENTRY_SCHEMA_VERSION = 2;
+
 export interface CacheEntry {
+  schemaVersion: number;
   url: string;
   urlPath: string;
   domain: string;
   capturedAt: string;
   visualFp: string;
-  viewport: Viewport;            // required — bbox/refs are viewport-bound
-  refs: CacheRef[];
+  viewport: Viewport;
+  refs: Waypoint[];
 }
 
 export interface UrlKey {
@@ -71,10 +109,54 @@ function entryFile(domain: string, urlPath: string, viewport: Viewport): string 
   return path.join(urlDir(domain, urlPath), `${viewportKey(viewport)}.json`);
 }
 
+// Migrate any older entry shape into the current schema.
+// v1: refs were { refId, role, name, selector?, bbox?, backendId?, source?, confidence? }
+// v2: refs are Waypoint with channels{}.
+interface LegacyRefV1 {
+  refId: string;
+  role?: string;
+  name?: string;
+  selector?: string;
+  bbox?: Bbox;
+  backendId?: number;
+}
+interface LegacyEntryV1 {
+  url: string; urlPath: string; domain: string; capturedAt: string;
+  visualFp: string; viewport: Viewport; refs: LegacyRefV1[];
+}
+export function migrateEntry(raw: unknown): CacheEntry {
+  const e = raw as Partial<CacheEntry> & Partial<LegacyEntryV1>;
+  if (e.schemaVersion === ENTRY_SCHEMA_VERSION) return e as CacheEntry;
+  // v1 → v2
+  const refs = (e.refs ?? []) as Array<LegacyRefV1 | Waypoint>;
+  const upgraded: Waypoint[] = refs.map((r) => {
+    if ((r as Waypoint).channels) return r as Waypoint;
+    const old = r as LegacyRefV1;
+    const channels: Waypoint['channels'] = {};
+    if (old.role || old.name) {
+      channels.a11y = { role: old.role ?? '', name: old.name ?? '', backendId: old.backendId };
+    }
+    if (old.selector) channels.dom = { selector: old.selector };
+    if (old.bbox) channels.visual = { bbox: old.bbox };
+    return { id: old.refId, refId: old.refId, channels };
+  });
+  return {
+    schemaVersion: ENTRY_SCHEMA_VERSION,
+    url: e.url!,
+    urlPath: e.urlPath!,
+    domain: e.domain!,
+    capturedAt: e.capturedAt!,
+    visualFp: e.visualFp!,
+    viewport: e.viewport!,
+    refs: upgraded,
+  };
+}
+
 export function save(entry: CacheEntry): string {
+  const toSave: CacheEntry = { ...entry, schemaVersion: ENTRY_SCHEMA_VERSION };
   const file = entryFile(entry.domain, entry.urlPath, entry.viewport);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(entry, null, 2));
+  fs.writeFileSync(file, JSON.stringify(toSave, null, 2));
   return file;
 }
 
@@ -103,7 +185,8 @@ export function lookup(url: string, opts: LookupOptions = {}): CacheEntry | null
     chosen = path.join(dir, files[0]);
   }
 
-  const entry: CacheEntry = JSON.parse(fs.readFileSync(chosen, 'utf-8'));
+  const raw: unknown = JSON.parse(fs.readFileSync(chosen, 'utf-8'));
+  const entry = migrateEntry(raw);
   if (mode === 'exact' && entry.url !== key.fullUrl) return null;
   return entry;
 }
@@ -127,8 +210,8 @@ export function list(opts: ListOptions = {}): CacheEntry[] {
       for (const f of fs.readdirSync(urlD)) {
         if (!f.endsWith('.json')) continue;
         try {
-          const e: CacheEntry = JSON.parse(fs.readFileSync(path.join(urlD, f), 'utf-8'));
-          out.push(e);
+          const raw: unknown = JSON.parse(fs.readFileSync(path.join(urlD, f), 'utf-8'));
+          out.push(migrateEntry(raw));
         } catch { /* skip corrupt */ }
       }
     }

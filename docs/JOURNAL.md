@@ -309,6 +309,57 @@ interface CacheEntry {
 
 ---
 
+### multi-channel Waypoint + vision attach (PR #20)
+
+#### 의도
+
+사용자 정정: "selector / aria / 좌표 / OCR 이 같은 element에 대한 다른 관점. 한 채널만 쓰는 게 아니라 모두를 묶어 행동 컨텍스트 한 덩어리로 기록하라."
+
+PR #11의 vision augment는 a11y와 안 겹치는 OCR만 visual-only ref로 추가했음 — 잘못된 read.
+
+#### 변경
+
+**`CacheRef` → `Waypoint`** (multi-channel 모델):
+```ts
+interface Waypoint {
+  id: string;
+  refId?: string;
+  channels: {
+    a11y?:   { role, name, backendId, description };
+    dom?:    { selector, tagName, xpath };
+    visual?: { bbox, visualFp, ocrText, ocrConf };
+  };
+  matchStats?: { successCount, failureCount, successByChannel, lastSuccessAt };
+}
+```
+
+`source: 'a11y' | 'vision'` 이분법 폐기 — 한 waypoint는 가능한 모든 채널 합집합.
+
+**Schema versioning + auto migration**:
+- `CacheEntry.schemaVersion = 2`
+- v1 entry는 `migrateEntry()`로 자동 변환 (load/list 시점)
+- 기존 cache 손실 없음
+
+**vision augment 재설계**:
+- 입력: 기존 a11y waypoints
+- 동작: 각 OCR word가 가장 specific한(작은 bbox 우선) a11y waypoint에 attach. 매칭 안 되는 word는 orphan waypoint로 (channels.visual만)
+- 결과: `{refs, attached, orphan, total, durationMs}` — observability 개선
+
+**snapshot/cache load 출력 갱신** — channels 기준.
+
+#### 검증
+
+- example.com snapshot — Waypoint 8개 + paddle vision: 3 attached / 0 orphan
+- migration: v1 fixture → v2 변환, 채널 매핑 정확
+- 80/80 tests pass (76 + 4 신규 migration test)
+
+#### 의의
+
+- replay/intelligent fallback의 데이터 기반 — 한 element가 selector 깨져도 좌표/role/ocr_text로 재발견 가능
+- LLM 지능요청 prompt material 그대로 — channels 묶음이 multi-modal context
+
+---
+
 ### record/replay nav 손실 보강 (PR #19)
 
 #### 문제

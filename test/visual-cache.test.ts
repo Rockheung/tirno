@@ -29,6 +29,7 @@ const DESKTOP: cache.Viewport = { w: 1200, h: 800, dpr: 2 };
 const MOBILE: cache.Viewport = { w: 390, h: 844, dpr: 3 };
 
 const fixtureEntry = (overrides: Partial<cache.CacheEntry> = {}): cache.CacheEntry => ({
+  schemaVersion: cache.ENTRY_SCHEMA_VERSION,
   url: 'https://example.com/foo?q=1',
   urlPath: '/foo?q=1',
   domain: 'example.com',
@@ -36,7 +37,14 @@ const fixtureEntry = (overrides: Partial<cache.CacheEntry> = {}): cache.CacheEnt
   visualFp: '0123456789abcdef',
   viewport: DESKTOP,
   refs: [
-    { refId: '@1', role: 'button', name: 'Submit', selector: '#submit' },
+    {
+      id: '@1',
+      refId: '@1',
+      channels: {
+        a11y: { role: 'button', name: 'Submit' },
+        dom: { selector: '#submit' },
+      },
+    },
   ],
   ...overrides,
 });
@@ -123,15 +131,21 @@ test('different query strings → separate entries', () => {
 });
 
 test('same URL different viewports → separate entries', () => {
-  cache.save(fixtureEntry({ viewport: DESKTOP, refs: [{ refId: '@1', role: 'd', name: 'desktop' }] }));
-  cache.save(fixtureEntry({ viewport: MOBILE, refs: [{ refId: '@1', role: 'm', name: 'mobile' }] }));
+  cache.save(fixtureEntry({
+    viewport: DESKTOP,
+    refs: [{ id: '@1', refId: '@1', channels: { a11y: { role: 'd', name: 'desktop' } } }],
+  }));
+  cache.save(fixtureEntry({
+    viewport: MOBILE,
+    refs: [{ id: '@1', refId: '@1', channels: { a11y: { role: 'm', name: 'mobile' } } }],
+  }));
   const all = cache.list();
   assert.equal(all.length, 2);
 
   const desktop = cache.lookup('https://example.com/foo?q=1', { viewport: DESKTOP });
   const mobile = cache.lookup('https://example.com/foo?q=1', { viewport: MOBILE });
-  assert.equal(desktop!.refs[0].name, 'desktop');
-  assert.equal(mobile!.refs[0].name, 'mobile');
+  assert.equal(desktop!.refs[0].channels.a11y?.name, 'desktop');
+  assert.equal(mobile!.refs[0].channels.a11y?.name, 'mobile');
 });
 
 test('list returns entries sorted by capturedAt desc', () => {
@@ -203,6 +217,77 @@ test('list returns empty when cache dir does not exist', () => {
   fs.rmSync(TMP, { recursive: true, force: true });
   assert.deepEqual(cache.list(), []);
   fs.mkdirSync(TMP, { recursive: true });
+});
+
+test('migrate v1 → v2: legacy fields → channels', () => {
+  // v1 had no schemaVersion + flat ref fields
+  const legacy = {
+    url: 'https://example.com/x',
+    urlPath: '/x',
+    domain: 'example.com',
+    capturedAt: '2026-01-01T00:00:00.000Z',
+    visualFp: '00',
+    viewport: DESKTOP,
+    refs: [
+      { refId: '@1', role: 'button', name: 'Submit', selector: '#go', bbox: { x: 1, y: 2, w: 3, h: 4 }, backendId: 99 },
+      { refId: '@v1', role: 'text', name: '레토르트', bbox: { x: 5, y: 6, w: 7, h: 8 } },
+    ],
+  };
+  const upgraded = cache.migrateEntry(legacy);
+  assert.equal(upgraded.schemaVersion, cache.ENTRY_SCHEMA_VERSION);
+  assert.equal(upgraded.refs.length, 2);
+  const r1 = upgraded.refs[0];
+  assert.equal(r1.id, '@1');
+  assert.deepEqual(r1.channels.a11y, { role: 'button', name: 'Submit', backendId: 99 });
+  assert.deepEqual(r1.channels.dom, { selector: '#go' });
+  assert.deepEqual(r1.channels.visual, { bbox: { x: 1, y: 2, w: 3, h: 4 } });
+});
+
+test('migrate v2 entry returned as-is', () => {
+  const e = fixtureEntry();
+  const out = cache.migrateEntry(e);
+  assert.deepEqual(out, e);
+});
+
+test('save persists schemaVersion = 2 always', () => {
+  cache.save(fixtureEntry({ schemaVersion: undefined as unknown as number }));
+  const got = cache.lookup('https://example.com/foo?q=1');
+  assert.equal(got!.schemaVersion, cache.ENTRY_SCHEMA_VERSION);
+});
+
+test('lookup auto-migrates legacy on disk', () => {
+  // write a v1-shaped JSON directly
+  const legacyDir = path.join(TMP, 'example.com');
+  const hash = 'a'.repeat(16);  // we don't need real hash — lookup uses path under domain
+  // simulate: drop a file at the proper path layout
+  const legacy = {
+    url: 'https://example.com/legacy',
+    urlPath: '/legacy',
+    domain: 'example.com',
+    capturedAt: new Date().toISOString(),
+    visualFp: '00',
+    viewport: DESKTOP,
+    refs: [{ refId: '@1', role: 'link', name: 'Click', selector: '#a' }],
+  };
+  // use save() with a fake v2 entry to materialize the directory layout, then overwrite
+  cache.save(fixtureEntry({ url: 'https://example.com/legacy', urlPath: '/legacy', viewport: DESKTOP }));
+  // now find the file we just wrote and replace its content with legacy
+  const foundDir = fs.readdirSync(path.join(TMP, 'example.com'));
+  for (const sub of foundDir) {
+    const dir2 = path.join(TMP, 'example.com', sub);
+    if (!fs.statSync(dir2).isDirectory()) continue;
+    for (const f of fs.readdirSync(dir2)) {
+      if (f.endsWith('.json')) {
+        fs.writeFileSync(path.join(dir2, f), JSON.stringify(legacy));
+      }
+    }
+  }
+  void legacyDir; // placate unused var
+  const got = cache.lookup('https://example.com/legacy');
+  assert.ok(got);
+  assert.equal(got!.refs.length, 1);
+  assert.equal(got!.refs[0].channels.a11y?.role, 'link');
+  assert.equal(got!.refs[0].channels.dom?.selector, '#a');
 });
 
 test('save creates url directory + viewport file structure', () => {

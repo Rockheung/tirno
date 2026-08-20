@@ -92,9 +92,8 @@ export function registerInspectCommands(program: Command): void {
 
         // collect cache data and (optional) vision augment while CDP is attached
         let cachePayload: visualCache.CacheEntry | null = null;
-        let visionRefs: visualCache.CacheRef[] = [];
-        let visionMeta: { backend: string; durationMs: number; total: number } | null = null;
-        let cacheRefs: visualCache.CacheRef[] = [];
+        let visionMeta: { backend: string; durationMs: number; total: number; attached: number; orphan: number } | null = null;
+        let cacheRefs: visualCache.Waypoint[] = [];
 
         const needCache = opts.cache !== false;
         const needVision = visionBackend !== null;
@@ -110,20 +109,27 @@ export function registerInspectCommands(program: Command): void {
                 dpr: window.devicePixelRatio,
               }));
               const refEntries = Object.entries(detailed);
+              type MaybeInfo = { selector?: string; bbox?: Bbox };
               const elementInfos = await Promise.all(
-                refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch(() => ({})))
+                refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch((): MaybeInfo => ({})))
               );
-              cacheRefs = refEntries.map(([k, v], i) => ({
-                refId: `@${k}`,
-                role: v.role,
-                name: v.name,
-                backendId: v.backendId,
-                source: 'a11y' as const,
-                ...elementInfos[i],
-              }));
+              cacheRefs = refEntries.map(([k, v], i) => {
+                const info: MaybeInfo = elementInfos[i] ?? {};
+                const channels: visualCache.Waypoint['channels'] = {
+                  a11y: { role: v.role, name: v.name, backendId: v.backendId },
+                };
+                if (info.selector) channels.dom = { selector: info.selector };
+                if (info.bbox) channels.visual = { bbox: info.bbox };
+                return {
+                  id: `@${k}`,
+                  refId: `@${k}`,
+                  channels,
+                };
+              });
               const visualFp = await dHash(screenshot);
               const key = visualCache.parseUrl(url);
               cachePayload = {
+                schemaVersion: visualCache.ENTRY_SCHEMA_VERSION,
                 url: key.fullUrl,
                 urlPath: key.urlPath,
                 domain: key.domain,
@@ -135,28 +141,21 @@ export function registerInspectCommands(program: Command): void {
             }
 
             if (needVision && visionBackend) {
-              // a11y bboxes for IoU filter — collect from element-info we already have or fetch fresh
-              let a11yBboxes: Bbox[];
-              if (cacheRefs.length > 0) {
-                a11yBboxes = cacheRefs.map(r => r.bbox).filter((b): b is Bbox => !!b);
-              } else {
-                const refEntries = Object.entries(detailed);
-                type MaybeInfo = { bbox?: Bbox };
-                const infos = await Promise.all(
-                  refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch((): MaybeInfo => ({})))
-                );
-                a11yBboxes = infos.map((i: MaybeInfo) => i.bbox).filter((b): b is Bbox => !!b);
-              }
-              const aug = await visionAugment(screenshot, a11yBboxes, {
+              const aug = await visionAugment(screenshot, cacheRefs, {
                 backend: visionBackend,
                 lang: opts.visionLang,
-                iouThreshold: opts.visionIou,
                 containThreshold: opts.visionContain,
                 minConfidence: opts.visionMinConfidence,
               });
-              visionRefs = aug.refs;
-              visionMeta = { backend: visionBackend, durationMs: aug.durationMs, total: aug.totalOcrWords };
-              if (cachePayload) cachePayload.refs = [...cachePayload.refs, ...visionRefs];
+              cacheRefs = aug.refs;
+              visionMeta = {
+                backend: visionBackend,
+                durationMs: aug.durationMs,
+                total: aug.totalOcrWords,
+                attached: aug.attached,
+                orphan: aug.orphan,
+              };
+              if (cachePayload) cachePayload.refs = cacheRefs;
             }
           } catch (e) {
             // best-effort — don't fail snapshot
@@ -178,16 +177,18 @@ export function registerInspectCommands(program: Command): void {
 
         for (const line of lines) console.log(line);
 
-        if (visionMeta && visionRefs.length > 0) {
+        if (visionMeta) {
           console.log('');
-          console.log(`# vision (${visionMeta.backend}, ${visionMeta.durationMs}ms, ${visionRefs.length}/${visionMeta.total} not covered by a11y):`);
-          for (const r of visionRefs) {
-            const conf = (r.confidence ?? 0).toString().padStart(3, ' ');
-            const bb = r.bbox ? `(${r.bbox.x},${r.bbox.y} ${r.bbox.w}x${r.bbox.h})` : '';
-            console.log(`${r.refId.padEnd(5)} text [${conf}%] ${bb} "${r.name}"`);
+          console.log(`# vision (${visionMeta.backend}, ${visionMeta.durationMs}ms): ${visionMeta.attached} attached to a11y, ${visionMeta.orphan} orphan, ${visionMeta.total} total OCR words`);
+          // visual-only orphan refs
+          for (const r of cacheRefs) {
+            if (r.channels.a11y) continue;
+            const v = r.channels.visual;
+            if (!v) continue;
+            const conf = (v.ocrConf ?? 0).toString().padStart(3, ' ');
+            const bb = `(${v.bbox.x},${v.bbox.y} ${v.bbox.w}x${v.bbox.h})`;
+            console.log(`${(r.refId ?? r.id).padEnd(5)} text [${conf}%] ${bb} "${v.ocrText ?? ''}"`);
           }
-        } else if (visionMeta) {
-          info(`vision (${visionMeta.backend}, ${visionMeta.durationMs}ms): all ${visionMeta.total} OCR words covered by a11y`);
         }
       } catch (e) {
         error((e as Error).message);
