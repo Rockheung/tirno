@@ -154,10 +154,23 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | 명령 | 설명 |
 |---|---|
 | `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록 |
-| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>]` | 캐시된 ref + selector + bbox emit. viewport 미지정 시 가장 최근 |
+| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>]` | 캐시된 항목을 **출력**한다 — a11y(role·name)와 bbox. viewport 미지정 시 가장 최근 |
 | `cache prune (--older-than <days> \| --all) [--domain <d>]` | 정리. **나이나 `--all` 중 하나를 반드시 준다** — 무인자로 전량을 지우지 않는다 |
 
 저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
+
+**지금 담기는 채널은 `a11y`(role·name·backendId)와 `visual`(bbox) 둘뿐이다.** `backendId` 는
+페이지가 다시 뜨면 무효라, 세션을 넘겨 재사용할 수 있는 것은 bbox 하나다. `dom.selector` 는
+`record`/`trail` 경로에서만 저장된다.
+
+`cache load` 는 **출력만 하고 ref store 를 채우지 않는다.** 꺼낸 `@N` 으로 바로 `click` 하면
+`Unknown ref` 로 실패하므로, 조작하려면 `snapshot` 을 다시 찍어야 한다.
+
+`visualFp`(dHash)는 저장되지만 **비교하는 코드가 없다** — 페이지가 바뀌어도 캐시는 그대로
+나온다. 유효한지는 부르는 쪽이 판단한다.
+
+셋 다 목표에 못 미친 상태고, [README 의 drift 절](../README.md#아직-구현이-아닌-것-drift)에
+같이 적어뒀다.
 
 ### 기록 · 재생
 

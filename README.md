@@ -8,7 +8,8 @@
 **여러 Chrome 을 세션으로 굴리는 CLI.** raw CDP 위에 얹혀 있고, 안에 LLM 이 없다 —
 보고, 적고, 다시 꺼내 준다. 무엇을 할지는 부르는 쪽이 정한다.
 
-에이전트가 사이트를 돌아다니며 알아낸 것을 누적하고, 다음 시도에 즉시 재사용하는 게 목표다.
+에이전트가 사이트를 돌아다니며 알아낸 것을 적어두고, 다음 시도에 다시 꺼내 쓰자는 게 목표다.
+어디까지 왔는지는 [아직 구현이 아닌 것](#아직-구현이-아닌-것-drift)에 적어뒀다.
 
 ```bash
 git clone https://github.com/Rockheung/tirno.git && cd tirno
@@ -32,7 +33,7 @@ npm 레지스트리에는 없다 — 소스에서 받는다.
 | **세션이 여럿이고 서로 격리된다** | `user-data-dir` 이 따로라 쿠키·로그인이 섞이지 않는다. 한 번 로그인해두면 그 세션에 계속 붙는다 |
 | **소유권을 관찰로 판정한다** | pid 생존 ∧ 그 pid 가 그 포트를 청취 ∧ `--user-data-dir` 일치. 셋이 안 맞으면 **붙지도 죽이지도 않는다** — 남의 브라우저를 조종하거나 죽이는 사고를 구조적으로 막는다 |
 | **셀렉터를 몰라도 조작한다** | `snapshot` 이 a11y 트리에 `@1 @2 …` 를 붙인다. `click @7` · `fill @39 "..."` |
-| **본 것을 캐시한다** | URL × viewport 키로 ref·selector·bbox·dHash 를 적어두고, 재방문 시 `cache load` 로 즉시 꺼낸다 |
+| **본 것을 적어둔다** | `snapshot` 이 URL × viewport 키로 a11y(role·name)와 bbox 를 저장한다. 재방문 시 `cache load` 로 **꺼내 볼 수 있다** — 조작하려면 `snapshot` 을 다시 찍어야 한다([아래](#아직-구현이-아닌-것-drift)) |
 | **여러 대에 동시에** | `broadcast … --group <g>` — 순차가 아니라 동시. 8세션 기준 1.35s → 0.35s |
 | **실패는 전부 exit 1** | 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서 받은 예외까지. `$?` 하나만 보면 된다 |
 
@@ -61,6 +62,7 @@ tirno schema | jq '.commands[] | select(.destructive) | .name'
 | **Stateless CLI** | 명령마다 connect/disconnect. daemon 없음 — `~/.tirno/sessions/<name>.json` 에서 메타 복원 |
 | **a11y `@ref`** | `snapshot` 이 붙인 번호. **세션마다·페이지마다 다시 찍는다** |
 | **Visual cache** | URL **과 viewport** 둘 다가 키다. bbox 는 viewport 종속이라 분리가 필수 |
+| **다채널 fallback** | `replay`·`trail replay` 가 `dom.selector → a11y → bbox → 기록 좌표` 순으로 대상을 다시 찾는다. **캐시 경로에는 아직 없다** |
 | **Emulation 영속** | device/network/cpu/dpr 을 한 번 적용하면 다음 명령에도 유지된다 |
 | **앵커** | 브라우저 MCP 가 붙을 대상을 포트가 아니라 디렉터리로 고정 |
 
@@ -69,6 +71,20 @@ tirno schema | jq '.commands[] | select(.destructive) | .name'
 
 이름은 요정어로 *지켜보는 자* (`tir-` — 보다·지키다). 개명 내력은
 [docs/JOURNAL.md](docs/JOURNAL.md).
+
+## 아직 구현이 아닌 것 (drift)
+
+문서가 앞서 있던 것을 실측해 내렸다. 목표는 여전하지만 지금 코드는 여기까지다.
+
+| 하고 싶은 것 | 지금 | 근거 |
+|---|---|---|
+| 캐시에서 꺼낸 ref 로 **바로 조작** | `cache load` 는 출력만 하고 ref store 를 안 채운다. `click @7` 은 `Unknown ref` 로 실패하고, `snapshot` 을 다시 찍어야 한다 | 새 세션에서 실행 확인 |
+| 캐시에 **selector** 를 담기 | `snapshot` 이 담는 채널은 `a11y`(role·name·backendId)와 `visual`(bbox) 둘뿐이다. `backendId` 는 페이지가 다시 뜨면 무효라, 세션을 넘겨 쓸 수 있는 건 bbox 하나다 | 캐시 파일의 채널 분포 실측 |
+| 캐시가 **낡았는지 판정** | `visualFp`(dHash)를 저장은 하지만 비교하는 코드가 없다 — 페이지가 바뀌어도 그대로 나온다. 유효성 판단은 부르는 쪽 몫이다 | `hammingDistance` 호출자 0건 |
+
+**다채널 fallback 은 `record`/`trail` 쪽에서는 실제로 돈다** — `replay` 가
+`dom.selector → a11y(role+name) → bbox → 기록 좌표` 순으로 되찾는다. 캐시 경로가 그
+수준에 아직 못 미친 것이다.
 
 ## 라이선스
 
