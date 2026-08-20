@@ -59,10 +59,15 @@ export function registerCacheCommands(program: Command): void {
         console.log(`# fp: ${entry.visualFp}  viewport: ${vp}`);
         console.log('');
         for (const r of entry.refs) {
-          const sel = r.selector ? ` [${r.selector}]` : '';
-          const bbox = r.bbox ? ` (${r.bbox.x},${r.bbox.y} ${r.bbox.w}x${r.bbox.h})` : '';
-          const name = r.name ? ` "${r.name}"` : '';
-          console.log(`${r.refId.padEnd(5)} ${r.role}${name}${sel}${bbox}`);
+          const a = r.channels.a11y;
+          const d = r.channels.dom;
+          const v = r.channels.visual;
+          const id = (r.refId ?? r.id).padEnd(5);
+          const role = a?.role ?? 'text';
+          const name = a?.name ? ` "${a.name}"` : (v?.ocrText ? ` ocr:"${v.ocrText.slice(0, 40)}"` : '');
+          const sel = d?.selector ? ` [${d.selector}]` : '';
+          const bbox = v?.bbox ? ` (${v.bbox.x},${v.bbox.y} ${v.bbox.w}x${v.bbox.h})` : '';
+          console.log(`${id} ${role}${name}${sel}${bbox}`);
         }
       } catch (e) {
         error((e as Error).message);
