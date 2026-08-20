@@ -18,13 +18,19 @@ export interface CacheRef {
   confidence?: number;          // populated for vision-sourced refs
 }
 
+export interface Viewport {
+  w: number;
+  h: number;
+  dpr: number;
+}
+
 export interface CacheEntry {
   url: string;
   urlPath: string;
   domain: string;
   capturedAt: string;
   visualFp: string;
-  viewport?: { w: number; h: number; dpr: number };
+  viewport: Viewport;            // required — bbox/refs are viewport-bound
   refs: CacheRef[];
 }
 
@@ -43,27 +49,61 @@ export function parseUrl(raw: string): UrlKey {
   };
 }
 
-function entryFile(domain: string, urlPath: string): string {
-  const hash = crypto.createHash('sha1').update(urlPath).digest('hex').slice(0, 16);
-  return path.join(cacheDir(), domain, `${hash}.json`);
+export function viewportKey(v: Viewport): string {
+  return `${v.w}x${v.h}@${v.dpr}`;
 }
 
-function ensureDir(p: string): void {
-  fs.mkdirSync(path.dirname(p), { recursive: true });
+export function parseViewportKey(s: string): Viewport | null {
+  const m = /^(\d+)x(\d+)@([\d.]+)$/.exec(s);
+  if (!m) return null;
+  return { w: Number(m[1]), h: Number(m[2]), dpr: Number(m[3]) };
+}
+
+// Path layout — viewport-aware:
+//   <cacheDir>/<domain>/<sha1(urlPath)>/<wxh@dpr>.json
+// Same URL viewed at different viewports = separate files.
+function urlDir(domain: string, urlPath: string): string {
+  const hash = crypto.createHash('sha1').update(urlPath).digest('hex').slice(0, 16);
+  return path.join(cacheDir(), domain, hash);
+}
+
+function entryFile(domain: string, urlPath: string, viewport: Viewport): string {
+  return path.join(urlDir(domain, urlPath), `${viewportKey(viewport)}.json`);
 }
 
 export function save(entry: CacheEntry): string {
-  const file = entryFile(entry.domain, entry.urlPath);
-  ensureDir(file);
+  const file = entryFile(entry.domain, entry.urlPath, entry.viewport);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(entry, null, 2));
   return file;
 }
 
-export function lookup(url: string, mode: 'exact' | 'urlPath' = 'urlPath'): CacheEntry | null {
+export interface LookupOptions {
+  viewport?: Viewport;
+  mode?: 'exact' | 'urlPath';
+}
+
+// Return the entry for given url. If viewport specified, exact viewport file
+// must exist. If not, return the most-recently-captured viewport entry.
+export function lookup(url: string, opts: LookupOptions = {}): CacheEntry | null {
+  const mode = opts.mode ?? 'urlPath';
   const key = parseUrl(url);
-  const file = entryFile(key.domain, key.urlPath);
-  if (!fs.existsSync(file)) return null;
-  const entry: CacheEntry = JSON.parse(fs.readFileSync(file, 'utf-8'));
+  const dir = urlDir(key.domain, key.urlPath);
+  if (!fs.existsSync(dir)) return null;
+
+  let chosen: string | null = null;
+  if (opts.viewport) {
+    const exact = entryFile(key.domain, key.urlPath, opts.viewport);
+    if (!fs.existsSync(exact)) return null;
+    chosen = exact;
+  } else {
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    if (files.length === 0) return null;
+    files.sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs);
+    chosen = path.join(dir, files[0]);
+  }
+
+  const entry: CacheEntry = JSON.parse(fs.readFileSync(chosen, 'utf-8'));
   if (mode === 'exact' && entry.url !== key.fullUrl) return null;
   return entry;
 }
@@ -79,14 +119,18 @@ export function list(opts: ListOptions = {}): CacheEntry[] {
   const domains = opts.domain ? [opts.domain] : fs.readdirSync(base);
   const out: CacheEntry[] = [];
   for (const d of domains) {
-    const dir = path.join(base, d);
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
-    for (const f of fs.readdirSync(dir)) {
-      if (!f.endsWith('.json')) continue;
-      try {
-        const e: CacheEntry = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf-8'));
-        out.push(e);
-      } catch { /* skip corrupt */ }
+    const dDir = path.join(base, d);
+    if (!fs.existsSync(dDir) || !fs.statSync(dDir).isDirectory()) continue;
+    for (const urlHash of fs.readdirSync(dDir)) {
+      const urlD = path.join(dDir, urlHash);
+      if (!fs.statSync(urlD).isDirectory()) continue;
+      for (const f of fs.readdirSync(urlD)) {
+        if (!f.endsWith('.json')) continue;
+        try {
+          const e: CacheEntry = JSON.parse(fs.readFileSync(path.join(urlD, f), 'utf-8'));
+          out.push(e);
+        } catch { /* skip corrupt */ }
+      }
     }
   }
   out.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
@@ -107,21 +151,39 @@ export function prune(opts: PruneOptions = {}): { removed: number } {
   const domains = opts.domain ? [opts.domain] : fs.readdirSync(base);
   let removed = 0;
   for (const d of domains) {
-    const dir = path.join(base, d);
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) continue;
-    for (const f of fs.readdirSync(dir)) {
-      if (!f.endsWith('.json')) continue;
-      const file = path.join(dir, f);
-      if (cutoff !== null) {
-        try {
-          const e: CacheEntry = JSON.parse(fs.readFileSync(file, 'utf-8'));
-          if (new Date(e.capturedAt).getTime() >= cutoff) continue;
-        } catch { /* corrupt — remove */ }
+    const dDir = path.join(base, d);
+    if (!fs.existsSync(dDir) || !fs.statSync(dDir).isDirectory()) continue;
+    for (const urlHash of fs.readdirSync(dDir)) {
+      const urlD = path.join(dDir, urlHash);
+      if (!fs.statSync(urlD).isDirectory()) {
+        // legacy flat layout — prune as a single file too
+        if (urlHash.endsWith('.json')) {
+          if (cutoff !== null) {
+            try {
+              const e: CacheEntry = JSON.parse(fs.readFileSync(urlD, 'utf-8'));
+              if (new Date(e.capturedAt).getTime() >= cutoff) continue;
+            } catch { /* corrupt — remove */ }
+          }
+          fs.unlinkSync(urlD);
+          removed++;
+        }
+        continue;
       }
-      fs.unlinkSync(file);
-      removed++;
+      for (const f of fs.readdirSync(urlD)) {
+        if (!f.endsWith('.json')) continue;
+        const file = path.join(urlD, f);
+        if (cutoff !== null) {
+          try {
+            const e: CacheEntry = JSON.parse(fs.readFileSync(file, 'utf-8'));
+            if (new Date(e.capturedAt).getTime() >= cutoff) continue;
+          } catch { /* corrupt — remove */ }
+        }
+        fs.unlinkSync(file);
+        removed++;
+      }
+      if (fs.readdirSync(urlD).length === 0) fs.rmdirSync(urlD);
     }
-    if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+    if (fs.readdirSync(dDir).length === 0) fs.rmdirSync(dDir);
   }
   return { removed };
 }
