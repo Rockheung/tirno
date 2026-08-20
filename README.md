@@ -223,6 +223,13 @@ backend 선택 — **local 기본**, cloud는 확장 예정 (현재 stub):
 
 cloud backend는 API key 없으면 안내 메시지, 있으면 "not yet implemented" 메시지. CLI surface는 stable.
 
+### 자기 기술 (agent 용)
+| 명령 | 설명 |
+|---|---|
+| `schema [--pretty]` | 명령 트리 전체를 JSON 으로. [The CLI Spec](https://clispec.dev/) v0.3 형식 |
+
+에이전트가 `--help` 를 긁을 필요가 없다 — 72개 엔드포인트가 `effects`(read_only / idempotent / non_idempotent)와 `destructive` 표시를 달고 나온다. commander 트리에서 자동 생성이라 CLI 와 어긋나지 않고, 분류가 빠지면 유닛 테스트가 깨진다.
+
 ### Multi-session
 | 명령 | 설명 |
 |---|---|

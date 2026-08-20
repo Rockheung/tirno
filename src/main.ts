@@ -20,6 +20,7 @@ import { registerAuthCommands } from './commands/auth.js';
 import { registerStatsCommand } from './commands/stats.js';
 import { registerAuditCommand } from './commands/audit.js';
 import { registerScreencastCommands } from './commands/screencast.js';
+import { registerSchemaCommand } from './commands/schema.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -50,6 +51,7 @@ registerAuthCommands(program);
 registerStatsCommand(program);
 registerAuditCommand(program);
 registerScreencastCommands(program);
+registerSchemaCommand(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);
