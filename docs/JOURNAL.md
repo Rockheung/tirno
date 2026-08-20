@@ -309,6 +309,48 @@ interface CacheEntry {
 
 ---
 
+### Phase 6-2 — vision OCR backend (PR #8)
+
+#### 의도
+
+Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / custom widget 등 a11y가 못 잡는 영역은 빈 채로 둠. OCR backend로 이 빈 영역의 텍스트를 추출 → 향후 cache entry에 visual-only ref로 통합 가능.
+
+#### backend 선정 — Florence-2 + PaddleOCR → tesseract.js로 변경
+
+처음 합의는 Florence-2 + PaddleOCR onnx 결합. 그러나 Node 환경 현실:
+
+- **PaddleOCR onnx direct via onnxruntime-node**: native 의존성 30MB+, preprocessing(image normalize)/postprocessing(DB algorithm + CRNN decoding) 직접 구현 필요 → 큰 PR
+- **Florence-2 via transformers.js**: 모델 ~460MB, 영어 중심
+- **`@gutenye/ocr-node` (Paddle wrap)**: 한국어 모델 별도 download 필요
+- **tesseract.js**: ~5MB JS + lang data download (per lang ~10MB), 한국어/영어 동시 가능, Node에서 안정적, API 단순
+
+**1단계는 tesseract.js로 시작**, backend interface는 plug-in 구조로 잡아두어 PaddleOCR / Florence-2를 추후 옵션으로 추가 가능. 효용성·유지보수성 우선.
+
+#### 구현
+
+- `src/vision/ocr.ts` (신규) — backend-agnostic interface (`OcrResult`, `OcrWord`, `recognize`, `shutdown`). worker는 lang별 lazy + cached → 같은 lang 반복 호출 시 재사용
+- `src/cdp/iou.ts` (신규) — `area`, `intersection`, `iou`, `containedIn` 헬퍼. a11y bbox와 vision bbox 매칭에 사용 예정
+- `src/commands/vision.ts` (신규) — `vision ocr` 명령
+- `package.json` — `tesseract.js` dependency 추가
+- `test/iou.test.ts` (신규) — 14 케이스 (area, intersection, iou, containedIn)
+
+#### 검증
+
+- example.com 영어 OCR — 19개 단어, 95%+ confidence, **첫 실행 833ms** (lang data download 포함). 두 번째부터 더 빠름
+- google 검색 결과 한국어+영어 OCR (`--lang kor+eng`) — 145개 단어 70%+ confidence, 2260ms. "Google", "이미지", "동영상", "Smasher:Tirno" 등 정상 추출
+- bbox + confidence per word 정확
+- worker shutdown 동작 (메모리 누수 방지)
+
+#### 한계
+
+- 정확도 PaddleOCR/Florence-2보다 낮음 (특히 작은 글자, 복잡한 레이아웃)
+- 페이지 fontconfig/렌더링 차이로 confidence 변동
+- a11y bbox와의 IoU 매칭은 helper만 제공, snapshot 통합은 다음 PR
+- vision element 자체를 cache entry에 visual-only ref로 저장하는 워크플로우는 다음 PR
+- backend interface는 잡았지만 PaddleOCR / Florence-2 실제 plug-in은 향후
+
+---
+
 ### 프로덕션 마감 (PR #7)
 
 #### 의도
@@ -342,7 +384,8 @@ interface CacheEntry {
 | [#4](https://github.com/Rockheung/tirno/pull/4) | docs: 작업 일지 + 리서치 문서화 + wandr → tirno rename | merged |
 | [#5](https://github.com/Rockheung/tirno/pull/5) | fix: `--enable-automation` flag 제거로 Akamai 봇 차단 우회 | merged |
 | [#6](https://github.com/Rockheung/tirno/pull/6) | feat: Phase 6-1 — URL-keyed visual cache + node:test | merged |
-| [#7](https://github.com/Rockheung/tirno/pull/7) | chore: 프로덕션 마감 — README + CI + packaging + element-info 격리 + 추가 test | open |
+| [#7](https://github.com/Rockheung/tirno/pull/7) | chore: 프로덕션 마감 — README + packaging + element-info 격리 | merged |
+| [#8](https://github.com/Rockheung/tirno/pull/8) | feat: Phase 6-2 — vision OCR backend (tesseract.js) + IoU helper | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
