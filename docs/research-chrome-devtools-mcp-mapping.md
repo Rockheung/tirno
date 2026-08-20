@@ -174,7 +174,7 @@ slim 모드 3개는 tirno 의 기본 surface 에 그대로 포함.
 | `screencast_*` | `tirno screencast start` / `stop` |
 | `performance_analyze_insight` | `tirno trace insight <path>` — LCP / FCP / CLS / long task |
 | `get_console_message` 단건 | `tirno console --show <id>` |
-| `get_network_request` 본문 | `tirno network show <id>` |
+| `get_network_request` 본문 | `tirno network --show <id>` |
 
 남은 것은 둘뿐이다:
 

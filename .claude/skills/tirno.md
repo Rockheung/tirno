@@ -71,7 +71,7 @@ tirno snapshot [--verbose]         # a11y 트리. 노드마다 @N ref 부여, ~/
 tirno console [--type error|warn] [--reload] [--ms <n>]   # 리스너 창 동안의 콘솔
 tirno console --show <id>          # 그 메시지 하나를 전문으로
 tirno network [--type xhr|fetch]   # 네트워크 요청 (reload 하고 networkidle2 까지 캡처)
-tirno network show <id>            # 그 요청의 헤더·본문
+tirno network --show <id>          # 그 요청의 헤더·본문
 ```
 
 ### 입력
@@ -163,10 +163,27 @@ tirno replay <name>                   # 신뢰 이벤트로 재생. 채널 순�
 `dispatcher.ts` 가 "not yet implemented" 로 던진다. vision 의 cloud 백엔드 3종도 stub 이고
 실제로 도는 것은 로컬 paddle 이다.
 
+### 자기 기술 — 에이전트는 `--help` 를 긁지 말 것
+
+```bash
+tirno schema [--pretty]          # 명령 트리 전체를 JSON 으로 (The CLI Spec v0.3)
+```
+
+`--help` 은 사람용 산문이라 서브커맨드 27개가 최상위에 안 보이고, 여러 줄 설명이
+명령 목록과 섞여 파싱하면 없는 플래그가 나온다. `schema` 는 commander 트리에서
+자동 생성되므로 CLI 와 어긋날 수 없다. 엔드포인트마다 다음을 선언한다:
+
+- `effects` — `read_only` / `idempotent` / `non_idempotent`
+- `destructive` — **되돌릴 수 없이 뭔가를 없앤다**: `kill` `gc` `restart` `close-tab`
+  `cache prune` `trail rm` `record rm` `auth rm`. 실행 전에 이걸 보면 된다
+- `passthrough` — `-- <chrome flags>` 를 받는 명령(`new` `restart` `drift`)
+- `args` / `options` / `cardinality` / `output_kind`
+
 ### 부수
 
 ```bash
-tirno auth set|get|ls|rm <key>   # API 키를 OS 키체인에. env 가 항상 우선한다
+tirno auth set|rm <provider>     # API 키를 OS 키체인에 (anthropic|openai|gemini)
+tirno auth status                # 어느 provider 가 키를 갖고 있나 (env·키체인)
 tirno stats                      # ~/.tirno/metrics.jsonl 집계
 ```
 

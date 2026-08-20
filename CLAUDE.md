@@ -65,6 +65,9 @@ node bin/tirno.js kill test --clean
   `claude`·`openai`·`gemini` 는 파일은 있으나 전부 stub 이다 (`florence` 는 실험)
 - `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
 - `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
+- `core/schema.ts` — `tirno schema` 의 생성기. 구조는 commander 트리에서 자동 추출하고,
+  의미(`effects`·`destructive`)만 `SEMANTICS` 표로 선언한다. 새 명령을 분류 없이 추가하면
+  `test/schema.test.ts` 가 깨진다 — 그게 이 표가 안 낡는 이유다
 - `src/util/` — 에러 타입, 인자 파서
 
 ## 의존성
