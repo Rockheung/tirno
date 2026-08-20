@@ -44,6 +44,12 @@ export interface SessionMetadata {
   lastAccessedAt: string;
   emulation?: EmulationState;
   group?: string;
+  /**
+   * Set by `record start`. The recorder itself lives in the page and its buffer
+   * is per-origin localStorage, so it cannot answer "where did this recording
+   * begin" once the flow navigates. The CLI keeps that here instead.
+   */
+  recording?: { startUrl: string; startedAt: string };
 }
 
 /**
