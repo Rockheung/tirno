@@ -14,6 +14,7 @@ import { registerRecordCommands } from './commands/record.js';
 import { registerReplayCommand } from './commands/replay.js';
 import { registerTrailCommands } from './commands/trail.js';
 import { registerAskCommand } from './commands/ask.js';
+import { registerExploreCommand } from './commands/explore.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -38,6 +39,7 @@ registerRecordCommands(program);
 registerReplayCommand(program);
 registerTrailCommands(program);
 registerAskCommand(program);
+registerExploreCommand(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);
