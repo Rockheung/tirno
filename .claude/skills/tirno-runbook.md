@@ -8,6 +8,17 @@ description: tirno 로 실제 브라우저 작업을 끝까지 수행하는 절�
 
 `--help` 도, 이 문서도 선언이다. 신뢰 대상은 방금 그 브라우저가 보여준 값이다.
 
+무엇이 있는지는 **`tirno schema`** 에 물어라. `--help` 은 사람용 산문이라 서브커맨드
+26개가 최상위에 안 보이고, 긁으면 없는 플래그가 나온다. `schema` 는 commander 트리에서
+자동 생성이라 CLI 와 어긋나지 않는다.
+
+```bash
+tirno schema --pretty | jq '.commands[] | select(.destructive) | .name'
+```
+
+**되돌릴 수 없는 명령을 실행 전에 가려내는 유일한 기계적 방법이다** — 지금은 8개다
+(`kill` `gc` `restart` `close-tab` `cache prune` `trail rm` `record rm` `auth rm`).
+
 ## 0. 가치 흐름 (CLAUDE.md, 불변)
 
 위에서부터 시도하고, 마지막은 자존심 굽혀 부탁한다.
@@ -210,6 +221,9 @@ tirno ls                      # 남은 게 없는지
 - `tirno drift` 가 `unreadable` 로 보고하는 플래그가 있다. 값에 `" --"` 가 들어가면
   실행 중 커맨드라인(`ps` 출력)에서 되읽을 수 없어서다 — 예: `--user-agent="tirno --probe"`.
   **이건 drift 가 아니다.** 재기동해도 같은 판정이 나오므로 고치려 들지 말 것.
+- `tirno --help` 을 긁어 명령 목록을 만들지 마라. 여러 줄 설명이 명령 목록과 섞여
+  **없는 플래그가 나온다**(실제로 `network show`·`auth get` 을 그렇게 만들어낸 적이 있다).
+  기계로 읽을 때는 `tirno schema` 를 쓴다.
 - `snapshot` 출력에서 조작 대상을 `grep textbox|button` 으로 찾으면 **`InlineTextBox` 가 대량으로
   걸려 정작 `searchbox`·`button` 이 묻힌다.** `@ref` 가 붙은 줄만 걸러라 — `grep -E '^@[0-9]+'`.
 
