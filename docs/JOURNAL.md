@@ -309,6 +309,58 @@ interface CacheEntry {
 
 ---
 
+### embedding pipeline + RAG retrieval (PR #26)
+
+#### 의도
+
+`tirno explore`의 LLM ask는 PR #25에서 만들어졌으나 `nearbyWaypoints`가 비어있는 상태. 누적된 trail/waypoint를 LLM prompt에 retrieval해주면 정확도 ↑ + 비용 ↓ + 사용자 시연 부탁 빈도 ↓.
+
+#### 신규 모듈
+
+`src/intelligence/embedding.ts`:
+- `@huggingface/transformers` (이미 dep)의 feature-extraction pipeline
+- 모델: `Xenova/all-MiniLM-L6-v2` (384d, ~25MB ONNX, env override)
+- lazy load — 첫 호출 시 download (~3~5초)
+- embed(text), embedBatch(texts), buildEmbedText(waypoint, url), cosine(a, b)
+- 모든 embedding L2-normalized → cosine = dot product
+
+#### Storage 통합
+
+- `Waypoint.embedding?: number[]` 필드 추가 — JSON에 array로 영속
+- `FileWaypointStore.searchSimilar(emb, topK)` — linear cosine over all loaded records (수천 entry까지 OK)
+- `LanceWaypointStore.searchSimilar` — native vector search (수만+)
+
+#### CLI
+
+**`tirno snapshot --embed`** — cache 저장 시 각 ref의 embedding도 자동 채움:
+- 약 50ms/ref CPU
+- 첫 호출 시 모델 download
+- LLM prompt material로 활용
+
+**`tirno explore --rag --rag-k 5`** — 매 step마다:
+1. `goal + currentUrl` → query embedding
+2. `waypointStore.searchSimilar(queryEmb, K)` → top-K nearby waypoints
+3. `IntelligenceContext.nearbyWaypoints`에 포함 → claude prompt에 자동 추가
+
+#### 의의
+
+이전 시도들이 누적될수록:
+- LLM이 "이 goal 비슷한 시도가 있었다 — selector / role / OCR text" 패턴 받음
+- prompt 정확도 ↑ → 첫 시도 성공률 ↑ → step 수 ↓ → 비용 ↓
+- 시간 지나면 cache hit 직전에 RAG로 패턴 발견 → LLM 호출 자체 줄어듦
+
+self-journaling의 진짜 누적 가치 — agent의 시행착오가 다음 호출을 강화.
+
+#### 한계 / 후속
+
+- 첫 모델 download (~25MB) 시간 — `--embed` opt-in이라 default 영향 없음
+- file backend의 linear cosine은 ~10K entry까지 OK. 그 이상은 lance backend
+- multi-modal embedding (CLIP 등)은 향후 — 현재 텍스트 only
+- LLM retry/streaming은 #24
+- 88/88 tests pass
+
+---
+
 ### tirno explore — 메인 가치 흐름 (PR #25)
 
 #### 의도

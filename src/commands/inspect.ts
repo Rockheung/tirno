@@ -61,6 +61,7 @@ export function registerInspectCommands(program: Command): void {
     .option('--vision-min-confidence <n>', 'Drop OCR words below this confidence', intArg, 50)
     .option('--vision-iou <n>', 'IoU threshold for "covered by a11y" (0..1)', floatArg, 0.3)
     .option('--vision-contain <n>', 'Contained-in threshold (vision word inside a11y bbox)', floatArg, 0.8)
+    .option('--embed', 'Compute semantic embedding for each ref (for RAG retrieval, ~50ms each + first-load model download)')
     .action(async (opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -170,6 +171,21 @@ export function registerInspectCommands(program: Command): void {
         const flatRefs: refStore.RefMap = {};
         for (const [k, v] of Object.entries(detailed)) flatRefs[k] = v.backendId;
         refStore.save(meta.name, flatRefs);
+
+        // optional embeddings — compute before cache save so they persist
+        if (opts.embed && cachePayload) {
+          try {
+            const { embed, buildEmbedText } = await import('../intelligence/embedding.js');
+            for (const r of cachePayload.refs) {
+              const text = buildEmbedText(r, cachePayload.url);
+              if (!text.trim()) continue;
+              const emb = await embed(text);
+              r.embedding = Array.from(emb);
+            }
+          } catch (e) {
+            info(`embed skipped: ${(e as Error).message}`);
+          }
+        }
 
         if (cachePayload) {
           try { visualCache.save(cachePayload); } catch { /* non-fatal */ }

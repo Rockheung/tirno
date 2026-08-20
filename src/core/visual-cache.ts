@@ -48,6 +48,9 @@ export interface Waypoint {
     successByChannel: Partial<Record<'dom' | 'a11y' | 'visual.bbox' | 'visual.ocr', number>>;
     lastSuccessAt?: string;
   };
+
+  /** Semantic embedding (Float32Array as plain array in JSON). 384d normalized. */
+  embedding?: number[];
 }
 
 /** @deprecated Use Waypoint instead. Old name kept for callers being migrated. */
