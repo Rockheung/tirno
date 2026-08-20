@@ -309,6 +309,29 @@ interface CacheEntry {
 
 ---
 
+### 프로덕션 마감 (PR #7)
+
+#### 의도
+
+지금까지의 phase는 기능 추가에 집중. 프로덕션 레벨 효용성·유지보수성을 위해 입구·CI·packaging·테스트 격리를 한 번 정리.
+
+#### 구현
+
+- `README.md` (신규) — 핵심 컨셉, 설치, quick start, 명령 reference, 데이터 위치
+- `LICENSE` (신규) — ISC
+- `.github/workflows/ci.yml` (신규) — Node 22 / `npm ci` / `npm run build` / `npm test`
+- `package.json` 보강 — `keywords`, `files`, `engines`, `repository`, `homepage`, `bugs`, `author`, `license`, `prepublishOnly`
+- `src/cdp/element-info.ts` 리팩토링 — page-side 스크립트는 attrs 추출만, selector 결정 로직(`chooseSelector`)을 Node-side 순수 함수로 분리. unit test 가능
+- `test/element-info.test.ts` (신규) — `chooseSelector` 12 케이스 (id/data-testid/aria-label/tag[name] 우선순위, special chars, 한글, 따옴표 escape)
+
+#### 검증
+
+- 35/35 unit tests pass (visual-cache 16 + screenshot-hash 7 + element-info 12)
+- e2e regression — google.com snapshot에서 selector 추출 정상 (`#ZnpjSd`, `[aria-label="Gmail "]` 등)
+- `npm run build` 성공
+
+---
+
 ## PR 목록
 
 | # | 제목 (실제 머지 시점 기준) | 상태 |
@@ -318,7 +341,8 @@ interface CacheEntry {
 | [#3](https://github.com/Rockheung/tirno/pull/3) | chore: rename project chromux → wandr | merged |
 | [#4](https://github.com/Rockheung/tirno/pull/4) | docs: 작업 일지 + 리서치 문서화 + wandr → tirno rename | merged |
 | [#5](https://github.com/Rockheung/tirno/pull/5) | fix: `--enable-automation` flag 제거로 Akamai 봇 차단 우회 | merged |
-| [#6](https://github.com/Rockheung/tirno/pull/6) | feat: Phase 6-1 — URL-keyed visual cache + node:test | open |
+| [#6](https://github.com/Rockheung/tirno/pull/6) | feat: Phase 6-1 — URL-keyed visual cache + node:test | merged |
+| [#7](https://github.com/Rockheung/tirno/pull/7) | chore: 프로덕션 마감 — README + CI + packaging + element-info 격리 + 추가 test | open |
 
 ## 보류된 항목 (다음 phase 후보)
 

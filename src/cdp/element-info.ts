@@ -5,6 +5,14 @@ export interface ElementInfo {
   bbox?: { x: number; y: number; w: number; h: number };
 }
 
+export interface ElementAttrs {
+  tag: string | null;
+  id: string | null;
+  testid: string | null;
+  ariaLabel: string | null;
+  name: string | null;
+}
+
 interface BoxModel {
   model: {
     border: number[]; // [x1,y1,x2,y2,x3,y3,x4,y4]
@@ -14,23 +22,31 @@ interface BoxModel {
 }
 
 interface RemoteObject {
-  result: { value?: string };
+  result: { value?: ElementAttrs | null };
 }
 
-// Best-effort stable selector: id → data-testid → aria-label → name → role
-// Returns undefined if no stable attribute.
-const SELECTOR_SCRIPT = `function(){
+const ATTR_SCRIPT = `function(){
   const el = this;
   if (!el || el.nodeType !== 1) return null;
-  if (el.id && /^[A-Za-z][A-Za-z0-9_-]*$/.test(el.id)) return '#' + el.id;
-  const testid = el.getAttribute('data-testid');
-  if (testid) return '[data-testid=' + JSON.stringify(testid) + ']';
-  const ariaLabel = el.getAttribute('aria-label');
-  if (ariaLabel) return '[aria-label=' + JSON.stringify(ariaLabel) + ']';
-  const name = el.getAttribute('name');
-  if (name && el.tagName) return el.tagName.toLowerCase() + '[name=' + JSON.stringify(name) + ']';
-  return null;
+  return {
+    tag: el.tagName ? el.tagName.toLowerCase() : null,
+    id: el.id || null,
+    testid: el.getAttribute('data-testid'),
+    ariaLabel: el.getAttribute('aria-label'),
+    name: el.getAttribute('name'),
+  };
 }`;
+
+// Pure decision: stable selector from attribute snapshot.
+// Priority: id → data-testid → aria-label → tag[name]. Returns null if none.
+export function chooseSelector(attrs: ElementAttrs | null): string | null {
+  if (!attrs) return null;
+  if (attrs.id && /^[A-Za-z][A-Za-z0-9_-]*$/.test(attrs.id)) return '#' + attrs.id;
+  if (attrs.testid) return '[data-testid=' + JSON.stringify(attrs.testid) + ']';
+  if (attrs.ariaLabel) return '[aria-label=' + JSON.stringify(attrs.ariaLabel) + ']';
+  if (attrs.name && attrs.tag) return attrs.tag + '[name=' + JSON.stringify(attrs.name) + ']';
+  return null;
+}
 
 export async function getElementInfo(cdp: CDPSession, backendNodeId: number): Promise<ElementInfo> {
   const info: ElementInfo = {};
@@ -47,15 +63,16 @@ export async function getElementInfo(cdp: CDPSession, backendNodeId: number): Pr
     };
   } catch { /* node may not be visible/rendered */ }
 
-  // selector via Runtime.callFunctionOn
+  // attrs via Runtime.callFunctionOn → chooseSelector
   try {
     const resolved = await cdp.send('DOM.resolveNode', { backendNodeId }) as { object: { objectId: string } };
     const result = await cdp.send('Runtime.callFunctionOn', {
       objectId: resolved.object.objectId,
-      functionDeclaration: SELECTOR_SCRIPT,
+      functionDeclaration: ATTR_SCRIPT,
       returnByValue: true,
     }) as RemoteObject;
-    if (result.result.value) info.selector = result.result.value;
+    const selector = chooseSelector(result.result.value ?? null);
+    if (selector) info.selector = selector;
     if (resolved.object.objectId) {
       await cdp.send('Runtime.releaseObject', { objectId: resolved.object.objectId }).catch(() => {});
     }
