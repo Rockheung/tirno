@@ -309,6 +309,43 @@ interface CacheEntry {
 
 ---
 
+### Phase 6-2d — snapshot --vision 통합 (PR #11)
+
+#### 의도
+
+Phase 6-2 / 6-2b의 OCR backend는 `vision ocr` 별도 명령으로만 호출 가능했음. **snapshot 종료 시 자동으로 OCR을 실행해 a11y가 못 잡은 영역의 텍스트를 visual-only ref(`@vN`)로 보강**하면 cache entry 한 번 적재로 a11y + vision 통합 정보 확보. 이게 Phase 6 전체의 진짜 가치.
+
+#### 구현
+
+- `src/vision/augment.ts` (신규) — `visionAugment(buf, a11yBboxes, opts)` — OCR → IoU/containedIn 필터로 a11y가 cover한 word 제외 → 남은 word만 `@v1, @v2 ...` ref로 반환
+- `src/commands/inspect.ts` snapshot — `--vision [backend]` flag 추가 + `--vision-lang`, `--vision-min-confidence`, `--vision-iou`, `--vision-contain` 옵션. snapshot 흐름 안에서 cache용 screenshot 한 장 재사용 (추가 capture 비용 없음)
+- `src/core/visual-cache.ts` — `CacheRef`에 `source?: 'a11y' | 'vision'`, `confidence?: number` 필드 추가 (back-compat — default 'a11y')
+
+#### 매칭 로직
+
+처음에는 IoU만 사용했으나, a11y의 paragraph가 wrap된 여러 줄을 layout box 하나로만 표현하는 경우 word-level OCR과 IoU가 매우 작아 false positive 많음. 두 가지 신호를 OR로:
+
+- `iou(a11yBbox, visionWordBbox) >= 0.3` (peer-level overlap)
+- `containedIn(visionWord, a11yBbox, 0.8)` (vision word가 a11y container 안에 80% 이상 포함)
+
+둘 중 하나라도 만족하면 cover된 것으로 보고 visual-only로 추가 안 함.
+
+#### 검증
+
+- example.com — a11y 8 refs + vision 6 visual-only ref. paragraph가 viewport 너머로 wrap된 부분 ("without", "needing", "permission.", "Avoid", "use", "in") 만 보강. 첫 줄은 paragraph bbox 안에 contain되어 cover됨. 310ms
+- 쿠팡 메인 — visual-only 45개. 주로 광고 배너의 image-as-text ("FORET", "탄라모박가", "AR" 등 — 한국어/영어 혼합). a11y로는 절대 못 잡는 영역
+- `--no-cache` + `--vision` 조합도 동작 (vision augment는 console에만)
+- 49/49 tests pass (회귀 없음)
+
+#### 한계
+
+- 매 snapshot마다 OCR 추가 비용 (~300ms tesseract / ~3s paddle 첫 실행) — opt-in flag라 default 영향 없음
+- 한국어 단음절이 많이 잡힘 (e.g. "탄", "라", "모", "박", "가" 따로) — tesseract의 단어 분할 한계. 라인 단위인 paddle backend가 더 깔끔
+- IoU/contain threshold는 페이지 구조에 따라 적절치 다름 — `--vision-iou`/`--vision-contain` 옵션으로 조정
+- visual-only ref는 ref-store에 등록 안 됨 (CDP click 불가, 좌표 click 별도 필요) — 현재는 cache emit + LLM 컨텍스트 용도
+
+---
+
 ### Phase 6-2c — Florence-2 backend (PR #10, experimental)
 
 #### 의도
@@ -471,7 +508,8 @@ Phase 6-1의 visual cache는 a11y 트리에 의존. canvas / image-as-text / cus
 | [#7](https://github.com/Rockheung/tirno/pull/7) | chore: 프로덕션 마감 — README + packaging + element-info 격리 | merged |
 | [#8](https://github.com/Rockheung/tirno/pull/8) | feat: Phase 6-2 — vision OCR backend (tesseract.js) + IoU helper | merged |
 | [#9](https://github.com/Rockheung/tirno/pull/9) | feat: Phase 6-2b — backend dispatcher + PaddleOCR backend + Florence stub | merged |
-| [#10](https://github.com/Rockheung/tirno/pull/10) | feat: Phase 6-2c — Florence-2 backend (experimental, output decoding 한계) | open |
+| [#10](https://github.com/Rockheung/tirno/pull/10) | feat: Phase 6-2c — Florence-2 backend (experimental, output decoding 한계) | merged |
+| [#11](https://github.com/Rockheung/tirno/pull/11) | feat: Phase 6-2d — snapshot --vision 통합 (a11y 못 잡은 영역 OCR로 보강) | open |
 
 ## 보류된 항목 (다음 phase 후보)
 
