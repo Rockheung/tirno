@@ -197,7 +197,7 @@ export function registerSessionCommands(program: Command): void {
           name,
           port: opts.port,
           chromeFlags,
-          executablePath: opts.executablePath,
+          executablePath: opts.executablePath ?? existing?.executablePath,
           headless: opts.headless,
           userDataDir: userDataDirOverride,
           bootUrl,

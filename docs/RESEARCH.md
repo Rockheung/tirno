@@ -8,8 +8,8 @@
 |---|---|---|---|
 | 활성도 | 활발 | 1회 publish (2026-03) 정지 | 매우 활발 (0.26.0, 2026-04-16) |
 | 언어 | TS + puppeteer-core | JS + zero-dep raw CDP | **Rust 네이티브** |
-| 명령 수 | ~30 | ~15 | **50+** |
-| a11y @ref | ✅ Phase 5-1 흡수 | ✅ | ✅ + **annotated screenshot** |
+| 명령 수 | **66** (`tirno schema` 로 실측) | ~15 | **50+** |
+| a11y @ref | ✅ | ✅ | ✅ + **annotated screenshot** |
 | find by role/text | — | — | ✅ |
 | daemon | — | ✅ | ✅ |
 | multi-instance | ✅ session | ✅ profile | ✅ (auth 분리) |
@@ -22,12 +22,12 @@
 | 공식 통합 | — | — | Claude Code/Cursor/Copilot/Codex 명시 |
 | 자체 메모리/학습 | ❌ | ❌ | ❌ (skills은 정적 markdown) |
 
-### chromux의 차별 영역 (현재 시점)
+### tirno 의 차별 영역
 
-- **broadcast** — 다세션 동시 푸시. agent-browser는 single-session per command. tmux 스타일로 *동시에 여러 Chrome instance에 같은 명령*은 chromux/tirno만의 영역
+- **broadcast** — 다세션 동시 푸시. agent-browser는 single-session per command. tmux 스타일로 *동시에 여러 Chrome instance에 같은 명령*은 tirno 만의 영역
 - 그 외 emulate/diff/perf는 agent-browser에 동등하거나 우수하게 구현됨
 
-### agent-browser의 추가 강점 (chromux 미보유)
+### agent-browser의 추가 강점 (tirno 미보유)
 
 - `set credentials` (HTTP auth)
 - `set offline on/off`

@@ -84,6 +84,18 @@ test('chrome flag passthrough is declared where it exists', async () => {
   assert.deepEqual(pass, ['drift', 'new', 'restart']);
 });
 
+// `trail capture` shipped as `capture <name> <name>` — commander registers the
+// arg once from `.command('capture <name>')` and again from `.argument('<name>')`,
+// so the documented single-name form died on "missing required argument". Nothing
+// caught it because the duplicate is invisible in the source and smoke only ran
+// `trail list`.
+test('no command declares the same argument twice', async () => {
+  for (const c of buildSchema(await realProgram()).commands) {
+    const names = c.args.map(a => a.name);
+    assert.equal(new Set(names).size, names.length, `${c.name}: ${names.join(' ')}`);
+  }
+});
+
 test('args and options carry through from commander', async () => {
   const schema = buildSchema(await realProgram());
   const nav = schema.commands.find(c => c.name === 'nav');
