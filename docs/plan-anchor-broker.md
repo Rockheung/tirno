@@ -335,13 +335,64 @@ anchor set mcp a2 --evict     → ✓ Evicted 'a1' (PID 66762)
 아예 없다** — Stage 2 에서 적어둔 구멍이 이것이다. 프로필은 남으므로 같은 이름으로
 `tirno new` 하면 로그인도 그대로 복구된다. `ambiguous` 는 엔트리조차 건드리지 않는다.
 
-### Stage 5 — drift 경고 (선택, 후순위)
+### Stage 5 — drift 경고 (선택, 후순위) — **완료 2026-08-14**
 
 세션의 `chromeFlags`(선언) vs 실행 중 커맨드라인(실제) 비교 → 차이 경고.
 `--host-resolver-rules` 는 launch-time 스냅샷이라 실행 중 변경 불가 → **재기동 제안**.
 앵커 방식에서는 재기동 비용이 사실상 0(포트 경합 없음, 프로필 영속, MCP 자동 재연결).
 
 `../wishs.md` 의 "wires.yaml 변경 시 세션 옵션 갱신" 요구가 여기에 대응한다.
+
+**대응 관계를 정확히 적어둔다** (`wishs.md` 는 레포 루트에 있다 — `docs/` 기준 `../`):
+
+- wish **A(우선순위 높음)** 는 sandweb 이 `wires.yaml` 의 host 목록에서 만든
+  `--host-resolver-rules` 가 바뀌었을 때 **세션을 새 옵션으로 갱신**하는 수단을 원한 것이고,
+  기대 형태로 `tirno restart sandweb -- <new-flags>` 를 직접 적어뒀다. 그 갱신 수단
+  자체는 **이미 있다**(`restart`, `new --force`).
+- 남아 있던 구멍은 **"갱신이 필요한지 판정"** 이다. sandweb 은 매번 재기동할지, 아니면
+  바뀐 경우에만 할지 알 방법이 없었다. `tirno drift sandweb -- <wires.yaml 로 만든 flags>`
+  가 그 판정을 준다 — 같으면 exit 0, 다르면 차이와 재기동 명령을 내고 exit 1.
+  wish **D** 가 요청한 "bash `&&`/`||` 로 분기 가능한 exit code" 와 같은 형태다.
+
+즉 Stage 5 는 wish A 를 대체하는 게 아니라 **A 를 조건부로 만들어 주는 판정**이다.
+
+`tirno drift [name] [--all] [-- <기대 flags>]`
+
+- 인자 없이 → 대장의 `chromeFlags`(선언) vs 실행 중 커맨드라인
+- `--` 뒤에 flags → **그 flags** vs 실행 중. 이게 "라우팅 설정이 바뀌었는데 이 세션은
+  재기동해야 하나?" 에 답하는 형태다. tirno 는 규칙의 의미를 모른 채 답할 수 있다
+- drift 가 있으면 **exit 1** — 자동화에서 게이트로 쓸 수 있다
+
+**extra flag 은 보고하지 않는다.** puppeteer·chrome 이 자기 기본 인자를 수십 개 붙이므로
+"선언에 없는데 실행 중" 은 정상 상태다. 그걸 defect 로 올리면 의미 있는 두 신호(missing,
+changed)가 묻힌다. 전체 커맨드라인이 필요하면 `--all`.
+
+**검수 결과 (2026-08-14, 실행 출력):**
+
+```
+$ tirno new d1 -- --host-resolver-rules="MAP example.com 127.0.0.1"
+$ tirno drift d1
+✓ 'd1' matches its declared flags                                    (exit 0)
+
+$ tirno drift d1 -- --host-resolver-rules="MAP example.com 10.0.0.1"
+→ changed  --host-resolver-rules: expected MAP example.com 10.0.0.1,
+                                  running  MAP example.com 127.0.0.1
+✗ 'd1' has drifted. Chrome only reads these at launch — restart to apply:
+→   tirno restart d1 -- --host-resolver-rules='MAP example.com 10.0.0.1'   (exit 1)
+
+$ tirno restart d1 -- --host-resolver-rules='MAP example.com 10.0.0.1'
+$ tirno drift d1 -- --host-resolver-rules="MAP example.com 10.0.0.1"
+✓ 'd1' matches its expected flags                                    (exit 0)
+```
+
+제안 명령을 **그대로 붙여넣어 실행**했고 drift 가 해소되는 것까지 확인했다.
+
+**구현 중 잡은 것:** 제안 명령의 값에 공백이 있으면(`--host-resolver-rules=MAP a.com 1.2.3.4`)
+인용 없이는 붙여넣을 때 인자 3개로 쪼개진다 → `shellQuoteFlag`. 실제 `sh` 에 통과시켜
+왕복 검증하는 테스트를 붙였다.
+
+`inventory` 의 `parseUserDataDir` 은 새 `parseFlags` 위로 옮겼다 — 커맨드라인 파싱 규칙이
+두 벌 있으면 한쪽만 고쳐지는 게 시간문제다. 기존 테스트 전부 그대로 통과.
 
 ---
 

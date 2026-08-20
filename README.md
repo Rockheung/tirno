@@ -61,6 +61,7 @@ tirno kill mysession
 | `attach <name>` | active 세션 변경 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
 | `gc [--dry-run] [--older-than <N>]` | 낡은 장부 정리. 기본은 장부만(ghost/foreign 엔트리, 잔존 `DevToolsActivePort`). `--older-than <N>`일 때만 **N일 이상 안 쓴 orphan 프로필 삭제** |
+| `drift [name] [--all] [-- <flags>]` | 선언한 chrome flag 와 실행 중 프로세스 비교. 차이 있으면 재기동 명령 제안 + **exit 1** |
 | `rename <old> <new>` | 이름 변경 |
 | `export <name>` | 메타데이터 출력 |
 
@@ -76,6 +77,31 @@ pid 생존 ∧ 그 pid 가 그 포트를 LISTEN ∧ 그 프로세스의 `--user-
 | `foreign(<app>)` | 하나라도 불일치 — 그 포트는 남의 것 | 표시만. connect·kill 거부 |
 | `ambiguous` | 같은 포트에 리스너 둘 이상 (IPv4/IPv6) | 표시만. 자동 조치 전면 금지 |
 | `ghost` | 대장에만 있고 리스너·pid 없음 | connect 불가 (kill 로 정리 가능) |
+
+#### drift — 실행 중인 옵션이 여전히 맞나
+
+`--host-resolver-rules` 같은 flag 는 Chrome 이 **기동 시 한 번만 읽는** 스냅샷이다. 라우팅
+설정을 바꿔도 이미 떠 있는 Chrome 은 옛 규칙을 그대로 쓴다. tirno 는 그 규칙의 의미를
+모르지만(알 필요도 없다), **선언과 실제가 다르다**는 사실은 알려줄 수 있다.
+
+```bash
+tirno drift                                   # 대장의 chromeFlags vs 실행 중
+tirno drift d1 -- --host-resolver-rules="…"   # 지금 원하는 flags vs 실행 중
+```
+
+```
+→ changed  --host-resolver-rules: expected MAP example.com 10.0.0.1,
+                                  running  MAP example.com 127.0.0.1
+✗ 'd1' has drifted. Chrome only reads these at launch — restart to apply:
+→   tirno restart d1 -- --host-resolver-rules='MAP example.com 10.0.0.1'
+```
+
+차이가 있으면 **exit 1** 이라 자동화에서 게이트로 쓸 수 있다. 재기동 비용은 앵커 방식에서
+사실상 0 이다 — 포트 경합 없고, 프로필이 영속이라 로그인이 유지되고, MCP 는 다음 툴
+호출에서 알아서 새 Chrome 에 붙는다.
+
+puppeteer·Chrome 이 자기 기본 인자를 수십 개 붙이므로 **"선언에 없는데 실행 중"은 보고하지
+않는다** — 정상 상태를 defect 로 올리면 의미 있는 신호가 묻힌다. 전체 커맨드라인은 `--all`.
 
 `gc` 는 이 판정 위에서만 움직인다. **프로필 삭제는 로그인 세션 소실**이므로 `--older-than`
 없이는 절대 지우지 않고, 앵커가 가리키는 프로필·active 세션·살아있는 세션은 어느 경우에도

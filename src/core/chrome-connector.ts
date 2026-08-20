@@ -11,9 +11,9 @@ export async function connect(sessionName?: string): Promise<{ browser: Browser;
 
   const meta = store.get(name);
 
-  // `isAlive(pid)` alone used to decide this, and it is not enough: pids are
-  // recycled and ports are inherited. Require pid + port + profile to agree
-  // before handing CDP control to whatever answers on that port.
+  // `isAlive(pid)` alone is not enough here: pids are recycled and ports are
+  // inherited. Require pid + port + profile to agree before handing CDP control
+  // to whatever answers on that port.
   const inv = await inspectSession(meta);
   if (inv.ownership === 'ghost') throw new ChromeNotRunning(name, meta.pid);
   if (inv.ownership !== 'ours') throw new SessionNotOwned(name, inv.resolvedPort, inv.reason);
