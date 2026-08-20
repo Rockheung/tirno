@@ -161,7 +161,10 @@ run('stats', ['stats']);
 // ── 멀티세션
 run('new (2번째 세션)', ['new', 'smoke2', '--ephemeral', PAGE, ...LAUNCH]);
 run('diff', ['diff', 'smoke', 'smoke2', '--out', `${OUT}/diff.png`], { timeout: 120_000 });
-run('broadcast', ['broadcast', 'eval', 'document.title'], { timeout: 120_000 });
+// The argument carries a space, comma and parens on purpose. `document.title`
+// alone survives a shell, so it passed for months while every real
+// expression died on `sh -c` before reaching a page.
+run('broadcast', ['broadcast', 'eval', 'document.title.slice(0, 5)'], { timeout: 120_000 });
 run('kill smoke2', ['kill', 'smoke2', '--clean']);
 
 // ── screencast
