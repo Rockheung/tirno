@@ -22,7 +22,17 @@ export function getDevice(name: string) {
 }
 
 export async function applyEmulation(page: Page, emu: EmulationState): Promise<void> {
-  if (!emu.device && !emu.viewport && !emu.network && emu.cpu === undefined) return;
+  if (
+    !emu.device &&
+    !emu.viewport &&
+    !emu.network &&
+    emu.cpu === undefined &&
+    emu.userAgent === undefined &&
+    emu.colorScheme === undefined &&
+    emu.geolocation === undefined
+  ) {
+    return;
+  }
 
   if (emu.device) {
     const device = getDevice(emu.device);
@@ -54,6 +64,29 @@ export async function applyEmulation(page: Page, emu: EmulationState): Promise<v
       deviceScaleFactor: emu.viewport.deviceScaleFactor,
       isMobile: emu.viewport.mobile,
       hasTouch: emu.viewport.mobile,
+    });
+  }
+
+  // UA / color-scheme / geolocation must go through puppeteer's main page session
+  // — page.createCDPSession() overrides are released on detach, so they don't
+  // persist after `tirno emulate` exits.
+  if (emu.userAgent !== undefined) {
+    await page.setUserAgent(emu.userAgent);
+  }
+  if (emu.colorScheme !== undefined) {
+    await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: emu.colorScheme }]);
+  }
+  if (emu.geolocation !== undefined) {
+    // Permission must be granted on the browser context for navigator.geolocation
+    // to actually return the override (otherwise "User denied").
+    try {
+      const origin = new URL(page.url()).origin;
+      await page.browserContext().overridePermissions(origin, ['geolocation']);
+    } catch { /* best-effort — page may be at chrome:// or about:blank */ }
+    await page.setGeolocation({
+      latitude: emu.geolocation.latitude,
+      longitude: emu.geolocation.longitude,
+      accuracy: emu.geolocation.accuracy,
     });
   }
 
@@ -93,6 +126,8 @@ export async function clearEmulation(page: Page): Promise<void> {
       latency: 0,
     });
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await cdp.send('Emulation.setEmulatedMedia', { media: '', features: [] });
+    await cdp.send('Emulation.clearGeolocationOverride');
   } finally {
     await cdp.detach();
   }

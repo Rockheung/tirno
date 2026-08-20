@@ -214,28 +214,70 @@ export function registerInspectCommands(program: Command): void {
 
   program
     .command('console')
-    .description('List console messages (requires active CDP listener)')
+    .description('List console messages (one-shot capture window; use --reload to re-trigger page-load logs)')
     .option('-s, --session <name>', 'Session name')
     .option('--type <type>', 'Filter by type (log|error|warn|info)')
     .option('--limit <n>', 'Max messages', intArg, 50)
+    .option('--show <id>', 'Print full detail of the message at zero-based index <id>', intArg)
+    .option('--json', 'Output as JSON array')
+    .option('--reload', 'Reload the page while listening — captures on-load console output')
+    .option('--ms <n>', 'Listener window in ms (default 500)', intArg, 500)
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
-        // listen for messages during a brief period
-        const messages: Array<{ type: string; text: string }> = [];
+        interface FullMsg {
+          id: number;
+          type: string;
+          text: string;
+          location?: { url?: string; lineNumber?: number; columnNumber?: number };
+          args?: string[];
+          stackFrames?: Array<{ url?: string; lineNumber?: number; columnNumber?: number }>;
+        }
+
+        const messages: FullMsg[] = [];
         const listener = (msg: import('puppeteer-core').ConsoleMessage) => {
           if (opts.type && msg.type() !== opts.type) return;
-          messages.push({ type: msg.type(), text: msg.text() });
+          const loc = msg.location();
+          const stack = msg.stackTrace().map(f => ({
+            url: f.url, lineNumber: f.lineNumber, columnNumber: f.columnNumber,
+          }));
+          messages.push({
+            id: messages.length,
+            type: msg.type(),
+            text: msg.text(),
+            location: { url: loc.url, lineNumber: loc.lineNumber, columnNumber: loc.columnNumber },
+            args: msg.args().map(a => String(a)),
+            stackFrames: stack.length ? stack : undefined,
+          });
         };
 
         page.on('console', listener);
-        // evaluate a no-op to trigger any pending console flush
-        await page.evaluate(() => void 0);
-        await new Promise(r => setTimeout(r, 500));
+        if (opts.reload) {
+          await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+        } else {
+          await page.evaluate(() => void 0);
+        }
+        await new Promise(r => setTimeout(r, opts.ms));
         page.off('console', listener);
         browser.disconnect();
+
+        if (opts.show !== undefined) {
+          const idx = Number(opts.show);
+          const m = messages[idx];
+          if (!m) {
+            error(`No console message at index ${idx} (captured ${messages.length})`);
+            process.exit(1);
+          }
+          console.log(JSON.stringify(m, null, 2));
+          return;
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify(messages.slice(0, opts.limit), null, 2));
+          return;
+        }
 
         if (messages.length === 0) {
           info('No console messages captured');
@@ -244,7 +286,7 @@ export function registerInspectCommands(program: Command): void {
 
         for (const msg of messages.slice(0, opts.limit)) {
           const prefix = msg.type === 'error' ? '✗' : msg.type === 'warning' ? '⚠' : '·';
-          console.log(`${prefix} [${msg.type}] ${msg.text}`);
+          console.log(`${String(msg.id).padStart(3)} ${prefix} [${msg.type}] ${msg.text}`);
         }
       } catch (e) {
         error((e as Error).message);
@@ -254,10 +296,12 @@ export function registerInspectCommands(program: Command): void {
 
   program
     .command('network')
-    .description('List recent network requests (captures for 2s)')
+    .description('List recent network requests (reloads + captures; --show <id> for full detail incl. body)')
     .option('-s, --session <name>', 'Session name')
     .option('--type <type>', 'Filter by resource type')
     .option('--limit <n>', 'Max requests', intArg, 50)
+    .option('--show <id>', 'Print full detail (headers + body) of the request at zero-based index <id>', intArg)
+    .option('--json', 'Output as JSON array')
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -266,40 +310,112 @@ export function registerInspectCommands(program: Command): void {
         const cdp = await page.createCDPSession();
         await cdp.send('Network.enable');
 
-        const requests: Array<{ url: string; method: string; status: number; type: string }> = [];
-        const pending = new Map<string, { url: string; method: string; type: string }>();
+        interface FullReq {
+          id: number;
+          requestId: string;
+          url: string;
+          method: string;
+          status: number;
+          type: string;
+          requestHeaders?: Record<string, string>;
+          responseHeaders?: Record<string, string>;
+          postData?: string;
+          mimeType?: string;
+        }
+
+        const completed: FullReq[] = [];
+        const pending = new Map<string, Partial<FullReq>>();
 
         cdp.on('Network.requestWillBeSent', (params) => {
-          const req = params as unknown as { requestId: string; request: { url: string; method: string }; type: string };
-          pending.set(req.requestId, { url: req.request.url, method: req.request.method, type: req.type });
+          const req = params as unknown as {
+            requestId: string;
+            request: { url: string; method: string; headers: Record<string, string>; postData?: string };
+            type: string;
+          };
+          pending.set(req.requestId, {
+            requestId: req.requestId,
+            url: req.request.url,
+            method: req.request.method,
+            type: req.type,
+            requestHeaders: req.request.headers,
+            postData: req.request.postData,
+          });
         });
 
         cdp.on('Network.responseReceived', (params) => {
-          const resp = params as unknown as { requestId: string; response: { status: number }; type: string };
-          const req = pending.get(resp.requestId);
-          if (req) {
-            requests.push({ ...req, status: resp.response.status, type: resp.type });
+          const resp = params as unknown as {
+            requestId: string;
+            response: { status: number; headers: Record<string, string>; mimeType: string };
+            type: string;
+          };
+          const partial = pending.get(resp.requestId);
+          if (partial) {
+            const full: FullReq = {
+              id: completed.length,
+              requestId: partial.requestId!,
+              url: partial.url!,
+              method: partial.method!,
+              status: resp.response.status,
+              type: resp.type,
+              requestHeaders: partial.requestHeaders,
+              responseHeaders: resp.response.headers,
+              mimeType: resp.response.mimeType,
+              postData: partial.postData,
+            };
+            completed.push(full);
             pending.delete(resp.requestId);
           }
         });
 
         // reload to capture requests
         await page.reload({ waitUntil: 'networkidle2' }).catch(() => {});
+
+        let filtered = completed;
+        if (opts.type) {
+          filtered = completed.filter(r => r.type.toLowerCase() === opts.type.toLowerCase());
+        }
+
+        if (opts.show !== undefined) {
+          const idx = Number(opts.show);
+          const r = filtered[idx];
+          if (!r) {
+            await cdp.detach();
+            browser.disconnect();
+            error(`No request at index ${idx} (captured ${filtered.length})`);
+            process.exit(1);
+          }
+          let body: string | undefined;
+          let bodyBase64 = false;
+          let bodyError: string | undefined;
+          try {
+            const res = await cdp.send('Network.getResponseBody', { requestId: r.requestId }) as { body: string; base64Encoded: boolean };
+            body = res.body;
+            bodyBase64 = res.base64Encoded;
+          } catch (e) {
+            bodyError = (e as Error).message;
+          }
+          await cdp.detach();
+          browser.disconnect();
+          console.log(JSON.stringify({ ...r, body, bodyBase64, bodyError }, null, 2));
+          return;
+        }
+
         await cdp.detach();
         browser.disconnect();
 
-        let filtered = requests;
-        if (opts.type) {
-          filtered = requests.filter(r => r.type.toLowerCase() === opts.type.toLowerCase());
+        if (opts.json) {
+          console.log(JSON.stringify(filtered.slice(0, opts.limit), null, 2));
+          return;
         }
 
         const rows = filtered.slice(0, opts.limit).map(r => [
+          String(r.id).padStart(3),
           r.method,
           String(r.status),
           r.type,
           r.url.slice(0, 80),
         ]);
-        console.log(formatTable(['METHOD', 'STATUS', 'TYPE', 'URL'], rows));
+        console.log(formatTable(['ID', 'METHOD', 'STATUS', 'TYPE', 'URL'], rows));
         info(`${filtered.length} requests captured`);
       } catch (e) {
         error((e as Error).message);
