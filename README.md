@@ -90,11 +90,17 @@ tirno drift d1 -- --host-resolver-rules="…"   # 지금 원하는 flags vs 실�
 ```
 
 ```
-→ changed  --host-resolver-rules: expected MAP example.com 10.0.0.1,
-                                  running  MAP example.com 127.0.0.1
+→ changed  --host-resolver-rules: expected MAP example.com 10.0.0.1, running MAP example.com 127.0.0.1
 ✗ 'd1' has drifted. Chrome only reads these at launch — restart to apply:
-→   tirno restart d1 -- --host-resolver-rules='MAP example.com 10.0.0.1'
+→   tirno restart d1 https://example.com --headless --ephemeral -- --host-resolver-rules='MAP example.com 10.0.0.1'
 ```
+
+제안 명령은 그대로 복붙하면 된다 — headless 여부·ephemeral 프로필·시작 URL·group 을
+모두 실어 보내므로 세션의 성격이 바뀌지 않는다.
+
+값에 `" --"` 가 든 플래그(`--user-agent="tirno --probe"` 등)는 `ps` 출력에서 되읽을 수
+없어 `unreadable` 로 따로 보고하고 drift 로 세지 않는다. 거짓 일치도 아니고, 재기동해도
+풀리지 않는 거짓 drift 도 아니다.
 
 차이가 있으면 **exit 1** 이라 자동화에서 게이트로 쓸 수 있다. 재기동 비용은 앵커 방식에서
 사실상 0 이다 — 포트 경합 없고, 프로필이 영속이라 로그인이 유지되고, MCP 는 다음 툴
@@ -182,12 +188,15 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 ### 성능
 | 명령 | 설명 |
 |---|---|
-| `trace --duration <s>` | chrome://tracing 호환 JSON |
-| `memory` | heap snapshot |
 | `stall [--window <s>]` | 메인스레드가 포화됐나, 무엇이 먹나. 렌더러 밖(브라우저 타깃)에서 재므로 페이지가 멈춰 DevTools 가 안 열려도 계속 관측된다 |
+| `audit [url]` | Lighthouse. 세션의 chrome 을 재사용한다 |
+| `trace --duration <s>` | chrome://tracing 호환 JSON |
+| `trace start`·`stop`·`insight <path>` | 상주 워커로 구간 트레이스, LCP / FCP / CLS / long task 추출 |
+| `memory` · `memory load <p>` · `memory details <p>` | heap snapshot, 요약, 타입별 retained size |
+| `screencast start`·`stop` | 프레임 연속 캡처 |
 | `diff <s1> <s2>` | 두 세션 시각 diff (pixelmatch) |
 
-### Visual cache (Phase 6-1, viewport-aware)
+### Visual cache (viewport-aware)
 | 명령 | 설명 |
 |---|---|
 | `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록 |
@@ -196,7 +205,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 
 저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
 
-### Vision OCR (Phase 6-2)
+### Vision OCR
 | 명령 | 설명 |
 |---|---|
 | `vision ocr [--backend <name>] [--lang <l>] [--full] [--out <path>] [--min-confidence <n>] [--paddle-models <dir>]` | 페이지 OCR — 단어/줄별 bbox + confidence |
@@ -250,6 +259,12 @@ ISC
 
 작업 일지는 [docs/JOURNAL.md](docs/JOURNAL.md), 비교 도구 리서치는 [docs/RESEARCH.md](docs/RESEARCH.md).
 
-진행 중인 설계 — **anchor broker** (브라우저 MCP 접속 대상을 포트가 아닌 디렉토리로,
-소유권을 관찰로 판정): [docs/research-anchor-broker.md](docs/research-anchor-broker.md) ·
-[docs/plan-anchor-broker.md](docs/plan-anchor-broker.md) (Gate 1·2·3 통과 — Stage 1 착수 가능)
+**anchor broker** — 브라우저 MCP 접속 대상을 포트가 아닌 디렉토리로, 소유권을 관찰로
+판정. Gate 1~4 · Stage 1~5 모두 반영됐다(앵커 · 소유권 · gc · drift).
+설계 문서: [docs/research-anchor-broker.md](docs/research-anchor-broker.md) ·
+[docs/plan-anchor-broker.md](docs/plan-anchor-broker.md).
+
+chrome-devtools-mcp 와의 도구 대조는
+[docs/research-chrome-devtools-mcp-mapping.md](docs/research-chrome-devtools-mcp-mapping.md),
+다른 엔진(Firefox / Safari) 지원 검토는
+[docs/research-multi-browser.md](docs/research-multi-browser.md).

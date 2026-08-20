@@ -46,6 +46,14 @@ export interface DriftReport {
   missing: FlagChange[];
   /** present in both, with different values */
   changed: FlagChange[];
+  /**
+   * Declared with a value containing ` --`, which `parseFlags` cannot read back
+   * whole. The visible prefix agrees, so nothing is known to differ — and
+   * nothing can be confirmed either. Not drift: a restart would relaunch the
+   * same command line and land here again, so calling it drift is an
+   * instruction to loop forever.
+   */
+  unverifiable: FlagChange[];
   hasDrift: boolean;
 }
 
@@ -58,6 +66,7 @@ export interface DriftReport {
 export function diffFlags(expected: string[], actual: Map<string, string | null>): DriftReport {
   const missing: FlagChange[] = [];
   const changed: FlagChange[] = [];
+  const unverifiable: FlagChange[] = [];
 
   for (const raw of expected) {
     if (!raw.startsWith('--')) continue;         // start URLs and other positionals
@@ -70,10 +79,20 @@ export function diffFlags(expected: string[], actual: Map<string, string | null>
       continue;
     }
     const got = actual.get(flag) ?? null;
-    if (got !== want) changed.push({ flag, expected: want, actual: got });
+    if (got === want) continue;
+
+    // The declared value carries the ` --` that parseFlags cuts on, so `got` is
+    // at best its prefix. A matching prefix is the most agreement this command
+    // line can express — report it as unreadable rather than as a difference.
+    const cut = want === null ? -1 : want.search(/\s--/);
+    if (cut >= 0 && got === want!.slice(0, cut)) {
+      unverifiable.push({ flag, expected: want, actual: got });
+      continue;
+    }
+    changed.push({ flag, expected: want, actual: got });
   }
 
-  return { missing, changed, hasDrift: missing.length > 0 || changed.length > 0 };
+  return { missing, changed, unverifiable, hasDrift: missing.length > 0 || changed.length > 0 };
 }
 
 export interface SessionDrift extends DriftReport {
@@ -119,7 +138,7 @@ export async function inspectDrift(meta: SessionMetadata, expected?: string[]): 
   // nothing about which positionals this browser was launched with.
   const report = cmdline
     ? diffFlags(want, parseFlags(stripPositionals(cmdline, meta.chromeFlags)))
-    : { missing: [], changed: [], hasDrift: false };
+    : { missing: [], changed: [], unverifiable: [], hasDrift: false };
 
   return {
     ...report,

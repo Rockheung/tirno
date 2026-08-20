@@ -68,8 +68,10 @@ tirno close-tab <id>               # 탭 닫기
 ```bash
 tirno screenshot [--out path] [--full] [--format png|jpeg|webp]
 tirno snapshot [--verbose]         # a11y 트리. 노드마다 @N ref 부여, ~/.tirno/refs/<session>.json에 저장
-tirno console [--type error|warn]  # 콘솔 메시지 (stateless 한계 — 캡처 시점만)
+tirno console [--type error|warn] [--reload] [--ms <n>]   # 리스너 창 동안의 콘솔
+tirno console --show <id>          # 그 메시지 하나를 전문으로
 tirno network [--type xhr|fetch]   # 네트워크 요청 (reload 하고 networkidle2 까지 캡처)
+tirno network show <id>            # 그 요청의 헤더·본문
 ```
 
 ### 입력
@@ -80,6 +82,7 @@ tirno fill <selector|@N> <value>
 tirno type <text> [--delay ms]
 tirno press <key>                       # Enter, Tab, Escape, ArrowDown...
 tirno hover <selector>
+tirno drag <from> <to>                  # 좌표 "x,y" 또는 selector (자동 판별)
 tirno upload <selector> <files...>
 tirno scroll <up|down|<pixels>> [--step <px>]
 tirno wait <ms>                         # 단순 sleep
@@ -108,18 +111,63 @@ tirno emulate --list-devices        # 프리셋 목록
 
 emulation 상태는 `SessionMetadata.emulation`에 저장되어 connect마다 자동 재적용 (`page.emulate()` 사용으로 UA/touch도 새 connection에서 유지).
 
-### 성능
+### 성능 · 진단
 
 ```bash
-tirno trace [--duration <s>] [--out <path>]   # 단일 명령으로 N초간 트레이스 후 저장 (기본 5초)
-tirno memory [--out path]                      # 힙 스냅샷 (DevTools Memory 탭에서 열기)
+tirno stall [--window <s>] [--json]           # 메인스레드가 포화됐나. 렌더러 밖에서 잰다
+tirno audit [url] [--categories <list>]       # Lighthouse. 세션의 chrome 을 재사용한다
+
+tirno trace [--duration <s>] [--out <path>]   # 고정 시간 트레이스 후 저장
+tirno trace start [path]                      # 상주 워커로 시작 (stop 까지 계속)
+tirno trace stop <path>                       # 중단하고 trace.json 확정
+tirno trace insight <path>                    # LCP / FCP / CLS / long task 추출
+
+tirno memory [--out <path>]                   # 힙 스냅샷
+tirno memory load <path>                      # 스냅샷 요약 통계
+tirno memory details <path>                   # 타입별 집계 — retained size 상위 클래스
+
+tirno screencast start [--out <dir>]          # 프레임 연속 캡처 (분리 프로세스)
+tirno screencast stop                         # 중단하고 index.json 확정
 ```
+
+`stall` 은 페이지가 먹통일 때 **쓰라고 있는 명령**이다. 다른 명령들이 렌더러에 물려
+매달리는 상황에서도 계속 보고한다 — 브라우저 타깃에 별도 소켓으로 붙고, 렌더러로
+가는 모든 호출에 데드라인을 건다.
 
 ### 멀티세션
 
 ```bash
-tirno diff <s1> <s2> [--out path]   # 두 세션 스크린샷 시각 비교 (pixelmatch)
-tirno broadcast <command> [args]    # 모든 세션에 명령 실행
+tirno diff <s1> <s2> [--out path]     # 두 세션 스크린샷 시각 비교 (pixelmatch)
+tirno broadcast [--group <g>] <cmd>   # 여러 세션에 같은 명령
+```
+
+`--group` 없는 `broadcast` 는 **모든 세션**에 간다.
+
+### 자율 흐름 — cache · trail · 지능요청
+
+가치 흐름(CLAUDE.md) 1~5번을 그대로 명령으로 옮긴 것들이다. 위에서 아래로 갈수록
+비결정론적이고 비싸다.
+
+```bash
+tirno cache list|load|prune           # 1번. URL·viewport 키 스냅샷 저장소
+tirno vision ocr [--backend <b>]      # 2번. OCR 채널 (기본 paddle, 로컬)
+tirno cdp <method> [params]           # 3번. 모든 CDP 명령 raw passthrough
+tirno ask <goal>                      # 4번. 단발 LLM 질의
+tirno explore <goal>                  # 4번. cache → 채널 → CDP → LLM 자율 탐색
+tirno trail capture|ls|show           # 5번. 마지막 보루 — 사용자 시연을 받는다
+tirno record start|stop               # 사용자 입력 캡처
+tirno replay <name>                   # 신뢰 이벤트로 재생. 채널 순서대로 폴백
+```
+
+**지능 백엔드는 claude 하나뿐이다.** `--backend openai|gemini` 는 인자로 받지만
+`dispatcher.ts` 가 "not yet implemented" 로 던진다. vision 의 cloud 백엔드 3종도 stub 이고
+실제로 도는 것은 로컬 paddle 이다.
+
+### 부수
+
+```bash
+tirno auth set|get|ls|rm <key>   # API 키를 OS 키체인에. env 가 항상 우선한다
+tirno stats                      # ~/.tirno/metrics.jsonl 집계
 ```
 
 ## 세션 메타데이터

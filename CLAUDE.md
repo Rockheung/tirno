@@ -53,13 +53,16 @@ node bin/tirno.js kill test --clean
 
 ## 구조
 
-- `src/core/` — 세션 저장, Chrome 실행/연결, 프로세스 관리, ref store, 그리고 앵커 브로커
-  (`anchor-store` · `inventory`(소유권 판정) · `devtools-port` · `gc` · `drift` · `path-guard`)
+- `src/core/` — 세션 저장, Chrome 실행/연결, 프로세스 관리, ref store, 키체인, 메트릭,
+  그리고 앵커 브로커 (`anchor-store` · `inventory`(소유권 판정) · `devtools-port` · `gc` ·
+  `drift` · `path-guard`)
 - `src/commands/` — CLI 명령. 파일명은 카테고리이지 명령 이름이 아니다 (`inspect.ts` 는
   screenshot/snapshot/console/network 를 등록한다 — `tirno inspect` 라는 명령은 없다)
 - `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash
-- `src/intelligence/` — LLM 백엔드(claude/openai/gemini), 임베딩, 재시도·비용 상한
-- `src/vision/` — OCR 백엔드와 a11y 증강
+- `src/intelligence/` — LLM 백엔드, 임베딩, 재시도·비용 상한. `backends/` 에는 **`claude.ts`
+  하나뿐이다** — openai·gemini 는 파일조차 없고 `dispatcher.ts` 가 던진다
+- `src/vision/` — OCR 백엔드와 a11y 증강. 실제로 도는 것은 로컬 `paddle` 이고,
+  `claude`·`openai`·`gemini` 는 파일은 있으나 전부 stub 이다 (`florence` 는 실험)
 - `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
 - `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
 - `src/util/` — 에러 타입, 인자 파서
