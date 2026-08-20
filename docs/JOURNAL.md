@@ -309,6 +309,49 @@ interface CacheEntry {
 
 ---
 
+### Trail 모델 + 가치 흐름 정정 (PR #22)
+
+#### 의도
+
+행동 시퀀스 (goal + steps) 데이터 모델 + replay 명령. **그러나 사용자 정정**으로 강조점이 바뀜:
+
+> 사용자 1회 시연은 정말 tirno 자신이 형편없게 느껴질 때, 마지막 책임감으로 어렵게 부탁하는 케이스다.
+
+내가 PR plan을 잘못 잡았음. "사용자 시연 → 자동 재현"을 메인으로 강조했던 건 잘못. **메인 가치는 자율 탐색**. 사용자 시연은 마지막 fallback.
+
+#### 정정된 가치 흐름 (CLAUDE.md 명문화)
+
+```
+1. cache lookup                        — 결정론, ms 단위
+2. multi-channel fallback              — 결정론, ms 단위
+   (selector → a11y → bbox → ocr)
+3. CDP 직접 분석 + 자율 시도           — agent 페이지 분석
+4. LLM (지능요청) + RAG retrieval      — 비결정론 보강
+─────── 위 모두 실패 ───────
+5. tirno trail capture <name>          — 사용자 시연. 마지막 보루.
+```
+
+`record / replay / trail capture`는 5번. tirno 메인은 1~4. 메인이 강해질수록 5번 빈도 ↓ — self-journaling의 진짜 의의.
+
+#### 구현 (PR scope)
+
+- `src/core/trail-store.ts` (신규) — Trail / TrailStep / matchStats / active-trail marker
+- `src/commands/trail.ts` (신규):
+  - `trail capture <name>` — **fallback only** 명시적 표시 + warning
+  - `trail save` — record 종료 + trail 저장
+  - `trail list / show / replay / rm`
+  - `trail replay`는 multi-channel fallback chain (selector → a11y → bbox → event.xy) + matchStats 누적
+- 명령 이름을 `start`가 아닌 `capture`로 — "사용자 시연" 의미 명확화
+- 자율 탐색 path는 #29 (`tirno explore`) PR에서 같은 trail-store 활용
+
+#### 새 task — #29 `tirno explore`
+
+자율 탐색 명령. cache → multi-channel → CDP → LLM 순 시도. 성공 시 trail로 저장. **이게 tirno 메인 흐름**.
+
+#18 (지능요청) + #21 (RAG) 머지 후 #29 진행.
+
+---
+
 ### record/replay multi-channel + fallback chain (PR #21)
 
 #### 의도
