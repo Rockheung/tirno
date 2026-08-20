@@ -49,6 +49,32 @@ export function positionalUrl(
   return beforeSeparator.includes(urlArg) ? urlArg : undefined;
 }
 
+
+/**
+ * `kill` refuses to touch a process it cannot prove is ours, but `new --force`
+ * and `restart` were sending SIGTERM to the ledger's pid outright — the same
+ * hole the ownership check exists to close, since a recycled pid belongs to
+ * someone else by then. Verified: a session whose pid had been taken over was
+ * reported `foreign`, `kill` refused it, and `restart` killed it anyway.
+ *
+ * Refusing the whole command is the wrong answer here — `tirno drift` tells
+ * people to run `restart`, so that path has to keep working. Leave the stranger
+ * alone and build the new session anyway; the old entry was only ever a label.
+ *
+ * Returns whether the old browser was actually ours, because the profile
+ * directory must not be deleted either when it was not.
+ */
+async function killIfOurs(meta: store.SessionMetadata, verb: string): Promise<boolean> {
+  const inv = await inspectSession(meta);
+  if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
+    info(`Leaving pid ${meta.pid} alone — ${inv.ownership}: ${inv.reason}`);
+    info(`${verb} continues with a fresh browser; the old entry was a stale label.`);
+    return false;
+  }
+  try { await killAndWait(meta.pid); } catch { /* already dead */ }
+  return true;
+}
+
 export function registerSessionCommands(program: Command): void {
   const newCmd = program
     .command('new')
@@ -84,10 +110,10 @@ export function registerSessionCommands(program: Command): void {
             `Session '${name}' already exists. Use --force to kill and re-create with new flags.`
           );
         }
-        try { await killAndWait(existing.pid); } catch { /* already dead */ }
-        if (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir())) {
+        const wasOurs = await killIfOurs(existing, '--force');
+        if (wasOurs && (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir()))) {
           fs.rmSync(existing.userDataDir, { recursive: true, force: true });
-        } else {
+        } else if (wasOurs) {
           // Chrome leaves SingletonLock symlinks pointing to dead pids; new
           // launch on the same user-data-dir hangs waiting for them.
           for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
@@ -156,8 +182,8 @@ export function registerSessionCommands(program: Command): void {
         let existing: store.SessionMetadata | null = null;
         try { existing = store.get(name); } catch { /* none */ }
         if (existing) {
-          try { await killAndWait(existing.pid); } catch { /* dead */ }
-          if (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir())) {
+          const wasOurs = await killIfOurs(existing, 'restart');
+          if (wasOurs && (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir()))) {
             fs.rmSync(existing.userDataDir, { recursive: true, force: true });
           }
           store.remove(name);
