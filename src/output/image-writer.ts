@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { underRoot } from '../core/paths.js';
 
-const TMP_DIR = path.join(os.homedir(), '.tirno', 'tmp');
+function tmpDir(): string {
+  return underRoot('tmp');
+}
 
 function ensureTmpDir(): void {
-  fs.mkdirSync(TMP_DIR, { recursive: true });
+  fs.mkdirSync(tmpDir(), { recursive: true });
 }
 
 export function writeScreenshot(buffer: Buffer, outPath?: string, format = 'png'): string {
@@ -19,7 +21,7 @@ export function writeScreenshot(buffer: Buffer, outPath?: string, format = 'png'
   ensureTmpDir();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = `screenshot-${timestamp}.${format}`;
-  const filepath = path.join(TMP_DIR, filename);
+  const filepath = path.join(tmpDir(), filename);
   fs.writeFileSync(filepath, buffer);
   return filepath;
 }

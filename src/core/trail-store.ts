@@ -4,17 +4,17 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import type { RecordedEvent } from './record-store.js';
+import { underRoot } from './paths.js';
 
 function trailsDir(): string {
-  const dir = process.env.TIRNO_TRAILS_DIR ?? path.join(os.homedir(), '.tirno', 'trails');
+  const dir = process.env.TIRNO_TRAILS_DIR ?? underRoot('trails');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function activeTrailFile(): string {
-  return path.join(os.homedir(), '.tirno', 'active-trail.json');
+  return underRoot('active-trail.json');
 }
 
 export interface TrailStep {

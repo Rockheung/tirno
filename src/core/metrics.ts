@@ -8,7 +8,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { underRoot } from './paths.js';
 
 // `trail.replay` is the only event anything emits. Kinds are not declared
 // ahead of a caller — cache.* and trail.save sat here for months describing
@@ -29,7 +29,7 @@ export interface MetricEvent {
 }
 
 function metricsFile(): string {
-  return process.env.TIRNO_METRICS_FILE ?? path.join(os.homedir(), '.tirno', 'metrics.jsonl');
+  return process.env.TIRNO_METRICS_FILE ?? underRoot('metrics.jsonl');
 }
 
 function enabled(): boolean {

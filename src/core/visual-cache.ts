@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import crypto from 'node:crypto';
+import { underRoot } from './paths.js';
 
 function cacheDir(): string {
-  return process.env.TIRNO_CACHE_DIR ?? path.join(os.homedir(), '.tirno', 'visual-cache');
+  return process.env.TIRNO_CACHE_DIR ?? underRoot('visual-cache');
 }
 
 export interface Bbox {

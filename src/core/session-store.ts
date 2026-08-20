@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { SessionNotFound, SessionAlreadyExists } from '../util/errors.js';
+import { tirnoDir } from './paths.js';
 
 export interface EmulationState {
   device?: string;
@@ -57,16 +57,6 @@ export interface SessionMetadata {
    * begin" once the flow navigates. The CLI keeps that here instead.
    */
   recording?: { startUrl: string; startedAt: string };
-}
-
-/**
- * Resolved per call, not once at import: `TIRNO_DIR` lets tests point the whole
- * store at a temp directory, and gc/anchor tests must never run against a real
- * `~/.tirno` — they delete profiles, which are logged-in browser sessions.
- * Same escape hatch as `TIRNO_CACHE_DIR` for the visual cache.
- */
-function tirnoDir(): string {
-  return process.env.TIRNO_DIR ?? path.join(os.homedir(), '.tirno');
 }
 
 function sessionsRoot(): string {

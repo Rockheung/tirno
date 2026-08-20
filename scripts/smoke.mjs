@@ -27,11 +27,9 @@ const chromeArgs = process.env.CHROME ? ['--executable-path', process.env.CHROME
 // 세션을 여는 모든 자리에 같은 인자를 준다 — 하나라도 빠지면 CI 에서 그 세션만 죽는다.
 const LAUNCH = ['--headless', ...chromeArgs, ...(extraFlags.length ? ['--', ...extraFlags] : [])];
 
-// 격리 — TIRNO_DIR 은 세션 장부(sessions/profiles/anchors)만 덮는다. recordings ·
-// trails · visual-cache · metrics 는 각자 다른 env 변수를 읽고, 기본값이 진짜
-// ~/.tirno 다. 하나라도 빼먹으면 스모크가 사용자의 캐시를 prune 하고 recordings 를
-// 지운다. (refs/ 와 active-trail.json 은 오버라이드 자체가 없어 격리 불가 — 끝의
-// 격리 검사가 그 누출을 알려진 결함으로 표시하고, 스모크 몫은 직접 걷어낸다.)
+// 격리 — TIRNO_DIR 하나가 모든 저장소를 옮긴다. 그래도 저장소별 env 를 함께 거는
+// 것은, 그 변수들이 루트보다 우선하기 때문이다 — 셸에 하나라도 걸려 있으면 스모크가
+// 그쪽을 쓴다. 끝의 격리 검사가 실제 ~/.tirno 를 전후 비교해 이 전제를 지킨다.
 const ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'tirno-smoke-'));
 const env = {
   ...process.env,
@@ -484,12 +482,11 @@ function main() {
   }
 
   // ── 격리 — 스모크는 실제 ~/.tirno 에 아무것도 남기면 안 된다.
-  // refs/ 와 active-trail.json 은 TIRNO_DIR 오버라이드가 없어 지금은 샌다. 실측된 결함.
+  // 빈 디렉터리 생성도 누출로 센다 — 저장소 하나가 루트 밖으로 새면 그 흔적부터 나온다.
   const escaped = lsTree(HOME_TIRNO).filter(p => !homeBefore.has(p));
   check('격리 — 실제 ~/.tirno 에 새 파일이 없다', escaped.length === 0,
-    `누출: ${escaped.join(', ').slice(0, 140)}`,
-    { known: 'refs/·active-trail.json 은 TIRNO_DIR 을 안 따른다' });
-  // 스모크 몫의 누출은 직접 걷어낸다 — 이 스모크가 만든 것이 확실한 경로만.
+    `누출: ${escaped.join(', ').slice(0, 140)}`);
+  // 실패해도 사용자 홈은 원래대로 돌려놓는다 — 이 스모크가 만든 것이 확실한 경로만.
   for (const rel of escaped) {
     if (/^refs\/(smoke|smoke2|smoke-renamed|smokefixed)\.json$/.test(rel) || rel === 'active-trail.json') {
       fs.rmSync(path.join(HOME_TIRNO, rel), { force: true });

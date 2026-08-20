@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { underRoot } from './paths.js';
 
 function recordingsDir(): string {
-  const dir = process.env.TIRNO_RECORDINGS_DIR ?? path.join(os.homedir(), '.tirno', 'recordings');
+  const dir = process.env.TIRNO_RECORDINGS_DIR ?? underRoot('recordings');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
