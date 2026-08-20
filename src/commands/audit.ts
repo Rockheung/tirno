@@ -16,7 +16,7 @@ export function registerAuditCommand(program: Command): void {
     .description('Run a Lighthouse audit against the active session (accessibility / seo / best-practices / perf)')
     .argument('[url]', 'URL to audit (defaults to active page URL)')
     .option('-s, --session <name>', 'Session name')
-    .option('--mode <mode>', 'navigation | snapshot | timespan', 'navigation')
+    .option('--mode <mode>', 'navigation | snapshot (timespan is split start/stop — not wired yet)', 'navigation')
     .option('--device <device>', 'desktop | mobile', 'desktop')
     .option('--categories <list>', 'Comma-separated subset: accessibility,seo,best-practices,performance,pwa')
     .option('--out <path>', 'HTML report output path')

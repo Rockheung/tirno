@@ -50,7 +50,7 @@ export function registerAskCommand(program: Command): void {
       '결정론(cache + multi-channel)이 막혔을 때만 호출 — 비용/지연이 있다.'
     )
     .option('-s, --session <name>', 'Session name')
-    .option('--backend <name>', 'Intelligence backend (claude|openai|gemini)', 'claude')
+    .option('--backend <name>', 'Intelligence backend — only "claude" is implemented', 'claude')
     .option('--no-screenshot', 'Skip screenshot (cheaper, less accurate)')
     .option('--no-a11y', 'Skip a11y tree dump')
     .option('--ax-lines <n>', 'Max a11y dump lines', (v: string) => parseInt(v, 10), 200)
