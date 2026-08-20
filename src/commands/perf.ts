@@ -1,12 +1,27 @@
 import { Command } from 'commander';
 import { floatArg, intArg } from '../util/parsers.js';
 import fs from 'node:fs';
+import path from 'node:path';
 import zlib from 'node:zlib';
+import { spawn } from 'node:child_process';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
+import * as store from '../core/session-store.js';
 
 import { success, info, error } from '../output/formatter.js';
 import { formatTable } from '../output/formatter.js';
+
+function resolveSession(name?: string): store.SessionMetadata {
+  if (name) return store.get(name);
+  const active = store.getActive();
+  if (!active) throw new Error('No active session — pass --session or run `tirno attach`');
+  return store.get(active);
+}
+
+function pidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true; }
+  catch { return false; }
+}
 
 interface TraceEvent {
   cat?: string;
@@ -117,6 +132,99 @@ export function registerPerfCommands(program: Command): void {
         const outPath = opts.out ?? `/tmp/tirno-trace-${Date.now()}.json`;
         fs.writeFileSync(outPath, buffer);
         success(`Trace saved: ${outPath} (open in chrome://tracing)`);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  traceCmd
+    .command('start')
+    .description('Start a performance trace in a detached worker (manual stop with `trace stop`)')
+    .argument('[path]', 'Output trace file path (default: /tmp/tirno-trace-<ts>.json)')
+    .option('-s, --session <name>', 'Session name')
+    .option('--categories <list>', 'Comma-separated trace categories (override defaults)')
+    .option('--screenshots', 'Include screenshots in trace', true)
+    .option('--no-screenshots', "Don't include screenshots")
+    .action((pathArg: string | undefined, opts) => {
+      try {
+        const meta = resolveSession(opts.session);
+        const outPath = pathArg ?? `/tmp/tirno-trace-${Date.now()}.json`;
+        const pidFile = `${outPath}.pid`;
+
+        if (fs.existsSync(pidFile)) {
+          const old = Number(fs.readFileSync(pidFile, 'utf-8'));
+          if (Number.isFinite(old) && pidAlive(old)) {
+            throw new Error(`Trace already running (PID ${old}) writing to ${outPath} — run \`tirno trace stop --out ${outPath}\` first`);
+          }
+        }
+
+        const workerScript = path.join(import.meta.url.startsWith('file://')
+          ? new URL('.', import.meta.url).pathname
+          : __dirname,
+          'trace-worker.js',
+        );
+
+        const args = [
+          workerScript,
+          '--ws', meta.wsEndpoint,
+          '--out', outPath,
+          ...(opts.categories ? ['--categories', opts.categories] : []),
+          ...(opts.screenshots ? ['--screenshots'] : []),
+        ];
+        const child = spawn(process.execPath, args, {
+          detached: true,
+          stdio: ['ignore', 'ignore', fs.openSync(`${outPath}.log`, 'a')],
+        });
+        child.unref();
+
+        if (typeof child.pid !== 'number') throw new Error('Failed to spawn trace worker');
+        fs.writeFileSync(pidFile, String(child.pid));
+        success(`Trace started (PID ${child.pid}) → ${outPath}`);
+        info(`Stop with: tirno trace stop ${outPath}`);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  traceCmd
+    .command('stop')
+    .description('Stop a running trace started with `trace start`')
+    .argument('<path>', 'Trace file path (the one given to/printed by `trace start`)')
+    .action(async (pathArg: string) => {
+      try {
+        const outPath = pathArg;
+        if (!outPath) throw new Error('<path> is required (use the path printed by `trace start`)');
+        const pidFile = `${outPath}.pid`;
+        if (!fs.existsSync(pidFile)) throw new Error(`No trace worker registered for ${outPath}`);
+        const pid = Number(fs.readFileSync(pidFile, 'utf-8'));
+        if (!Number.isFinite(pid)) throw new Error('Corrupt .pid');
+
+        if (pidAlive(pid)) {
+          process.kill(pid, 'SIGTERM');
+          // tracing can hold a few MB of buffered events — give worker up to 15s
+          // to flush before escalating.
+          const deadline = Date.now() + 15000;
+          while (pidAlive(pid) && Date.now() < deadline) {
+            await new Promise(r => setTimeout(r, 100));
+          }
+          if (pidAlive(pid)) {
+            try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ }
+          }
+        }
+        try { fs.unlinkSync(pidFile); } catch { /* ok */ }
+        // worker writes <out>.started on launch and <out>.meta.json on finalize;
+        // clean up the marker but keep the meta file for reporting.
+        try { fs.unlinkSync(`${outPath}.started`); } catch { /* ok */ }
+
+        let size = 0;
+        try { size = fs.statSync(outPath).size; } catch { /* no file */ }
+        if (size === 0) {
+          info(`Trace stopped — but no data written to ${outPath} (worker may have died early; check ${outPath}.log)`);
+          return;
+        }
+        success(`Trace saved: ${outPath} (${(size / 1024).toFixed(1)} KB — analyze with \`tirno trace insight ${outPath}\`)`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
