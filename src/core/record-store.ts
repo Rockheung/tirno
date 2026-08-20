@@ -13,10 +13,20 @@ export interface RecordedEvent {
   t: number;                 // ms since start
   x?: number;
   y?: number;
-  sel?: string | null;
-  tag?: string;
   key?: string;
   value?: string | null;
+
+  // Multi-channel target identification — at least one channel populated for
+  // events with a target element. Replay tries channels in order.
+  channels?: {
+    a11y?: { role?: string; name?: string };
+    dom?:  { selector?: string; tagName?: string };
+    visual?: { bbox?: { x: number; y: number; w: number; h: number } };
+  };
+
+  // Legacy flat fields — kept for back-compat reading old recordings.
+  sel?: string | null;
+  tag?: string;
   bbox?: { x: number; y: number; w: number; h: number } | null;
 }
 
