@@ -246,7 +246,6 @@ export function registerTrailCommands(program: Command): void {
         }
 
         const cdp = await page.createCDPSession();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const send = cdp.send.bind(cdp) as any;
 
         const speed = Math.max(0.01, opts.speed);

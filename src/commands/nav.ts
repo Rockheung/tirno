@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, listPages } from '../cdp/page-resolver.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, error } from '../output/formatter.js';
 
 export function registerNavCommands(program: Command): void {
   program

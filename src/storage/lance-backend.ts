@@ -26,9 +26,7 @@ const EMBEDDING_DIM = parseInt(process.env.TIRNO_EMBEDDING_DIM ?? '384', 10);
 
 // LanceDB types are loose because the SDK has rich generics that conflict with
 // our simpler tsc target.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Table = any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Connection = any;
 
 let cachedConn: Connection | null = null;
@@ -36,7 +34,6 @@ async function getConnection(): Promise<Connection> {
   if (cachedConn) return cachedConn;
   fs.mkdirSync(lanceDir(), { recursive: true });
   const lance = await import('@lancedb/lancedb');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cachedConn = await (lance as any).connect(lanceDir());
   return cachedConn!;
 }

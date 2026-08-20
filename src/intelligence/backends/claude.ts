@@ -24,7 +24,6 @@ const PRICE_OUTPUT_PER_M = parseFloat(process.env.TIRNO_CLAUDE_PRICE_OUT ?? '5.0
 // Loose-typed client — SDK type imports break our flat-config tsc target.
 // We treat `messages.create` as `(params: any) => Promise<any>` and cast at the
 // boundary. Trade: zero SDK type safety for build simplicity.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnthropicClient = { messages: { create: (params: any) => Promise<any> } };
 
 let cachedClient: AnthropicClient | null = null;
@@ -34,7 +33,6 @@ async function getClient(): Promise<AnthropicClient> {
   const k = keychain.get(ENV_KEY);
   if (!k.value) throw new Error(`${ENV_KEY} not found in env or keychain. Set via "tirno auth set anthropic" or export the env var.`);
   const mod = await import('@anthropic-ai/sdk');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Anthropic = (mod.default ?? (mod as any).Anthropic) as new (opts: { apiKey: string }) => AnthropicClient;
   cachedClient = new Anthropic({ apiKey: k.value });
   return cachedClient;
