@@ -87,7 +87,7 @@ export function registerInspectCommands(program: Command): void {
         const needCache = opts.cache !== false;
         if (needCache) {
           try {
-            if (needCache) {
+            {
               const url = page.url();
               const viewport = await page.evaluate(() => ({
                 w: window.innerWidth,

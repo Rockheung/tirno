@@ -118,6 +118,9 @@ export function registerEmulateCommand(program: Command): void {
           applied.push(`color-scheme=${opts.colorScheme}`);
         }
 
+        if (opts.geolocation === undefined && opts.geolocationAccuracy !== undefined) {
+          throw new Error('--geolocation-accuracy only applies with --geolocation <lat,lng>');
+        }
         if (opts.geolocation !== undefined) {
           const m = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/.exec(opts.geolocation);
           if (!m) throw new Error(`--geolocation must be "<lat>,<lng>", got "${opts.geolocation}"`);

@@ -250,10 +250,24 @@ function main() {
     { expectFail: true, expectMatch: /No element/ });
   run('hover', ['hover', '#link', ...S]);
   check('hover 가 mouseover 를 실제로 쐈다', q("document.getElementById('status').textContent") === 'hovered');
+  // hover 만 @ref 를 안 받았다 — click/fill 은 받는데. 표면이 갈리면 호출자가 분기해야 한다.
+  // 포인터를 먼저 다른 곳으로 뗀다 — 같은 요소 위에 이미 있으면 mouseover 가 다시 뜨지
+  // 않아, 검사가 hover 를 안 해도 통과하거나(옛 값) 해도 실패한다.
+  execFileSync('node', [TIRNO, 'hover', '#text', ...S], { env, stdio: 'ignore' });
+  q("document.getElementById('status').textContent = ''");
+  const snapForHover = run('snapshot (hover @ref 용)', ['snapshot', ...S]);
+  const linkRef = (/@(\d+)[^\n]*link/.exec(snapForHover.out) ?? [])[1];
+  run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });
+  check('hover @ref 가 mouseover 를 쐈다', q("document.getElementById('status').textContent") === 'hovered',
+    `실측: ${q("document.getElementById('status').textContent")} (ref @${linkRef})`);
   // 값에 공백·괄호·따옴표·유니코드가 들어간다 — fill 이 셸이나 이스케이프를 거치면 깨진다.
   const FILL = '안녕 world ("quoted") + 50%';
   run('fill', ['fill', '#text', FILL, ...S]);
   check('fill 값이 그대로 들어갔다', q("document.getElementById('text').value") === FILL,
+    `실측: ${q("document.getElementById('text').value")}`);
+  // 빈 값은 "Filled" 라고 말하고선 옛 값을 남겼다 — 지우는 것도 채우기다.
+  run('fill (빈 값)', ['fill', '#text', '', ...S]);
+  check('fill "" 가 실제로 지웠다', q("document.getElementById('text').value") === '',
     `실측: ${q("document.getElementById('text').value")}`);
   run('fill --batch', ['fill', '--batch', '[{"target":"#text","value":"a"},{"target":"#area","value":"b"}]', ...S]);
   check('fill --batch 가 두 필드 모두 채웠다',
@@ -274,6 +288,10 @@ function main() {
   run('wait-for --text', ['wait-for', '--text', 'bottom marker', '--timeout', '5000', ...S]);
   run('wait-for --network-idle', ['wait-for', '--network-idle', '--timeout', '5000', ...S]);
   // 타임아웃은 무한 대기가 아니라 exit 1 + 무엇을 기다렸는지로 끝나야 한다.
+  // 셋은 대안이지 우선순위가 아니다 — 함께 주면 셀렉터가 조용히 무시됐다.
+  run('wait-for (selector + --network-idle → exit≠0)',
+    ['wait-for', '#bottom', '--network-idle', '--timeout', '5000', ...S],
+    { expectFail: true, expectMatch: /one of/ });
   run('wait-for (타임아웃 → exit≠0)', ['wait-for', '#nope', '--timeout', '800', ...S],
     { expectFail: true, expectMatch: /#nope/ });
   fs.writeFileSync(`${OUT}/upload.txt`, 'x');
@@ -296,6 +314,12 @@ function main() {
   run('emulate --color-scheme', ['emulate', '--color-scheme', 'dark', ...S]);
   check('emulate --color-scheme 실측', q("matchMedia('(prefers-color-scheme: dark)').matches") === 'true');
   run('emulate --geolocation', ['emulate', '--geolocation', '37.5,127.0', ...S]);
+  // accuracy 만 주면 조용히 무시되고 "No emulation options" 로 끝났다 — 그 문구에도 안 나온다.
+  run('emulate --geolocation-accuracy 단독 → exit≠0',
+    ['emulate', '--geolocation-accuracy', '10', ...S],
+    // 옛 문구("No emulation options … --geolocation …")에도 이 낱말이 있어서,
+    // 무엇을 짝지어야 하는지 말하는 문장으로 못 박는다.
+    { expectFail: true, expectMatch: /only applies with --geolocation/ });
   run('emulate --device', ['emulate', '--device', 'iPhone 14', ...S]);
   // device 프리셋이 실제로 적용하는 것은 화면 치수와 dpr 이다 (UA 는 적용 코드가 없다 —
   // emulate.ts 의 "keeps device UA" 주석은 코드와 다르다. 실측 근거로 여기서는 안 본다).
@@ -362,6 +386,9 @@ function main() {
   run('cache prune (무인자 → exit≠0)', ['cache', 'prune'],
     { expectFail: true, expectMatch: /--older-than|--all/ });
   run('cache prune --older-than', ['cache', 'prune', '--older-than', '0']);
+  // 모르는 mode 는 조용히 urlPath 로 처리돼, 오타가 매칭을 넓혔다.
+  run('cache load --mode 오타 → exit≠0', ['cache', 'load', PAGE, '--mode', 'exakt'],
+    { expectFail: true, expectMatch: /exact\|urlPath/ });
   // prune 0일 = 전부 삭제 — 지워졌다는 말이 아니라 다시 못 읽는 것으로 판정한다.
   run('cache load (prune 후 miss)', ['cache', 'load', PAGE], { expectFail: true });
 

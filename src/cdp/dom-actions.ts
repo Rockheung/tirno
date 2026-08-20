@@ -45,5 +45,27 @@ export async function fillByRef(page: Page, backendNodeId: number, value: string
     await cdp.detach();
   }
   // type via the page keyboard so we generate trusted input events
+  if (value === '') {
+    // Nothing to type, so the selection would just sit there and the old text
+    // would survive a command that reported "Filled".
+    await page.keyboard.press('Backspace');
+    return;
+  }
   await page.keyboard.type(value);
+}
+
+/** Hover by ref — moves the real pointer to the node's centre, so :hover and
+ *  mouseover handlers fire the way they do for a person. */
+export async function hoverByRef(page: Page, backendNodeId: number): Promise<void> {
+  const cdp = await page.createCDPSession();
+  try {
+    await cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId });
+    const { model } = await cdp.send('DOM.getBoxModel', { backendNodeId }) as {
+      model: { content: number[] };
+    };
+    const [x1, y1, , , x3, y3] = model.content;
+    await page.mouse.move((x1 + x3) / 2, (y1 + y3) / 2);
+  } finally {
+    await cdp.detach();
+  }
 }

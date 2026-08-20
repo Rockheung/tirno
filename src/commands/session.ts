@@ -333,41 +333,49 @@ export function registerSessionCommands(program: Command): void {
         }
 
         const listeners = await collectListeners();
-        let refused = 0;
+        let failures = 0;
 
         for (const meta of targets) {
-          // The ledger says this pid is ours; observation gets the final word.
-          // Killing on the ledger's say-so is how a stale entry turns into
-          // "tirno killed an unrelated app". Refuse and name it —
-          // ghosts still pass, since killing a dead pid is a no-op.
-          const inv = await inspectSession(meta, listeners);
-          if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
-            error(`Refusing to kill '${meta.name}' — ${inv.ownership}: ${inv.reason}`);
-            refused++;
-            continue;
+          // Each session is handled on its own. `--all` and `--group` used to
+          // abort at the first exception, leaving every session after it
+          // running under an entry that says it was killed.
+          try {
+            // The ledger says this pid is ours; observation gets the final word.
+            // Killing on the ledger's say-so is how a stale entry turns into
+            // "tirno killed an unrelated app". Refuse and name it —
+            // ghosts still pass, since killing a dead pid is a no-op.
+            const inv = await inspectSession(meta, listeners);
+            if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
+              error(`Refusing to kill '${meta.name}' — ${inv.ownership}: ${inv.reason}`);
+              failures++;
+              continue;
+            }
+
+            await killAndWait(meta.pid);
+            // Chrome leaves DevToolsActivePort behind on every exit path, and a
+            // leftover makes the next MCP attach fail with an opaque
+            // `ECONNREFUSED <port>` instead of "no browser here".
+            clearActivePort(meta.userDataDir);
+            store.remove(meta.name);
+
+            // ephemeral dirs always cleaned; otherwise --clean
+            const isEphemeral = meta.userDataDir.startsWith(os.tmpdir());
+            if (opts.clean || isEphemeral) {
+              fs.rmSync(meta.userDataDir, { recursive: true, force: true });
+            }
+
+            if (store.getActive() === meta.name) store.clearActive();
+            success(`Killed '${meta.name}' (PID ${meta.pid}${isEphemeral ? ', ephemeral cleaned' : opts.clean ? ', profile cleaned' : ''})`);
+          } catch (e) {
+            error(`Failed on '${meta.name}': ${(e as Error).message}`);
+            failures++;
           }
-
-          await killAndWait(meta.pid);
-          // Chrome leaves DevToolsActivePort behind on every exit path, and a
-          // leftover makes the next MCP attach fail with an opaque
-          // `ECONNREFUSED <port>` instead of "no browser here".
-          clearActivePort(meta.userDataDir);
-          store.remove(meta.name);
-
-          // ephemeral dirs always cleaned; otherwise --clean
-          const isEphemeral = meta.userDataDir.startsWith(os.tmpdir());
-          if (opts.clean || isEphemeral) {
-            fs.rmSync(meta.userDataDir, { recursive: true, force: true });
-          }
-
-          if (store.getActive() === meta.name) store.clearActive();
-          success(`Killed '${meta.name}' (PID ${meta.pid}${isEphemeral ? ', ephemeral cleaned' : opts.clean ? ', profile cleaned' : ''})`);
         }
 
-        // A refusal is a failure — the browser the caller named is still running.
-        // Exiting 0 tells a script the kill happened, which is the one thing it
-        // must not believe here.
-        if (refused > 0) process.exit(1);
+        // A refusal or an error is a failure — the browser the caller named is
+        // still running. Exiting 0 tells a script the kill happened, which is the
+        // one thing it must not believe here.
+        if (failures > 0) process.exit(1);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
@@ -408,6 +416,9 @@ export function registerSessionCommands(program: Command): void {
           info(`Dry run — nothing changed. ${result.applied.length} item(s) would be removed.`);
         } else {
           success(`Removed ${result.applied.length} item(s)${result.failed.length ? `, ${result.failed.length} failed` : ''}`);
+          // Printed failures are still failures — a caller reading only $? was
+          // told the cleanup succeeded.
+          if (result.failed.length > 0) process.exit(1);
         }
       } catch (e) {
         error((e as Error).message);

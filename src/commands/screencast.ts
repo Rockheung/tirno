@@ -31,7 +31,7 @@ export function registerScreencastCommands(program: Command): void {
     .command('start')
     .description('Start a screencast capture in a detached worker')
     .option('-s, --session <name>', 'Session name')
-    .option('--out <dir>', 'Output directory (default: /tmp/tirno-screencast-<ts>)')
+    .option('--out <dir>', 'Output directory (default: <tmpdir>/tirno-screencast-<ts>)')
     .option('--format <fmt>', 'png | jpeg (default png)', 'png')
     .option('--quality <0-100>', 'JPEG quality (jpeg only)', (v: string) => parseInt(v, 10), 80)
     .option('--max-width <px>', 'Max frame width', (v: string) => parseInt(v, 10))

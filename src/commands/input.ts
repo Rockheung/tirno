@@ -3,7 +3,7 @@ import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
-import { clickByRef, fillByRef } from '../cdp/dom-actions.js';
+import { clickByRef, fillByRef, hoverByRef } from '../cdp/dom-actions.js';
 import * as refStore from '../core/ref-store.js';
 import type { Page } from 'puppeteer-core';
 
@@ -117,7 +117,8 @@ export function registerInputCommands(program: Command): void {
         } else {
           // triple-click to select all, then type to replace
           await page.click(target, { count: 3 });
-          await page.type(target, value);
+          if (value === '') await page.keyboard.press('Backspace');
+          else await page.type(target, value);
         }
 
         browser.disconnect();
@@ -171,18 +172,22 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('hover')
-    .description('Hover over an element')
-    .argument('<selector>', 'CSS selector')
+    .description('Hover over an element (CSS selector or @ref)')
+    .argument('<target>', 'CSS selector or @ref from snapshot')
     .option('-s, --session <name>', 'Session name')
-    .action(async (selector: string, opts) => {
+    .action(async (target: string, opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
-        await page.hover(selector);
+        if (refStore.isRef(target)) {
+          await hoverByRef(page, refStore.resolveRef(meta.name, target));
+        } else {
+          await page.hover(target);
+        }
 
         browser.disconnect();
-        success(`Hovered ${selector}`);
+        success(`Hovered ${target}`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
@@ -316,6 +321,12 @@ export function registerInputCommands(program: Command): void {
       try {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
+
+        // The three forms are alternatives, not a priority list. Silently
+        // ignoring the selector because --network-idle was also given makes the
+        // command wait for something the caller did not ask about.
+        const forms = [selector && 'selector', opts.text && '--text', opts.networkIdle && '--network-idle'].filter(Boolean);
+        if (forms.length > 1) throw new Error(`Give one of: selector, --text, --network-idle (got ${forms.join(' + ')})`);
 
         if (opts.networkIdle) {
           await page.waitForNetworkIdle({ timeout: opts.timeout });

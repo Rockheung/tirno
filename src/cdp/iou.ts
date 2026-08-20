@@ -1,5 +1,6 @@
-// IoU (Intersection over Union) for bbox matching — used to merge a11y refs
-// with vision-detected bboxes (e.g. OCR text inside canvas/image).
+// IoU (Intersection over Union) for bbox matching. `Bbox` is the live part —
+// snapshot uses it. The geometry below merged a11y refs with vision-detected
+// bboxes, and that layer is gone.
 
 export interface Bbox {
   x: number;
@@ -20,6 +21,11 @@ export function intersection(a: Bbox, b: Bbox): Bbox {
   return { x: x1, y: y1, w: Math.max(0, x2 - x1), h: Math.max(0, y2 - y1) };
 }
 
+/**
+ * No caller in the CLI today — the vision layer that used this was removed
+ * (CLAUDE.md, "덜어낸 것"). Kept with its tests rather than quietly deleted, but
+ * do not read its presence as evidence that something depends on it.
+ */
 export function iou(a: Bbox, b: Bbox): number {
   const inter = area(intersection(a, b));
   if (inter === 0) return 0;
