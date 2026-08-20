@@ -14,7 +14,9 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { ask as intelligenceAsk } from '../intelligence/dispatcher.js';
 import type { BackendName, ProposedAction } from '../intelligence/types.js';
-import { getTrailStore } from '../storage/index.js';
+import { embed, buildEmbedText } from '../intelligence/embedding.js';
+import { getTrailStore, getWaypointStore } from '../storage/index.js';
+import type { Waypoint } from '../core/visual-cache.js';
 import type { Trail, TrailStep } from '../core/trail-store.js';
 import type { RecordedEvent } from '../core/record-store.js';
 import { success, info, warn, error } from '../output/formatter.js';
@@ -197,6 +199,8 @@ export function registerExploreCommand(program: Command): void {
     .option('--save <name>', 'Save resulting trail under name')
     .option('--no-cache', 'Skip cache lookup (force LLM iteration)')
     .option('--retry-threshold <n>', 'Use existing trail if successRate above this', floatArg, 0.5)
+    .option('--rag', 'Retrieve nearby waypoints (cosine top-K) and include in LLM prompt')
+    .option('--rag-k <n>', 'Top-K nearby waypoints to retrieve', intArg, 5)
     .option('--verbose', 'Per-step LLM reasoning + cost')
     .action(async (goal: string, opts) => {
       try {
@@ -230,8 +234,28 @@ export function registerExploreCommand(program: Command): void {
         let lastReason = '';
         let outcome: 'done' | 'give_up' | 'max_steps' = 'max_steps';
 
+        const waypointStore = opts.rag ? await getWaypointStore() : null;
+
         for (let i = 0; i < opts.maxSteps; i++) {
           const ctx = await capturePageContext(page, opts.axLines);
+
+          // RAG retrieval — top-K waypoints semantically similar to goal +
+          // current page url. Only if --rag and store has searchSimilar.
+          let nearbyWaypoints: Waypoint[] | undefined;
+          if (waypointStore && waypointStore.searchSimilar) {
+            try {
+              const queryText = `${goal} ${ctx.url}`;
+              const queryEmb = await embed(queryText);
+              const hits = await waypointStore.searchSimilar(queryEmb, opts.ragK);
+              nearbyWaypoints = hits.map(h => ({
+                id: h.id, refId: h.refId, channels: h.channels, matchStats: h.matchStats,
+              }));
+              if (opts.verbose) info(`step ${i + 1}: RAG retrieved ${hits.length} nearby waypoints`);
+            } catch (e) {
+              if (opts.verbose) info(`step ${i + 1}: RAG retrieval skipped — ${(e as Error).message}`);
+            }
+          }
+
           const askStart = Date.now();
           const response = await intelligenceAsk(opts.backend as BackendName, {
             goal,
@@ -241,6 +265,7 @@ export function registerExploreCommand(program: Command): void {
               viewport: ctx.viewport,
               screenshot: ctx.screenshot,
               a11yDump: ctx.a11yDump,
+              nearbyWaypoints,
             },
             maxTokens: opts.maxTokens,
           });

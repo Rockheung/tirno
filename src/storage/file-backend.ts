@@ -42,6 +42,7 @@ async function loadAllRecords(): Promise<WaypointRecord[]> {
         viewport: e.viewport,
         capturedAt: e.capturedAt,
         searchText: buildSearchText(wp),
+        embedding: wp.embedding,
       });
     }
   }
@@ -54,11 +55,15 @@ export class FileWaypointStore implements WaypointStore {
   async save(rec: WaypointRecord): Promise<void> {
     // Find existing cache entry for this URL+viewport, or create
     const existing = visualCache.lookup(rec.url, { viewport: rec.viewport, mode: 'exact' });
+    const wp: Waypoint = {
+      id: rec.id,
+      refId: rec.refId,
+      channels: rec.channels,
+      matchStats: rec.matchStats,
+      embedding: rec.embedding,
+    };
     if (existing) {
-      // upsert by id
       const idx = existing.refs.findIndex(r => r.id === rec.id);
-      // strip storage-only fields from waypoint
-      const wp: Waypoint = { id: rec.id, refId: rec.refId, channels: rec.channels, matchStats: rec.matchStats };
       if (idx >= 0) existing.refs[idx] = wp;
       else existing.refs.push(wp);
       visualCache.save(existing);
@@ -71,7 +76,7 @@ export class FileWaypointStore implements WaypointStore {
         capturedAt: rec.capturedAt,
         visualFp: '',
         viewport: rec.viewport,
-        refs: [{ id: rec.id, refId: rec.refId, channels: rec.channels, matchStats: rec.matchStats }],
+        refs: [wp],
       });
     }
   }
@@ -116,6 +121,22 @@ export class FileWaypointStore implements WaypointStore {
         return;
       }
     }
+  }
+
+  // Linear cosine over all embedded waypoints. OK for thousands; switch to
+  // lance backend for larger workloads.
+  async searchSimilar(embedding: Float32Array, topK: number): Promise<WaypointRecord[]> {
+    const all = await loadAllRecords();
+    const scored: Array<{ rec: WaypointRecord; score: number }> = [];
+    for (const r of all) {
+      if (!r.embedding) continue;
+      let s = 0;
+      const n = Math.min(embedding.length, r.embedding.length);
+      for (let i = 0; i < n; i++) s += embedding[i] * r.embedding[i];
+      scored.push({ rec: r, score: s });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topK).map(x => x.rec);
   }
 }
 
