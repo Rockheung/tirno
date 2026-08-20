@@ -6,6 +6,7 @@ import { isAlive, killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
 import { collectListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
 import * as gc from '../core/gc.js';
+import * as drift from '../core/drift.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -281,7 +282,7 @@ export function registerSessionCommands(program: Command): void {
         for (const meta of targets) {
           // The ledger says this pid is ours; observation gets the final word.
           // Killing on the ledger's say-so is how a stale entry turns into
-          // "tirno killed an unrelated app" (2026-07-07). Refuse and name it —
+          // "tirno killed an unrelated app". Refuse and name it —
           // ghosts still pass, since killing a dead pid is a no-op.
           const inv = await inspectSession(meta, listeners);
           if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
@@ -351,6 +352,64 @@ export function registerSessionCommands(program: Command): void {
         process.exit(1);
       }
     });
+
+  const driftCmd = program
+    .command('drift')
+    .description('Compare chrome flags against the running process; pass "-- <flags>" to check what you want now instead of what was declared. Exits non-zero when they differ')
+    .argument('[name]', 'Session name (default: active session)')
+    .option('--all', 'Also print the full running command line')
+    .allowUnknownOption(true)
+    .allowExcessArguments(true);
+
+  driftCmd.action(async (name: string | undefined, opts) => {
+    try {
+      // Flags after `--` are "what I want now" — that is how a caller whose
+      // routing config changed asks whether this session needs a restart,
+      // without tirno having to understand the config.
+      const rawArgs = process.argv;
+      const dashDashIdx = rawArgs.indexOf('--');
+      const expected = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : undefined;
+
+      const target = name ?? store.getActive();
+      if (!target) throw new Error('No active session. Provide a name or use "tirno attach <name>"');
+      const meta = store.get(target);
+
+      const d = await drift.inspectDrift(meta, expected);
+
+      if (d.inventory.ownership !== 'ours') {
+        error(`Cannot inspect '${target}' — ${d.inventory.ownership}: ${d.inventory.reason}`);
+        process.exit(1);
+      }
+
+      if (opts.all) info(`running: ${d.cmdline}`);
+
+      if (!d.hasDrift) {
+        success(`'${target}' matches its ${d.expectedSource === 'ledger' ? 'declared flags' : 'expected flags'}`);
+        return;
+      }
+
+      for (const c of d.missing) {
+        info(`missing  ${c.flag}${c.expected === null ? '' : `=${c.expected}`}`);
+      }
+      for (const c of d.changed) {
+        info(`changed  ${c.flag}: expected ${c.expected ?? '(no value)'}, running ${c.actual ?? '(no value)'}`);
+      }
+
+      // Chrome reads flags like --host-resolver-rules once at launch, so there
+      // is no way to reconcile this without restarting. That is cheap here:
+      // the OS picks the port, the profile (and its logins) persists, and a
+      // directory-anchored MCP reconnects on its next tool call.
+      const flags = d.expected
+        .filter(f => f.startsWith('--') && !f.startsWith('--remote-debugging-port'))
+        .map(drift.shellQuoteFlag);
+      error(`'${target}' has drifted. Chrome only reads these at launch — restart to apply:`);
+      info(`  tirno restart ${target}${flags.length ? ` -- ${flags.join(' ')}` : ''}`);
+      process.exit(1);
+    } catch (e) {
+      error((e as Error).message);
+      process.exit(1);
+    }
+  });
 
   program
     .command('rename')

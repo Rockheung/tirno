@@ -12,12 +12,12 @@ const exec = promisify(execFile);
  * Answers "what is actually listening, and is it ours?" by observation rather
  * than by trusting `~/.tirno/sessions/*.json`.
  *
- * The ledger is a launch-time claim, not a fact. On 2026-08-10 this machine had
- * port 9222 recorded as tirno session "legacy-widget-session" while the real
- * listener was OtherAgentApp — an Electron app holding a production DB
- * proxy login tab. `isAlive(pid)` was the only guard, and it passed only by the
- * luck of that pid being dead; pids get reused. Connecting would have handed
- * CDP control of that app to tirno, and "cleaning up" would have killed it.
+ * The ledger is a launch-time claim, not a fact. A port it records as a tirno
+ * session can be held by something else entirely — OtherAgentApp, an
+ * Electron app with a production DB proxy login tab, squats 9222 on this
+ * machine. `isAlive(pid)` does not catch that, because pids get reused.
+ * Connecting there hands CDP control of that app to tirno, and "cleaning up"
+ * kills it.
  *
  * So ownership needs three independent facts to agree, and anything short of
  * that is never acted on. See docs/plan-anchor-broker.md §3 Stage 2.
@@ -111,15 +111,37 @@ export function parseLsofListeners(stdout: string): Listener[] {
 }
 
 /**
- * Pull `--user-data-dir` out of a `ps -o command=` line.
+ * Split a `ps -o command=` line into its `--flags`.
  *
- * Values are taken up to the next ` --`, so profile paths containing spaces
- * survive. A path that itself contains " --" would be cut short; no such path
- * exists under ~/.tirno, and guessing wrong here fails closed (foreign).
+ * Chrome command lines cannot be split on whitespace: values contain spaces
+ * (`--user-data-dir=/Users/me/my profiles/a`) and trailing positionals are
+ * start URLs. So segments are cut at ` --` boundaries instead. A value that
+ * itself contains " --" would be cut short; no such value exists in what tirno
+ * passes, and guessing wrong fails closed (an unmatched flag reads as drift or
+ * as foreign, never as agreement).
+ *
+ * Valueless flags map to null, which is distinct from an empty value.
  */
+export function parseFlags(cmdline: string): Map<string, string | null> {
+  const flags = new Map<string, string | null>();
+
+  for (const segment of cmdline.split(/\s+(?=--)/)) {
+    if (!segment.startsWith('--')) continue;      // executable path, positionals
+    const eq = segment.indexOf('=');
+    if (eq === -1) {
+      // `--no-first-run about:blank` — the positional after it is not a value
+      flags.set(segment.split(/\s/)[0], null);
+    } else {
+      flags.set(segment.slice(0, eq), segment.slice(eq + 1).trim());
+    }
+  }
+
+  return flags;
+}
+
+/** Convenience for the ownership check — see parseFlags for the parsing rules. */
 export function parseUserDataDir(cmdline: string): string | null {
-  const match = /--user-data-dir=(.*?)(?=\s+--|\s*$)/.exec(cmdline);
-  return match ? match[1].trim() || null : null;
+  return parseFlags(cmdline).get('--user-data-dir') || null;
 }
 
 // ------------------------------------------------------------ classifying
@@ -132,9 +154,9 @@ export function parseUserDataDir(cmdline: string): string | null {
 export function classify(obs: Observation): Verdict {
   const pids = new Set(obs.listeners.map(l => l.pid));
 
-  // Checked first, and deliberately: two processes on one port is the 2026-07-07
-  // mis-attribution (an old chrome on IPv4 and a new one on IPv6, same port).
-  // Whatever else looks right, nothing may be acted on automatically here.
+  // Checked first, and deliberately: two processes on one port (an old chrome on
+  // IPv4, a new one on IPv6) is where mis-attribution happens. Whatever else
+  // looks right, nothing may be acted on automatically here.
   if (pids.size > 1) {
     const who = [...pids].map(p => {
       const l = obs.listeners.find(x => x.pid === p);
