@@ -68,6 +68,7 @@ async function init(): Promise<void> {
 
 export const florenceBackend: OcrBackend = {
   name: 'florence-2 (transformers.js)',
+  kind: 'local',
 
   async recognize(pngBuffer: Buffer, _opts: OcrOptions = {}): Promise<OcrResult> {
     const start = Date.now();

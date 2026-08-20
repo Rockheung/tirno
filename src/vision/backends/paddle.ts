@@ -57,6 +57,7 @@ export interface PaddleOptions extends OcrOptions {
 
 export const paddleBackend: OcrBackend = {
   name: 'paddleocr (@gutenye/ocr-node)',
+  kind: 'local',
 
   async recognize(pngBuffer: Buffer, opts: PaddleOptions = {}): Promise<OcrResult> {
     const start = Date.now();

@@ -115,10 +115,19 @@ tirno kill mysession
 |---|---|
 | `vision ocr [--backend <name>] [--lang <l>] [--full] [--out <path>] [--min-confidence <n>] [--paddle-models <dir>]` | 페이지 OCR — 단어/줄별 bbox + confidence |
 
-backend 선택:
-- `tesseract` (default) — light, 한국어/영어 동시 지원 (`--lang kor+eng`), word 단위
-- `paddle` — PaddleOCR via @gutenye/ocr-node, line 단위, 영어 default. 한국어는 `--paddle-models <dir>` 로 PaddleOCR 한국어 det/rec/dict 지정
-- `florence` — Florence-2 via `@huggingface/transformers`. **experimental** — 모델 로드/추론 인프라는 동작하나, transformers.js v4의 task token(`<OCR_WITH_REGION>`) 처리에 디코딩 버그가 있어 output 정확성 미흡. production 용도는 tesseract/paddle 권장. env: `TIRNO_FLORENCE_MODEL`, `TIRNO_FLORENCE_DTYPE` (q4|q8|fp32), `TIRNO_FLORENCE_DEBUG=1`
+backend 선택 — **local 기본**, cloud는 확장 예정 (현재 stub):
+
+**local**:
+- `paddle` (**default**) — PaddleOCR via @gutenye/ocr-node, line 단위, 영어 default. 한국어는 `--paddle-models <dir>` 로 PaddleOCR 한국어 det/rec/dict 지정
+- `tesseract` — light, 한국어/영어 동시 지원 (`--lang kor+eng`), word 단위. **올드 테크** — 한국어 단음절 분리 경향
+- `florence` — Florence-2 via `@huggingface/transformers`. **experimental** — 모델 로드/추론 인프라는 동작하나, transformers.js v4의 task token 처리에 디코딩 버그가 있어 output 정확성 미흡. env: `TIRNO_FLORENCE_MODEL`, `TIRNO_FLORENCE_DTYPE` (q4|q8|fp32), `TIRNO_FLORENCE_DEBUG=1`
+
+**cloud** (Phase 6-2f 예정 — 현재 stub):
+- `claude` — `ANTHROPIC_API_KEY`
+- `openai` — `OPENAI_API_KEY`
+- `gemini` — `GEMINI_API_KEY` 또는 `GOOGLE_API_KEY`
+
+cloud backend는 API key 없으면 안내 메시지, 있으면 "not yet implemented" 메시지. CLI surface는 stable.
 
 ### Multi-session
 | 명령 | 설명 |
