@@ -7,6 +7,7 @@ import { registerEvalCommand } from './commands/eval.js';
 import { registerEmulateCommand } from './commands/emulate.js';
 import { registerPerfCommands } from './commands/perf.js';
 import { registerMultiCommands } from './commands/multi.js';
+import { registerCacheCommands } from './commands/cache.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -24,6 +25,7 @@ registerEvalCommand(program);
 registerEmulateCommand(program);
 registerPerfCommands(program);
 registerMultiCommands(program);
+registerCacheCommands(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);

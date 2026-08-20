@@ -4,6 +4,9 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 import * as refStore from '../core/ref-store.js';
+import * as visualCache from '../core/visual-cache.js';
+import { dHash } from '../cdp/screenshot-hash.js';
+import { getElementInfo } from '../cdp/element-info.js';
 import type { ScreenshotOptions } from 'puppeteer-core';
 
 export function registerInspectCommands(program: Command): void {
@@ -48,6 +51,7 @@ export function registerInspectCommands(program: Command): void {
     .description('Take an accessibility tree snapshot')
     .option('-s, --session <name>', 'Session name')
     .option('--verbose', 'Include all elements (default: skip ignored)')
+    .option('--no-cache', 'Skip visual-cache write')
     .action(async (opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -55,16 +59,67 @@ export function registerInspectCommands(program: Command): void {
         const cdp = await page.createCDPSession();
 
         const tree = await cdp.send('Accessibility.getFullAXTree') as { nodes: AXNode[] };
-        await cdp.detach();
-        browser.disconnect();
 
         if (!tree.nodes.length) {
+          await cdp.detach();
+          browser.disconnect();
           info('Empty snapshot');
           return;
         }
 
-        const { lines, refs } = renderAXTree(tree.nodes, !opts.verbose);
-        refStore.save(meta.name, refs);
+        const { lines, refs: detailed } = renderAXTree(tree.nodes, !opts.verbose);
+
+        // collect cache data while CDP is still attached
+        let cachePayload: visualCache.CacheEntry | null = null;
+        if (opts.cache !== false) {
+          try {
+            const url = page.url();
+            const screenshot = await page.screenshot({ type: 'png', optimizeForSpeed: true }) as Buffer;
+            const viewport = await page.evaluate(() => ({
+              w: window.innerWidth,
+              h: window.innerHeight,
+              dpr: window.devicePixelRatio,
+            }));
+            const refEntries = Object.entries(detailed);
+            const elementInfos = await Promise.all(
+              refEntries.map(([, v]) => getElementInfo(cdp, v.backendId).catch(() => ({})))
+            );
+            const cacheRefs: visualCache.CacheRef[] = refEntries.map(([k, v], i) => ({
+              refId: `@${k}`,
+              role: v.role,
+              name: v.name,
+              backendId: v.backendId,
+              ...elementInfos[i],
+            }));
+            const visualFp = await dHash(screenshot);
+            const key = visualCache.parseUrl(url);
+            cachePayload = {
+              url: key.fullUrl,
+              urlPath: key.urlPath,
+              domain: key.domain,
+              capturedAt: new Date().toISOString(),
+              visualFp,
+              viewport,
+              refs: cacheRefs,
+            };
+          } catch (e) {
+            // cache write is best-effort — don't fail snapshot
+            cachePayload = null;
+          }
+        }
+
+        await cdp.detach();
+        browser.disconnect();
+
+        // flat refs for ref-store (backward compatible)
+        const flatRefs: refStore.RefMap = {};
+        for (const [k, v] of Object.entries(detailed)) flatRefs[k] = v.backendId;
+        refStore.save(meta.name, flatRefs);
+
+        if (cachePayload) {
+          try { visualCache.save(cachePayload); } catch { /* non-fatal */ }
+        }
+
         for (const line of lines) console.log(line);
       } catch (e) {
         error((e as Error).message);
@@ -183,12 +238,18 @@ interface AXNode {
   properties?: AXProperty[];
 }
 
-function renderAXTree(nodes: AXNode[], skipIgnored: boolean): { lines: string[]; refs: { [k: string]: number } } {
+interface DetailedRef {
+  backendId: number;
+  role: string;
+  name: string;
+}
+
+function renderAXTree(nodes: AXNode[], skipIgnored: boolean): { lines: string[]; refs: { [k: string]: DetailedRef } } {
   const byId = new Map<string, AXNode>();
   for (const n of nodes) byId.set(n.nodeId, n);
   const root = nodes.find(n => !n.parentId) ?? nodes[0];
   const lines: string[] = [];
-  const refs: { [k: string]: number } = {};
+  const refs: { [k: string]: DetailedRef } = {};
   let counter = 0;
 
   function walk(node: AXNode, depth: number): void {
@@ -196,13 +257,14 @@ function renderAXTree(nodes: AXNode[], skipIgnored: boolean): { lines: string[];
     let nextDepth = depth;
     if (!skip) {
       const role = String(node.role?.value ?? '?');
-      const name = node.name?.value ? ` "${String(node.name.value)}"` : '';
+      const nameValue = node.name?.value ? String(node.name.value) : '';
+      const name = nameValue ? ` "${nameValue}"` : '';
       const value = node.value?.value !== undefined ? ` value=${JSON.stringify(node.value.value)}` : '';
       const indent = '  '.repeat(depth);
       let prefix = '   '; // 3 spaces when no ref
       if (node.backendDOMNodeId !== undefined) {
         counter++;
-        refs[String(counter)] = node.backendDOMNodeId;
+        refs[String(counter)] = { backendId: node.backendDOMNodeId, role, name: nameValue };
         prefix = `@${counter}`.padEnd(4, ' ');
       }
       lines.push(`${prefix}${indent}${role}${name}${value}`);
