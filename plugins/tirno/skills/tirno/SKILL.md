@@ -87,6 +87,8 @@ tirno fill <selector|@N> <value>
 tirno fill <selector|@N> --value-stdin  # 값을 stdin 에서. 인자로 준 값은 ps 에 남는다
 tirno type <text> [--delay ms]
 tirno press <key>                       # Enter, Tab, Escape, ArrowDown...
+tirno press 'Meta+v'                    # 조합키. 편집 명령은 CDP commands 로 실제 실행된다
+tirno press 'Shift+Tab'                 # 그 밖의 조합은 평범한 키 입력
 tirno hover <selector|@N>
 tirno drag <from> <to>                  # 좌표 "x,y" 또는 selector (자동 판별)
 tirno upload <selector> <files...>

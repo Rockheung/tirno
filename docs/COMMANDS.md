@@ -128,10 +128,29 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `fill <selector\|@N> <value>` | input clear + type |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N>` | 키보드/마우스 |
+| `press <modifier>+<key>` | `Meta+v` · `Ctrl+a` · `Shift+Tab`. 수식키는 Alt·Ctrl·Meta·Shift(별칭 cmd/command/option 도 받는다) |
 | `scroll up\|down\|<pixels>` | 스크롤 |
 | `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
+
+붙여넣기·복사·잘라내기·전체선택·실행취소는 **키 이벤트만으로 일어나지 않는다.** 브라우저가
+그 동작을 실제로 하려면 CDP 에 `commands` 를 함께 실어야 하고(실측: `commands` 없이 Meta+V 를
+보내면 포커스된 필드의 값이 그대로였다), `press` 가 그것을 채운다. `Meta` 든 `Ctrl` 이든 같은
+명령으로 보낸다 — `commands` 는 브라우저에 동작을 직접 지시하는 것이라 플랫폼 관례와 무관하다.
+
+| 조합 | 실리는 command |
+|---|---|
+| `Meta+v` · `Ctrl+v` | `paste` |
+| `Meta+c` · `Meta+x` | `copy` · `cut` |
+| `Meta+a` | `selectAll` |
+| `Meta+z` · `Meta+Shift+z` · `Ctrl+y` | `undo` · `redo` · `redo` |
+
+그 밖의 조합(`Shift+Tab`, `Meta+ArrowLeft` …)은 수식키를 누른 채 키를 눌렀다 떼는 평범한
+입력으로 나간다.
+
+**클립보드를 읽을 때는 `press 'Meta+v'` 가 `navigator.clipboard.readText()` 보다 싸다** —
+후자는 권한과 문서 포커스를 둘 다 요구하고, 없으면 settle 하지 않는 promise 로 매달린다.
 
 ### 실행 / emulation
 | 명령 | 설명 |
