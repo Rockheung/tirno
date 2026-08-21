@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// tirno sw-proxy — 규칙 파일 하나로 부트스트랩 산출물을 굽는다.
+// tirno sw-proxy — 설정 하나로 부트스트랩 산출물을 굽는다.
 //
-//   node scripts/sw-proxy/generate.mjs <serve.json> [--out <dir>]
+//   node scripts/sw-proxy/generate.mjs <mounts.json> [--out <dir>]
 //
-// 하는 일은 하나다: 지정한 origin 경로들을 로컬 빌드에서 내게 만든다.
+// 하는 일은 하나다: origin 의 지정한 경로를 로컬 빌드가 내게 만든다.
+// 앱이 여럿이면 마운트를 여럿 적는다 — 서비스워커는 origin 당 하나지만,
+// 그 하나가 여러 빌드를 나눠 낸다.
+//
 // 나오는 것 — __tirno-sw.js · __tirno-boot.html · serve.mjs · cert.pem/key.pem
-// 그다음 칠 명령도 찍어 준다.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,59 +17,74 @@ import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2);
 const cfgPath = args.find(a => !a.startsWith('--'));
 if (!cfgPath) {
-  console.error('사용법: node scripts/sw-proxy/generate.mjs <serve.json> [--out <dir>]');
+  console.error('사용법: node scripts/sw-proxy/generate.mjs <mounts.json> [--out <dir>]');
   process.exit(1);
 }
-const outDir = args.includes('--out') ? args[args.indexOf('--out') + 1] : path.dirname(path.resolve(cfgPath));
+const cfgDir = path.dirname(path.resolve(cfgPath));
+const outDir = args.includes('--out') ? args[args.indexOf('--out') + 1] : cfgDir;
 const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
 
-for (const k of ['origin', 'root', 'serve']) {
-  if (!cfg[k]) { console.error(`설정에 "${k}" 가 없다`); process.exit(1); }
+if (!cfg.origin) { console.error('설정에 "origin" 이 없다'); process.exit(1); }
+if (!Array.isArray(cfg.mounts) || !cfg.mounts.length) {
+  console.error('설정에 "mounts" 가 없거나 비어 있다');
+  process.exit(1);
 }
 const host = new URL(cfg.origin).hostname;
 const port = cfg.port ?? 8443;
-const root = path.resolve(path.dirname(path.resolve(cfgPath)), cfg.root);
-if (!fs.existsSync(root)) { console.error(`root 가 없다: ${root}`); process.exit(1); }
 
-// ── serve 목록을 실제 경로로 편다.
-//    `/` 로 끝나면 그 아래 전부, 아니면 그 파일 하나. 둘 다 root 안에 있어야 한다.
+// ── 마운트를 편다.
+//    { path: "/_/app/", root: "./app/dist" }  → 그 디렉터리 전부를 그 접두사 아래로
+//    { path: "/vendor/x.js", file: "./x.js" } → 파일 하나
+//
+// origin 의 경로와 로컬 경로는 **다를 수 있다.** 앱의 dist 는 자기 루트가 `/` 지만
+// origin 에서는 `/_/app/` 아래 사는 것이 보통이다 — 그 어긋남을 여기서 흡수한다.
 const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
   e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
-const rel = f => '/' + path.relative(root, f).split(path.sep).join('/');
 
-const paths = [];
-const missing = [];
-for (const entry of cfg.serve) {
-  const local = path.join(root, entry);
-  if (entry.endsWith('/')) {
-    if (!fs.existsSync(local)) { missing.push(entry); continue; }
-    paths.push(...walk(local).map(rel));
+const map = new Map();          // origin 경로 → 로컬 절대경로
+const errors = [];
+for (const [i, m] of cfg.mounts.entries()) {
+  const label = m.path ?? `mounts[${i}]`;
+  if (!m.path) { errors.push(`${label}: "path" 가 없다`); continue; }
+
+  if (m.path.endsWith('/')) {
+    if (!m.root) { errors.push(`${label}: 디렉터리 마운트에는 "root" 가 필요하다`); continue; }
+    const root = path.resolve(cfgDir, m.root);
+    if (!fs.existsSync(root)) { errors.push(`${label}: root 가 없다 — ${root}`); continue; }
+    for (const f of walk(root)) {
+      const rel = path.relative(root, f).split(path.sep).join('/');
+      const urlPath = m.path + rel;
+      if (map.has(urlPath)) errors.push(`${urlPath}: 마운트가 겹친다`);
+      map.set(urlPath, f);
+    }
   } else {
-    if (!fs.existsSync(local)) { missing.push(entry); continue; }
-    paths.push(entry);
+    if (!m.file) { errors.push(`${label}: 파일 마운트에는 "file" 이 필요하다`); continue; }
+    const file = path.resolve(cfgDir, m.file);
+    if (!fs.existsSync(file)) { errors.push(`${label}: file 이 없다 — ${file}`); continue; }
+    if (map.has(m.path)) errors.push(`${m.path}: 마운트가 겹친다`);
+    map.set(m.path, file);
   }
 }
-if (missing.length) {
-  console.error(`root 에 없는 항목: ${missing.join(', ')}`);
-  process.exit(1);
-}
-if (!paths.length) { console.error('serve 가 비어 있다'); process.exit(1); }
+if (errors.length) { console.error(errors.map(e => '✗ ' + e).join('\n')); process.exit(1); }
+if (!map.size) { console.error('마운트가 아무 파일도 가리키지 않는다'); process.exit(1); }
+
+const paths = [...map.keys()].sort();
 
 // ── buildId — 경로와 그 내용에서 나온다. 무엇이든 바뀌면 activate 가 옛 캐시를 지운다.
 const h = crypto.createHash('sha1');
-for (const p of paths.sort()) h.update(p).update(fs.readFileSync(path.join(root, p)));
+for (const p of paths) h.update(p).update(fs.readFileSync(map.get(p)));
 const buildId = h.digest('hex').slice(0, 12);
 
 fs.mkdirSync(outDir, { recursive: true });
-const swConfig = { buildId, generatedAt: new Date().toISOString(), paths };
 fs.writeFileSync(path.join(outDir, '__tirno-sw.js'),
   fs.readFileSync(new URL('./sw-template.js', import.meta.url), 'utf-8')
-    .replace('__CONFIG__', JSON.stringify(swConfig, null, 2)));
+    .replace('__CONFIG__', JSON.stringify({ buildId, generatedAt: new Date().toISOString(), paths }, null, 2)));
 
 fs.writeFileSync(path.join(outDir, '__tirno-boot.html'),
-  `<!doctype html><meta charset="utf-8"><title>tirno sw-proxy</title>\n<h1>tirno sw-proxy</h1>\n<p>${cfg.origin} · build ${buildId} · ${paths.length} paths</p>\n`);
+  `<!doctype html><meta charset="utf-8"><title>tirno sw-proxy</title>\n<h1>tirno sw-proxy</h1>\n<p>${cfg.origin} · build ${buildId} · ${paths.length} paths · ${cfg.mounts.length} mounts</p>\n`);
 
-// ── 로컬 TLS 서버. 부트스트랩 페이지와 SW, 그리고 serve 대상만 내려주면 된다.
+// ── 로컬 TLS 서버. 부트스트랩 산출물과 마운트된 파일만 내려주면 된다.
+//    마운트마다 root 가 다르므로 경로 표를 그대로 박는다.
 fs.writeFileSync(path.join(outDir, 'serve.mjs'), `#!/usr/bin/env node
 // 생성된 파일. 부트스트랩 동안에만 필요하다.
 import fs from 'node:fs';
@@ -75,7 +92,8 @@ import path from 'node:path';
 import https from 'node:https';
 
 const DIR = path.dirname(new URL(import.meta.url).pathname);
-const ROOT = ${JSON.stringify(root)};
+const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
+
 // SW 는 캐시된 응답의 헤더를 그대로 넘긴다 — 여기서 붙인 타입이 그대로 굳는다.
 // 틀리면 브라우저가 거부한다: JS/CSS 는 nosniff 로 막히고, wasm 은
 // instantiateStreaming 이 application/wasm 을 요구한다.
@@ -100,10 +118,8 @@ https.createServer({
   key: fs.readFileSync(path.join(DIR, 'key.pem')),
 }, (req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
-  const local = path.join(DIR, path.basename(p));      // 부트스트랩 산출물
-  const fromRoot = path.join(ROOT, p);                 // 빌드 산출물
-  const file = fs.existsSync(local) && fs.statSync(local).isFile() ? local
-             : fs.existsSync(fromRoot) && fs.statSync(fromRoot).isFile() ? fromRoot : null;
+  const boot = path.join(DIR, path.basename(p));          // 부트스트랩 산출물
+  const file = MAP[p] ?? (fs.existsSync(boot) && fs.statSync(boot).isFile() ? boot : null);
   console.log(res.statusCode = file ? 200 : 404, p);
   if (!file) return res.end('not found');
   const ext = path.extname(file).toLowerCase();
@@ -125,11 +141,13 @@ if (!fs.existsSync(cert)) {
     '-subj', `/CN=${host}`, '-addext', `subjectAltName=DNS:${host}`], { stdio: 'ignore' });
 }
 
-const shown = paths.slice(0, 5).join('  ');
 console.log(`생성 완료 — ${outDir}
-  build ${buildId} · 경로 ${paths.length}개
-  ${shown}${paths.length > 5 ? `  … 외 ${paths.length - 5}` : ''}
-
+  build ${buildId} · 마운트 ${cfg.mounts.length} · 경로 ${paths.length}개`);
+for (const m of cfg.mounts) {
+  const n = paths.filter(p => (m.path.endsWith('/') ? p.startsWith(m.path) : p === m.path)).length;
+  console.log(`    ${m.path}  ←  ${m.root ?? m.file}  (${n})`);
+}
+console.log(`
 다음:
 
   node ${path.relative(process.cwd(), path.join(outDir, 'serve.mjs'))} &
