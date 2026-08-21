@@ -32,6 +32,8 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 | `origin` | **https** URL. 실재하고 도달 가능해야 한다 (로그인 여부는 무관) |
 | `mounts` | origin 경로 ← 로컬 빌드. **이미 빌드돼 있어야 한다** — 이 스킬은 빌드를 돌리지 않는다 |
 | 경로 선정 | **origin 이 그 경로를 실제로 쓰는지는 호출자가 안다** — 이 스킬은 모른다. 가리키는 곳이 없으면 생성이 실패한다 |
+| `scope` | **볼 문서가 사는 곳.** 자산 경로가 아니다. 그 아래 문서를 열어야 SW 가 붙는다 — 아니면 아무 일도 안 일어난다 |
+| 앱 이름 | 겹치면 생성이 실패한다. `x-tirno-app` 과 status 의 키가 된다 |
 
 ### 환경
 
@@ -52,8 +54,9 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 |---|---|
 | 프로필 | 그 origin 이 **계속** 바뀐 채로 남는다. tirno 없이 열어도 그렇다 |
 | `buildId` | 경로와 파일 내용의 해시. 새 빌드는 새 id 를 갖고 옛 캐시는 자동으로 지워진다 |
-| 조회 | `GET /__tirno/status` → `{buildId, paths, served, …}` |
-| 해제 | `GET /__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
+| 조회 | `GET <scope>__tirno/status` → `{buildId, scope, apps: [{name, mount, paths, served}]}` |
+| 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
+| 앱 구분 | 모든 응답에 `x-tirno-app: <이름>` |
 | 로그인 | 풀려 있다 |
 
 ### 엮이는 자리
@@ -72,16 +75,34 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 {
   "origin": "https://app.example.com",
   "port": 8443,
+  "scope": "/admin/",
   "mounts": [
-    { "path": "/_/design-mode-magnet/", "root": "../magnet/dist" },
-    { "path": "/_/publish-modal/",      "root": "../modal/dist" },
-    { "path": "/vendor/v.js",           "file": "./patched/v.js" }
+    { "name": "magnet", "path": "/_/design-mode-magnet/", "root": "../magnet/dist" },
+    { "name": "modal",  "path": "/_/publish-modal/",      "root": "../modal/dist" },
+    { "name": "vendor-patch", "path": "/vendor/v.js",     "file": "./patched/v.js" }
   ]
 }
 ```
 
-**서비스워커는 origin 당 하나다.** 그래서 앱이 여럿이어도 SW 를 여럿 두지 않는다 —
-하나가 여러 빌드를 나눠 낸다. 마운트를 나열하면 된다.
+### 앱마다 SW 를 둘 수는 없다
+
+**scope 는 자산이 아니라 문서로 매칭된다.** 문서가 어느 SW 에 제어되는지가 먼저 정해지고,
+그 문서에서 나가는 요청은 **경로와 무관하게** 그 SW 로만 간다. 실측:
+
+| | |
+|---|---|
+| `/a/` scope SW, 문서 `/` 에서 `fetch('/a/x.js')` | **안 잡힌다.** 그 문서는 컨트롤러가 없다 |
+| `/admin/` scope SW, 문서 `/admin/…` 에서 `fetch('/_/app/x.js')` | **잡힌다.** scope 밖 경로여도 온다 |
+
+그래서 `/_/a-app/` ← a-sw, `/_/b-app/` ← b-sw 같은 구성은 **등록은 되지만 한 번도 안 불린다**
+— 요청을 보내는 문서가 그 scope 아래에 없기 때문이다. 앱이 자기 iframe 을 갖고 그 문서가
+그 경로 아래 있는 경우가 아니라면 성립하지 않는다.
+
+**`scope` 는 볼 화면이 사는 곳으로 잡는다.** 관리자만 볼 거면 `/admin/` 이면 되고, 그러면
+사이트의 나머지에는 SW 가 아예 안 붙는다. 기본값은 `/` 다.
+
+**앱은 이름으로 구분한다** — 응답의 `x-tirno-app` 헤더, `<scope>__tirno/status` 의 앱별
+집계, 생성 시 출력. `name` 을 안 주면 경로에서 만든다.
 
 `path` 가 `/` 로 끝나면 `root` 디렉터리 전부를 그 접두사 아래로, 아니면 `file` 하나를
 그 경로에. **origin 의 경로와 로컬 경로는 달라도 된다** — 앱의 `dist/` 는 자기 루트가
@@ -107,8 +128,8 @@ node .sw-proxy/serve.mjs &
 tirno new preview --headless -- \
   --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" \
   --ignore-certificate-errors
-tirno nav https://app.example.com/__tirno-boot.html
-tirno eval "navigator.serviceWorker.register('/__tirno-sw.js').then(r => r.scope)"
+tirno nav https://app.example.com/admin/__tirno-boot.html
+tirno eval "navigator.serviceWorker.register('/admin/__tirno-sw.js').then(r => r.scope)"
 
 tirno restart preview        # rule 없이 — 여기서부터 진짜 origin
 ```
@@ -124,10 +145,10 @@ Private Network Access 가 전부 안 걸린다. 이게 이 부트스트랩 방�
 ### 4. 확인 · 해제
 
 ```bash
-tirno eval 'fetch("/__tirno/status").then(r => r.text())'
+tirno eval 'fetch("/admin/__tirno/status").then(r => r.text())'
 # {"buildId":"76fb0737063c","origin":"…","paths":3,"served":12,…}
 
-tirno eval 'fetch("/__tirno/off").then(r => r.text())'   # unregister + 캐시 삭제
+tirno eval 'fetch("/admin/__tirno/off").then(r => r.text())'   # unregister + 캐시 삭제
 ```
 
 `status` 와 `off` 는 **SW 안에** 있다. 로컬 서버가 꺼져 있어도 조회·해제가 된다.

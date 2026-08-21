@@ -4,8 +4,8 @@
 //   node scripts/sw-proxy/generate.mjs <mounts.json> [--out <dir>]
 //
 // 하는 일은 하나다: origin 의 지정한 경로를 로컬 빌드가 내게 만든다.
-// 앱이 여럿이면 마운트를 여럿 적는다 — 서비스워커는 origin 당 하나지만,
-// 그 하나가 여러 빌드를 나눠 낸다.
+// 앱이 여럿이면 마운트를 여럿 적는다 — SW 는 scope 당 하나뿐이라 앱마다 둘 수 없다.
+// 하나가 여러 빌드를 나눠 내고, 어느 앱이 냈는지는 x-tirno-app 으로 구분한다.
 //
 // 나오는 것 — __tirno-sw.js · __tirno-boot.html · serve.mjs · cert.pem/key.pem
 
@@ -32,6 +32,15 @@ if (!Array.isArray(cfg.mounts) || !cfg.mounts.length) {
 const host = new URL(cfg.origin).hostname;
 const port = cfg.port ?? 8443;
 
+// scope 는 **문서**로 매칭된다 — 자산이 어디 있느냐가 아니라, 볼 페이지가 어디 있느냐다.
+// 문서가 이 scope 아래 있어야 제어되고, 그러면 그 문서의 모든 요청이 SW 로 온다
+// (경로가 scope 밖이어도 온다). 그래서 앱마다 SW 를 두는 것은 불가능하다.
+const scope = cfg.scope ?? '/';
+if (!scope.startsWith('/') || !scope.endsWith('/')) {
+  console.error(`scope 는 "/" 로 시작하고 "/" 로 끝나야 한다 — 지금 ${JSON.stringify(scope)}`);
+  process.exit(1);
+}
+
 // ── 마운트를 편다.
 //    { path: "/_/app/", root: "./app/dist" }  → 그 디렉터리 전부를 그 접두사 아래로
 //    { path: "/vendor/x.js", file: "./x.js" } → 파일 하나
@@ -41,28 +50,38 @@ const port = cfg.port ?? 8443;
 const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
   e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
 
-const map = new Map();          // origin 경로 → 로컬 절대경로
+const map = new Map();          // origin 경로 → { file, app }
+const apps = [];
 const errors = [];
+const seenName = new Set();
 for (const [i, m] of cfg.mounts.entries()) {
   const label = m.path ?? `mounts[${i}]`;
   if (!m.path) { errors.push(`${label}: "path" 가 없다`); continue; }
+  // 이름은 status 와 x-tirno-app 에 쓰인다. 안 주면 경로에서 만든다.
+  const name = m.name ?? (m.path.replace(/^\/+|\/+$/g, '').split('/').pop() || 'root');
+  if (seenName.has(name)) { errors.push(`${label}: 이름이 겹친다 — ${name}`); continue; }
+  seenName.add(name);
 
   if (m.path.endsWith('/')) {
     if (!m.root) { errors.push(`${label}: 디렉터리 마운트에는 "root" 가 필요하다`); continue; }
     const root = path.resolve(cfgDir, m.root);
     if (!fs.existsSync(root)) { errors.push(`${label}: root 가 없다 — ${root}`); continue; }
+    let n = 0;
     for (const f of walk(root)) {
       const rel = path.relative(root, f).split(path.sep).join('/');
       const urlPath = m.path + rel;
       if (map.has(urlPath)) errors.push(`${urlPath}: 마운트가 겹친다`);
-      map.set(urlPath, f);
+      map.set(urlPath, { file: f, app: name });
+      n++;
     }
+    apps.push({ name, path: m.path, from: m.root, paths: n });
   } else {
     if (!m.file) { errors.push(`${label}: 파일 마운트에는 "file" 이 필요하다`); continue; }
     const file = path.resolve(cfgDir, m.file);
     if (!fs.existsSync(file)) { errors.push(`${label}: file 이 없다 — ${file}`); continue; }
     if (map.has(m.path)) errors.push(`${m.path}: 마운트가 겹친다`);
-    map.set(m.path, file);
+    map.set(m.path, { file, app: name });
+    apps.push({ name, path: m.path, from: m.file, paths: 1 });
   }
 }
 if (errors.length) { console.error(errors.map(e => '✗ ' + e).join('\n')); process.exit(1); }
@@ -71,14 +90,17 @@ if (!map.size) { console.error('마운트가 아무 파일도 가리키지 않�
 const paths = [...map.keys()].sort();
 
 // ── buildId — 경로와 그 내용에서 나온다. 무엇이든 바뀌면 activate 가 옛 캐시를 지운다.
-const h = crypto.createHash('sha1');
-for (const p of paths) h.update(p).update(fs.readFileSync(map.get(p)));
+const h = crypto.createHash('sha1').update(scope);
+for (const p of paths) h.update(p).update(map.get(p).app).update(fs.readFileSync(map.get(p).file));
 const buildId = h.digest('hex').slice(0, 12);
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, '__tirno-sw.js'),
   fs.readFileSync(new URL('./sw-template.js', import.meta.url), 'utf-8')
-    .replace('__CONFIG__', JSON.stringify({ buildId, generatedAt: new Date().toISOString(), paths }, null, 2)));
+    .replace('__CONFIG__', JSON.stringify({
+      buildId, scope, generatedAt: new Date().toISOString(), apps,
+      paths: Object.fromEntries(paths.map(p => [p, map.get(p).app])),
+    }, null, 2)));
 
 fs.writeFileSync(path.join(outDir, '__tirno-boot.html'),
   `<!doctype html><meta charset="utf-8"><title>tirno sw-proxy</title>\n<h1>tirno sw-proxy</h1>\n<p>${cfg.origin} · build ${buildId} · ${paths.length} paths · ${cfg.mounts.length} mounts</p>\n`);
@@ -92,7 +114,7 @@ import path from 'node:path';
 import https from 'node:https';
 
 const DIR = path.dirname(new URL(import.meta.url).pathname);
-const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
+const MAP = ${JSON.stringify(Object.fromEntries([...map].map(([k, v]) => [k, v.file])), null, 2)};
 
 // SW 는 캐시된 응답의 헤더를 그대로 넘긴다 — 여기서 붙인 타입이 그대로 굳는다.
 // 틀리면 브라우저가 거부한다: JS/CSS 는 nosniff 로 막히고, wasm 은
@@ -142,19 +164,18 @@ if (!fs.existsSync(cert)) {
 }
 
 console.log(`생성 완료 — ${outDir}
-  build ${buildId} · 마운트 ${cfg.mounts.length} · 경로 ${paths.length}개`);
-for (const m of cfg.mounts) {
-  const n = paths.filter(p => (m.path.endsWith('/') ? p.startsWith(m.path) : p === m.path)).length;
-  console.log(`    ${m.path}  ←  ${m.root ?? m.file}  (${n})`);
-}
+  build ${buildId} · scope ${scope} · 앱 ${apps.length} · 경로 ${paths.length}개`);
+for (const a of apps) console.log(`    ${a.name.padEnd(16)} ${a.path}  ←  ${a.from}  (${a.paths})`);
 console.log(`
 다음:
 
   node ${path.relative(process.cwd(), path.join(outDir, 'serve.mjs'))} &
   tirno new <세션> --headless -- --host-resolver-rules="MAP ${host} 127.0.0.1:${port}" --ignore-certificate-errors
-  tirno nav ${cfg.origin}/__tirno-boot.html
-  tirno eval "navigator.serviceWorker.register('/__tirno-sw.js').then(r => r.scope)"
+  tirno nav ${cfg.origin}${scope}__tirno-boot.html
+  tirno eval "navigator.serviceWorker.register('${scope}__tirno-sw.js').then(r => r.scope)"
   tirno restart <세션>          # rule 없이 — 여기서부터 진짜 origin
 
-확인:  tirno eval 'fetch("/__tirno/status").then(r => r.text())'
-해제:  tirno eval 'fetch("/__tirno/off").then(r => r.text())'`);
+scope 는 ${scope} 다 — 그 아래 문서를 열어야 SW 가 붙는다.
+
+확인:  tirno eval 'fetch("${scope}__tirno/status").then(r => r.text())'
+해제:  tirno eval 'fetch("${scope}__tirno/off").then(r => r.text())'`);
