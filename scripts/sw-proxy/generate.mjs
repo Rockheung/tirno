@@ -114,11 +114,40 @@ https.createServer({
 `);
 
 // ── 인증서는 있으면 다시 굽지 않는다. 매번 새로 만들 이유가 없다.
+//
+// 굽는 것은 openssl 이고 tirno 가 아니다. mkcert 로 구워도 상관없지만
+// `mkcert -install` 은 하지 않는다 — 아래 경고 참고.
 const cert = path.join(outDir, 'cert.pem');
 if (!fs.existsSync(cert)) {
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048',
     '-keyout', path.join(outDir, 'key.pem'), '-out', cert, '-days', '365', '-nodes',
     '-subj', `/CN=${host}`, '-addext', `subjectAltName=DNS:${host}`], { stdio: 'ignore' });
+}
+
+// ── 원칙: 로컬 CA 를 신뢰 저장소에 넣지 않는다.
+//
+// 신뢰는 --ignore-certificate-errors 로 그 크롬 세션에만 국한한다. 로컬 CA 가 신뢰
+// 저장소에 들어가면 아무 도메인 인증서나 발급할 수 있는 권한이 생기고, 그 개인키는
+// 디스크에 평문으로 남는다 — 부트스트랩 몇 초를 편하려고 시스템 전역에 만능 발급권을
+// 심는 셈이다. 글로만 적어두면 안 지켜지므로 여기서 본다.
+if (process.platform === 'darwin') {
+  const found = [];
+  for (const name of ['mkcert', 'mitmproxy', 'Proxyman', 'Charles', 'Fiddler']) {
+    try {
+      execFileSync('security', ['find-certificate', '-c', name], { stdio: 'ignore' });
+      found.push(name);
+    } catch { /* 없음 — 정상 */ }
+  }
+  if (found.length) {
+    console.warn(`
+⚠  키체인에 로컬 CA 가 있다: ${found.join(', ')}
+   그 CA 는 아무 도메인 인증서나 발급할 수 있고 개인키는 디스크에 있다.
+   이 절차는 --ignore-certificate-errors 로 그 크롬 세션에만 신뢰를 국한하므로
+   신뢰 저장소에 넣을 필요가 없다. 쓰지 않는다면 빼는 게 맞다:
+     security find-certificate -a -c <이름>      # 확인
+     mkcert -uninstall                           # mkcert 인 경우
+`);
+  }
 }
 
 const shown = paths.slice(0, 5).join('  ');
