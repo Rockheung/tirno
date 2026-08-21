@@ -60,7 +60,7 @@ const seenName = new Set();
 for (const [i, m] of cfg.mounts.entries()) {
   const label = m.path ?? `mounts[${i}]`;
   if (!m.path) { errors.push(`${label}: "path" 가 없다`); continue; }
-  // 이름은 status 와 x-tirno-app 에 쓰인다. 안 주면 경로에서 만든다.
+  // 이름은 status·x-tirno-layer·mount/unmount 의 키다. 안 주면 경로에서 만든다.
   const name = m.name ?? (m.path.replace(/^\/+|\/+$/g, '').split('/').pop() || 'root');
   if (seenName.has(name)) { errors.push(`${label}: 이름이 겹친다 — ${name}`); continue; }
   seenName.add(name);
