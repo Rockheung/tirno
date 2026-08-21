@@ -4,8 +4,10 @@
 //   node scripts/sw-proxy/generate.mjs <mounts.json> [--out <dir>]
 //
 // 하는 일은 하나다: origin 의 지정한 경로를 로컬 빌드가 내게 만든다.
-// 앱이 여럿이면 마운트를 여럿 적는다 — SW 는 scope 당 하나뿐이라 앱마다 둘 수 없다.
-// 하나가 여러 빌드를 나눠 내고, 어느 앱이 냈는지는 x-tirno-app 으로 구분한다.
+//
+// SW 는 scope 당 하나이고 scope 는 **문서**로 매칭되므로 앱마다 SW 를 둘 수 없다.
+// 대신 SW 를 커널로 두고 배포 산출물을 **레이어**로 얹는다 — 순서대로 해석해 먼저
+// 가진 레이어가 이기고, 아무도 안 가지면 원본으로 간다. 런타임에 mount/unmount 한다.
 //
 // 나오는 것 — __tirno-sw.js · __tirno-boot.html · serve.mjs · cert.pem/key.pem
 
@@ -50,8 +52,9 @@ if (!scope.startsWith('/') || !scope.endsWith('/')) {
 const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
   e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
 
-const map = new Map();          // origin 경로 → { file, app }
-const apps = [];
+const map = new Map();          // origin 경로 → 로컬 절대경로 (서버 기본값, 위 레이어가 이긴다)
+const layerFile = new Map();    // "<layerId>\0<경로>" → 로컬 절대경로
+const layers = [];
 const errors = [];
 const seenName = new Set();
 for (const [i, m] of cfg.mounts.entries()) {
@@ -66,22 +69,25 @@ for (const [i, m] of cfg.mounts.entries()) {
     if (!m.root) { errors.push(`${label}: 디렉터리 마운트에는 "root" 가 필요하다`); continue; }
     const root = path.resolve(cfgDir, m.root);
     if (!fs.existsSync(root)) { errors.push(`${label}: root 가 없다 — ${root}`); continue; }
-    let n = 0;
+    const own = [];
     for (const f of walk(root)) {
       const rel = path.relative(root, f).split(path.sep).join('/');
       const urlPath = m.path + rel;
-      if (map.has(urlPath)) errors.push(`${urlPath}: 마운트가 겹친다`);
-      map.set(urlPath, { file: f, app: name });
-      n++;
+      own.push(urlPath);
+      layerFile.set(`${i}-${name}\u0000${urlPath}`, f);
+      // 겹침은 오류가 아니라 우선순위다 — 먼저 선언된 레이어가 이긴다.
+      if (!map.has(urlPath)) map.set(urlPath, f);
     }
-    apps.push({ name, path: m.path, from: m.root, paths: n });
+    layers.push({ id: `${i}-${name}`, name, mount: m.path, from: m.root,
+                  enabled: m.enabled !== false, paths: own });
   } else {
     if (!m.file) { errors.push(`${label}: 파일 마운트에는 "file" 이 필요하다`); continue; }
     const file = path.resolve(cfgDir, m.file);
     if (!fs.existsSync(file)) { errors.push(`${label}: file 이 없다 — ${file}`); continue; }
-    if (map.has(m.path)) errors.push(`${m.path}: 마운트가 겹친다`);
-    map.set(m.path, { file, app: name });
-    apps.push({ name, path: m.path, from: m.file, paths: 1 });
+    layerFile.set(`${i}-${name}\u0000${m.path}`, file);
+    if (!map.has(m.path)) map.set(m.path, file);
+    layers.push({ id: `${i}-${name}`, name, mount: m.path, from: m.file,
+                  enabled: m.enabled !== false, paths: [m.path] });
   }
 }
 if (errors.length) { console.error(errors.map(e => '✗ ' + e).join('\n')); process.exit(1); }
@@ -91,15 +97,17 @@ const paths = [...map.keys()].sort();
 
 // ── buildId — 경로와 그 내용에서 나온다. 무엇이든 바뀌면 activate 가 옛 캐시를 지운다.
 const h = crypto.createHash('sha1').update(scope);
-for (const p of paths) h.update(p).update(map.get(p).app).update(fs.readFileSync(map.get(p).file));
+for (const l of layers) {
+  h.update(l.id);
+  for (const p of l.paths) h.update(p).update(fs.readFileSync(layerFile.get(l.id + '\u0000' + p)));
+}
 const buildId = h.digest('hex').slice(0, 12);
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(path.join(outDir, '__tirno-sw.js'),
   fs.readFileSync(new URL('./sw-template.js', import.meta.url), 'utf-8')
     .replace('__CONFIG__', JSON.stringify({
-      buildId, scope, generatedAt: new Date().toISOString(), apps,
-      paths: Object.fromEntries(paths.map(p => [p, map.get(p).app])),
+      buildId, scope, generatedAt: new Date().toISOString(), layers,
     }, null, 2)));
 
 fs.writeFileSync(path.join(outDir, '__tirno-boot.html'),
@@ -114,7 +122,11 @@ import path from 'node:path';
 import https from 'node:https';
 
 const DIR = path.dirname(new URL(import.meta.url).pathname);
-const MAP = ${JSON.stringify(Object.fromEntries([...map].map(([k, v]) => [k, v.file])), null, 2)};
+const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
+// 레이어별 실제 파일. 겹치는 경로에서 각 레이어가 자기 것을 받아야 하므로,
+// SW 가 install 때 ?__tirno_layer=<id> 로 물어본다.
+const LAYERS = ${JSON.stringify(Object.fromEntries(layers.map(l => [l.id,
+  Object.fromEntries(l.paths.map(p => [p, layerFile.get(l.id + '\u0000' + p)]))])), null, 2)};
 
 // SW 는 캐시된 응답의 헤더를 그대로 넘긴다 — 여기서 붙인 타입이 그대로 굳는다.
 // 틀리면 브라우저가 거부한다: JS/CSS 는 nosniff 로 막히고, wasm 은
@@ -140,8 +152,11 @@ https.createServer({
   key: fs.readFileSync(path.join(DIR, 'key.pem')),
 }, (req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
+  const layer = new URL(req.url, 'https://x').searchParams.get('__tirno_layer');
   const boot = path.join(DIR, path.basename(p));          // 부트스트랩 산출물
-  const file = MAP[p] ?? (fs.existsSync(boot) && fs.statSync(boot).isFile() ? boot : null);
+  const file = (layer && LAYERS[layer] && LAYERS[layer][p])
+    ?? MAP[p]
+    ?? (fs.existsSync(boot) && fs.statSync(boot).isFile() ? boot : null);
   console.log(res.statusCode = file ? 200 : 404, p);
   if (!file) return res.end('not found');
   const ext = path.extname(file).toLowerCase();
@@ -164,8 +179,11 @@ if (!fs.existsSync(cert)) {
 }
 
 console.log(`생성 완료 — ${outDir}
-  build ${buildId} · scope ${scope} · 앱 ${apps.length} · 경로 ${paths.length}개`);
-for (const a of apps) console.log(`    ${a.name.padEnd(16)} ${a.path}  ←  ${a.from}  (${a.paths})`);
+  build ${buildId} · scope ${scope} · 레이어 ${layers.length} · 경로 ${paths.length}개
+  (위에 있는 레이어가 이긴다)`);
+for (const l of layers) {
+  console.log(`    ${l.name.padEnd(16)} ${l.mount}  ←  ${l.from}  (${l.paths.length}${l.enabled ? '' : ', 꺼짐'})`);
+}
 console.log(`
 다음:
 
@@ -177,5 +195,7 @@ console.log(`
 
 scope 는 ${scope} 다 — 그 아래 문서를 열어야 SW 가 붙는다.
 
-확인:  tirno eval 'fetch("${scope}__tirno/status").then(r => r.text())'
-해제:  tirno eval 'fetch("${scope}__tirno/off").then(r => r.text())'`);
+확인:    tirno eval 'fetch("${scope}__tirno/status").then(r => r.text())'
+레이어:  tirno eval 'fetch("${scope}__tirno/unmount?layer=<이름>").then(r => r.text())'
+         tirno eval 'fetch("${scope}__tirno/mount?layer=<이름>").then(r => r.text())'
+해제:    tirno eval 'fetch("${scope}__tirno/off").then(r => r.text())'`);

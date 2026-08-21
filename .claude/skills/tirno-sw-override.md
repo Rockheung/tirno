@@ -54,9 +54,10 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 |---|---|
 | 프로필 | 그 origin 이 **계속** 바뀐 채로 남는다. tirno 없이 열어도 그렇다 |
 | `buildId` | 경로와 파일 내용의 해시. 새 빌드는 새 id 를 갖고 옛 캐시는 자동으로 지워진다 |
-| 조회 | `GET <scope>__tirno/status` → `{buildId, scope, apps: [{name, mount, paths, served}]}` |
+| 조회 | `GET <scope>__tirno/status` → `{buildId, scope, layers: [{name, mount, paths, enabled, served}]}` |
 | 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
-| 앱 구분 | 모든 응답에 `x-tirno-app: <이름>` |
+| 앱 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
+| 앱 제어 | `<scope>__tirno/mount|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이 |
 | 로그인 | 풀려 있다 |
 
 ### 엮이는 자리
@@ -77,11 +78,33 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
   "port": 8443,
   "scope": "/admin/",
   "mounts": [
-    { "name": "magnet", "path": "/_/design-mode-magnet/", "root": "../magnet/dist" },
-    { "name": "modal",  "path": "/_/publish-modal/",      "root": "../modal/dist" },
-    { "name": "vendor-patch", "path": "/vendor/v.js",     "file": "./patched/v.js" }
+    { "name": "local-override", "path": "/_/magnet/", "root": "../magnet/dist" },
+    { "name": "deployment-123", "path": "/_/magnet/", "root": "../artifacts/123" },
+    { "name": "modal",          "path": "/_/publish-modal/", "root": "../modal/dist" },
+    { "name": "vendor-patch",   "path": "/vendor/v.js", "file": "./patched/v.js" }
   ]
 }
+```
+
+### 레이어 — 위에 있는 것이 이긴다
+
+마운트는 **레이어**다. 경로가 겹치면 오류가 아니라 우선순위다 — 먼저 선언된 쪽이 낸다.
+위 예에서 `/_/magnet/` 은 로컬 작업본이 배포 산출물을 덮고 있고, 로컬을 내리면 배포본이
+드러난다.
+
+```
+resolve("/_/magnet/assets/app.js")
+  1. local-override   ← 켜져 있고 그 경로를 가짐 → 낸다
+  2. deployment-123
+  3. (아무도 없으면) 원본
+```
+
+**런타임에 올리고 내린다.** 다시 굽거나 다시 심을 필요가 없다.
+
+```bash
+tirno eval 'fetch("/admin/__tirno/unmount?layer=local-override").then(r => r.text())'
+tirno eval 'fetch("/admin/__tirno/mount?layer=local-override").then(r => r.text())'
+tirno eval 'fetch("/admin/__tirno/mount").then(r => r.text())'      # layer 생략 = 전부
 ```
 
 ### 앱마다 SW 를 둘 수는 없다
@@ -101,8 +124,8 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 **`scope` 는 볼 화면이 사는 곳으로 잡는다.** 관리자만 볼 거면 `/admin/` 이면 되고, 그러면
 사이트의 나머지에는 SW 가 아예 안 붙는다. 기본값은 `/` 다.
 
-**앱은 이름으로 구분한다** — 응답의 `x-tirno-app` 헤더, `<scope>__tirno/status` 의 앱별
-집계, 생성 시 출력. `name` 을 안 주면 경로에서 만든다.
+**앱은 레이어 이름으로 구분한다** — 응답의 `x-tirno-layer` 헤더, `<scope>__tirno/status` 의
+레이어별 집계, 생성 시 출력. `name` 을 안 주면 경로에서 만든다.
 
 `path` 가 `/` 로 끝나면 `root` 디렉터리 전부를 그 접두사 아래로, 아니면 `file` 하나를
 그 경로에. **origin 의 경로와 로컬 경로는 달라도 된다** — 앱의 `dist/` 는 자기 루트가
@@ -190,6 +213,24 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
 
 **`mkcert -install` 은 하지 않는다.** 신뢰는 `--ignore-certificate-errors` 로 그 크롬
 세션에만 국한한다 — tirno 가 띄운 그 프로세스 하나에만 걸리고, 죽으면 같이 사라진다.
+
+## 계보
+
+뜬금없는 발명이 아니다. 검증된 세 조각의 조합이다.
+
+| | |
+|---|---|
+| [Wayne](https://github.com/jcubic/wayne) | "Express inside Service Worker". SW 를 브라우저 안의 HTTP 서버로 쓰고, VFS·커스텀 핸들러·네트워크 폴백으로 응답을 고른다 |
+| [CodeSandbox `static-browser-server`](https://github.com/codesandbox/static-browser-server) | 가상 파일을 SW 로 서빙하는 브라우저 내부 정적 서버 |
+| [MSW](https://github.com/mswjs/msw) | 앱 코드를 안 건드리고 네트워크 층에서 가로채되, 안 걸리는 요청은 실제 네트워크로 통과 — 이 문서의 "목록에 없으면 respondWith 를 안 부른다" 가 같은 규율이다 |
+
+이 스킬이 다른 점은 서빙 대상이 **가상 프로젝트가 아니라 아직 배포되지 않은 산출물**이고,
+얹는 곳이 **살아 있는 production 페이지**라는 것이다. 그래서 mock 보다는 **deployment
+overlay** 라고 부르는 편이 정확하다 — 페이지를 프리뷰용으로 다시 빌드하지 않고, URL 도
+production 그대로다.
+
+레이어 모델도 여기서 왔다. 앱마다 SW 를 띄우려는 충동이 자연스럽지만 그건 불가능하고,
+**SW 하나를 커널로 두고 배포본을 마운트/언마운트**하는 편이 이 문제의 모양에 맞다.
 
 ## 조사할 때 걸리는 것
 
