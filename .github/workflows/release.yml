@@ -13,6 +13,10 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+  # 이 파이프라인이 바뀌면 PR 에서 스스로 돈다. 릴리즈 날에 처음 돌려보는 것은
+  # 확인이 아니라 도박이다.
+  pull_request:
+    paths: ['.github/workflows/release.yml']
 
 permissions:
   contents: write
