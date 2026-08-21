@@ -8,11 +8,10 @@
 
 ---
 
-## 먼저 확인할 둘
+## 먼저 확인할 것 — Chrome 하나
 
 | | |
 |---|---|
-| **Node** | **22 이상.** `package.json` 의 `engines` 로 강제된다. 확인: `node -v` |
 | **Chrome** | 아래 **네 경로만** 자동으로 찾는다 |
 
 ```
@@ -25,11 +24,36 @@
 없으면 기동이 `Chrome not found` 로 멈춘다. Brave·Edge·다른 경로에 깔린 Chrome 은
 `--executable-path` 로 직접 준다. 그 값은 세션 메타에 남아 `restart` 에서도 유지된다.
 
-> **npm 레지스트리에 없다.** 소스에서 받는다 — `npm i -g tirno` 는 안 된다.
+Node 는 **바이너리로 받으면 필요 없다** — 런타임이 들어 있다. 소스에서 빌드할 때만
+Node 22+ 가 필요하다.
+
+> **npm 레지스트리에 없다.** `npm i -g tirno` 는 안 된다.
 
 ---
 
-## 설치
+## 설치 — 받아서 바로
+
+```bash
+curl -fsSL https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64 -o tirno
+chmod +x tirno && sudo mv tirno /usr/local/bin/
+tirno --version
+```
+
+타깃 넷 — `darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64`.
+자기 것으로 파일명만 바꾼다. **Windows 는 대상이 아니다**(소유권 판정이 `lsof`·`ps` 를 읽는다).
+
+검증하려면:
+
+```bash
+curl -fsSLO https://github.com/Rockheung/tirno/releases/latest/download/SHA256SUMS
+shasum -a 256 -c SHA256SUMS 2>/dev/null | grep darwin-arm64     # → OK
+```
+
+여기까지가 끝이다. **아래는 도구를 고칠 사람만** 본다.
+
+---
+
+## 소스에서 — 고칠 사람만
 
 ### 1. 클론
 
@@ -68,7 +92,7 @@ npm link
 
 ```bash
 $ tirno --version
-0.1.0
+0.2.0
 
 $ tirno schema | jq '.commands | length'
 66
@@ -186,8 +210,8 @@ tirno broadcast nav https://example.com --group wall
 
 | 명령 | 무엇을 증명하나 | 실측 |
 |---|---|---|
-| `npm test` | 파서·판정 로직. **Chrome 을 안 띄운다** — 캡처한 문자열로 돈다 | 183건 · 0.55s |
-| `node scripts/smoke.mjs` | 명령이 **실제로 도는가**. 종료코드만이 아니라 출력·파일·페이지 상태까지 재독한다 | 188건 · 56s |
+| `npm test` | 파서·판정 로직. **Chrome 을 안 띄운다** — 캡처한 문자열로 돈다 | 190건 · 0.56s |
+| `node scripts/smoke.mjs` | 명령이 **실제로 도는가**. 종료코드만이 아니라 출력·파일·페이지 상태까지 재독한다 | 190건 · 55s |
 | `npm run lint` | eslint | — |
 
 **둘 다 PR 게이트다** — `ci.yml` 이 유닛과 스모크를 같이 돌리고, 하나라도 깨지면 PR 이 빨간불이 된다.
