@@ -45,7 +45,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | `click` (uid) | `tirno click @N` 또는 `tirno click <css>` | snapshot 후 ref 또는 selector |
 | `click` (dblClick) | **미구현 직접 옵션** — `tirno cdp Input.dispatchMouseEvent` 두 번 또는 `tirno eval "el.click(); el.click()"` | — |
 | `click_at` (x,y) | `tirno click "<x>,<y>" [--dbl]` | wave 4 — 좌표 형태면 자동으로 `Input.dispatchMouseEvent` trusted click 사용 |
-| `hover` | `tirno hover <selector>` | — |
+| `hover` | `tirno hover <selector\|@N>` | — |
 | `fill` (input/textarea) | `tirno fill <target> <value>` | target = selector or @ref |
 | `fill` (checkbox/select 자동) | **부분 매핑** — selector 가 select 이면 `tirno eval "document.querySelector('#s').value='b'"`, checkbox 는 `tirno click` | mcp 의 자동 분기 동등 미구현 |
 | `type_text` | `tirno type "<text>"` (+ `tirno press Enter` for submitKey) | — |
