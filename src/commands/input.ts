@@ -4,6 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
 import { clickByRef, fillByRef, hoverByRef } from '../cdp/dom-actions.js';
+import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
 import type { Page } from 'puppeteer-core';
 
@@ -182,15 +183,49 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('press')
-    .description('Press a key')
-    .argument('<key>', 'Key name (Enter, Tab, Escape, ArrowDown, ...)')
+    .description('Press a key, or a modifier combo like "Meta+v" / "Shift+Tab"')
+    .argument('<key>', 'Key name (Enter, Tab, Escape, ArrowDown, ...) or <modifier>+<key>')
     .option('-s, --session <name>', 'Session name')
     .action(async (key: string, opts) => {
       try {
+        const combo = parseKeyCombo(key);
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
-        await page.keyboard.press(key as import('puppeteer-core').KeyInput);
+        if (combo.modifiers.length === 0) {
+          await page.keyboard.press(key as import('puppeteer-core').KeyInput);
+        } else {
+          const command = editingCommandFor(combo);
+          if (command) {
+            // 편집 조작은 키 이벤트만으로는 일어나지 않는다. 브라우저가 그 동작을
+            // 실행하려면 `commands` 를 함께 받아야 한다 — 실측으로, commands 없이
+            // Meta+V 를 보내면 포커스된 필드의 값이 그대로였다.
+            const cdp = await page.createCDPSession();
+            try {
+              const base = {
+                key: combo.key,
+                code: keyCodeName(combo.key),
+                modifiers: modifierBits(combo.modifiers),
+                windowsVirtualKeyCode: virtualKeyCode(combo.key),
+                nativeVirtualKeyCode: virtualKeyCode(combo.key),
+              };
+              await cdp.send('Input.dispatchKeyEvent', { ...base, type: 'keyDown', commands: [command] });
+              await cdp.send('Input.dispatchKeyEvent', { ...base, type: 'keyUp' });
+            } finally {
+              await cdp.detach();
+            }
+          } else {
+            // 편집 명령이 아닌 조합은 puppeteer 가 자기 키보드 표로 눌러 준다 —
+            // 여기서 전체 표를 다시 들 이유가 없다.
+            const mods = combo.modifiers as import('puppeteer-core').KeyInput[];
+            for (const m of mods) await page.keyboard.down(m);
+            try {
+              await page.keyboard.press(combo.key as import('puppeteer-core').KeyInput);
+            } finally {
+              for (const m of [...mods].reverse()) await page.keyboard.up(m);
+            }
+          }
+        }
 
         browser.disconnect();
         success(`Pressed ${key}`);
