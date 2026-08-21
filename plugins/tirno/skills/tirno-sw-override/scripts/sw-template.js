@@ -55,10 +55,36 @@ self.addEventListener('fetch', e => {
 
   // 켜져 있는 레이어를 순서대로 — 먼저 가진 쪽이 이긴다.
   const layer = state.layers.find(l => l.enabled && l.paths.includes(url.pathname));
-  if (!layer) return;                              // 아무 레이어에도 없음 → 원본으로
-  layer.served++;
-  e.respondWith(fromLayer(layer, url.pathname, e.request));
+  if (layer) {
+    layer.served++;
+    return e.respondWith(fromLayer(layer, url.pathname, e.request));
+  }
+
+  // 목록에 없는 경로. SPA 는 라우트가 무한하므로(동적 세그먼트가 있으면 원리적으로
+  // 그렇다) 나열로는 덮을 수 없다 — 진입점만 마운트해 두면 하위 경로로 직접 들어가거나
+  // 거기서 새로고침할 때 원본이 뜬다.
+  //
+  // 그래서 **navigate 요청에 한해**, 접두사를 밝힌 레이어가 자기 문서를 낸다. 자산까지
+  // 이렇게 하면 없는 청크가 200 text/html 로 위장되어 훨씬 나쁜 실패가 된다.
+  // 접두사를 안 밝힌 레이어는 예전대로 통과시킨다 — 목록에 없으면 원본이 이 도구의 규율이고,
+  // 이것은 부르는 쪽이 명시적으로 켠 예외다.
+  if (e.request.mode === 'navigate') {
+    const fb = state.layers.find(l =>
+      l.enabled && l.navigateFallback && underPrefix(url.pathname, l.navigateFallback));
+    if (fb) {
+      fb.served++;
+      // 요청 경로가 아니라 그 레이어가 마운트한 문서를 낸다 — 캐시에 있는 것은 그것뿐이다.
+      return e.respondWith(fromLayer(fb, fb.paths[0], e.request));
+    }
+  }
 });
+
+/** `/app` 은 `/app` 과 `/app/…` 을 덮고 `/application` 은 덮지 않는다. */
+function underPrefix(pathname, prefix) {
+  if (pathname === prefix) return true;
+  const withSlash = prefix.endsWith('/') ? prefix : prefix + '/';
+  return pathname.startsWith(withSlash);
+}
 
 async function control(url) {
   const op = url.pathname.slice((CONFIG.scope + '__tirno/').length);
