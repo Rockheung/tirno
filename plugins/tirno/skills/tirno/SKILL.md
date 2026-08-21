@@ -103,7 +103,11 @@ tirno eval <expression>
 tirno eval "document.title"
 tirno eval "JSON.stringify(performance.timing)" --json
 tirno eval "<expr>" --timeout 60000     # 기본 30초. 0 이면 연결이 허용하는 만큼
+tirno eval '() => { …; return x }'      # 인자 없는 함수는 호출하고 반환값을 낸다
 ```
+
+함수 리터럴을 넘기면 **호출한다.** 안 부르면 함수 객체가 `{}` 로 직렬화되어 "빈 결과" 로
+읽힌다. 인자를 받는 함수는 부르지 않고 그렇게 말한다(exit 1).
 
 settle 하지 않는 promise 를 페이지가 돌려주면 기본 30초에서 끊고 그렇게 말한다 —
 `navigator.clipboard.readText()` 가 권한 없이 그렇게 된다. 페이지 쪽 실행을 멈추지는 않는다.

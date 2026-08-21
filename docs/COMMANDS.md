@@ -136,9 +136,20 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 ### 실행 / emulation
 | 명령 | 설명 |
 |---|---|
-| `eval <expression> [--timeout <ms>]` | 페이지에서 JS 실행. 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
+| `eval <expression> [--timeout <ms>]` | 페이지에서 JS 실행. **함수 리터럴은 호출한다**(아래). 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
 | `cdp <method> [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
 | `emulate [--device <name>] [--dpr <n>] [--network <p>] [--cpu <n>] [--reset]` | 영속 emulation |
+
+`eval` 은 평가 결과가 **인자 없는 함수면 호출하고 그 반환을 낸다.** 안 부르면 함수 객체가
+값이 되어 `{}` 로 직렬화되는데, 그것은 "함수를 안 불렀다" 가 아니라 "빈 결과" 로 읽힌다 —
+여러 문장이 필요한 조작은 자연스럽게 함수로 감싸게 되므로 흔히 밟는 자리다.
+
+```bash
+tirno eval '() => { const a = 1, b = 2; return { sum: a + b }; }'   # → {"sum": 3}
+```
+
+인자를 받는 함수는 **부르지 않고 그렇게 말한다**(exit 1) — 무엇을 넘길지는 부르는 쪽만 알고,
+undefined 를 밀어 넣으면 그쪽이 더 조용한 오답이 된다. 호출 결과가 또 함수일 때도 같다.
 
 ### 권한
 | 명령 | 설명 |
