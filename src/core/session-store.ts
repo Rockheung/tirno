@@ -50,6 +50,12 @@ export interface SessionMetadata {
   createdAt: string;
   lastAccessedAt: string;
   emulation?: EmulationState;
+  /**
+   * origin → granted permissions, re-applied on every connect. Chrome ties a
+   * CDP grant to the DevTools connection, not the profile, so it does not
+   * survive a command ending — see cdp/permissions.
+   */
+  permissions?: Record<string, string[]>;
   group?: string;
   /**
    * Set by `record start`. The recorder itself lives in the page and its buffer

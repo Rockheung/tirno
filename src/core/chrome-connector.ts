@@ -4,6 +4,7 @@ import { inspectSession } from './inventory.js';
 import { ChromeNotRunning, NoActiveSession, SessionNotOwned } from '../util/errors.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
+import { applyPermissions } from '../cdp/permissions.js';
 
 /**
  * Attach to a session's browser and prepare its pages (dialog auto-dismiss,
@@ -229,6 +230,17 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   if (prepare) {
     await attachAll();
     browser.on('targetcreated', () => { attachAll().catch(() => {}); });
+  }
+
+  // Grants are connection-scoped in Chrome, so the ledger is the only place
+  // they persist; re-applying here is what makes them outlive one command.
+  if (prepare && meta.permissions && Object.keys(meta.permissions).length > 0) {
+    try {
+      await applyPermissions(browser, meta.permissions);
+    } catch {
+      // best-effort, same as emulation: a grant that cannot be re-applied must
+      // not stop the command the caller actually asked for
+    }
   }
 
   if (prepare && meta.emulation) {

@@ -116,6 +116,24 @@ tirno emulate --list-devices        # 프리셋 목록
 
 emulation 상태는 `SessionMetadata.emulation`에 저장되어 connect마다 자동 재적용 (`page.emulate()` 사용으로 UA/touch도 새 connection에서 유지).
 
+### 권한
+
+```bash
+tirno permissions grant https://example.com clipboard-read clipboard-write
+tirno permissions revoke https://example.com   # origin 생략하면 전부 해제
+tirno permissions ls                            # 이 세션에 기록된 grant
+tirno perm ls                                   # 줄임말
+```
+
+CDP 권한은 프로필이 아니라 **DevTools 연결에 묶인다.** tirno 는 명령마다 붙었다 끊으므로
+`cdp Browser.grantPermissions` 로 직접 준 권한은 그 명령이 끝나면 `prompt` 로 돌아간다 —
+user-data-dir 을 유지해도 그렇다. `permissions grant` 는 `SessionMetadata.permissions` 에
+저장하고 emulation 과 같은 자리에서 connect 마다 재적용한다.
+
+클립보드는 권한만으로 부족하다. 문서에 포커스가 없으면 `readText()` 가
+`NotAllowedError: Document is not focused` 로 거절되므로, 백그라운드 탭이면
+`tirno cdp Page.bringToFront '{}'` 를 먼저 보낸다.
+
 ### 성능 · 진단
 
 ```bash
