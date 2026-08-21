@@ -88,6 +88,11 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'anchor set':   { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'anchor rm':    { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
 
+  // ---- permissions
+  'permissions ls':     { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'permissions grant':  { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'permissions revoke': { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+
   // ---- navigation
   'nav':          { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'reload':       { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },

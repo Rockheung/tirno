@@ -139,6 +139,24 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `cdp <method> [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
 | `emulate [--device <name>] [--dpr <n>] [--network <p>] [--cpu <n>] [--reset]` | 영속 emulation |
 
+### 권한
+| 명령 | 설명 |
+|---|---|
+| `permissions grant <origin> <permission...>` | origin 에 권한을 주고 세션에 기록. origin 은 `new URL(x).origin` 으로 정규화되므로 경로·쿼리를 붙여도 된다 |
+| `permissions revoke [origin]` | 한 origin, 또는 인자 없으면 전부 해제 |
+| `permissions ls [--json]` | 이 세션에 기록된 grant 목록 |
+
+`perm` 으로 줄여 쓸 수 있다.
+
+CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.** tirno 는 명령마다 붙었다
+끊으므로, `cdp Browser.grantPermissions` 로 직접 준 권한은 그 명령이 끝나는 순간 `prompt`
+로 돌아간다 — user-data-dir 을 유지해도 마찬가지다. 그래서 grant 는 `SessionMetadata.permissions`
+에 저장되고 emulation 과 같은 자리에서 connect 마다 재적용된다.
+
+권한이 있어도 `navigator.clipboard.readText()` 는 문서에 포커스가 없으면
+`NotAllowedError: Document is not focused` 로 거절된다. 백그라운드 탭이면 `cdp Page.bringToFront`
+를 먼저 보낸다.
+
 ### 성능
 | 명령 | 설명 |
 |---|---|
