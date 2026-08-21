@@ -111,17 +111,12 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
   원인을 못 찾는다. tirno 세션 하나를 전용으로 쓰고, 확실히 되돌리려면
   `tirno kill <세션> --clean` 으로 프로필째 버린다(로그인도 같이 사라진다).
 
-## 인증서 — `mkcert -install` 은 이 절차에 없다
+## 인증서
 
-인증서는 생성기가 `openssl` 로 굽는다. `mkcert` 로 구워도 된다 — 굽는 도구는 상관없다.
+생성기가 `openssl` 로 굽는다. `mkcert` 로 구워도 된다.
 
-**하지 않는 것은 `mkcert -install` 이다.** mkcert 안내문이 으레 함께 시키지만, 이 절차에는
-필요 없다. 신뢰는 `--ignore-certificate-errors` 로 **그 크롬 세션에만** 국한한다 — tirno 가
-띄운 그 프로세스 하나에만 걸리고, 죽으면 같이 사라진다.
-
-`-install` 은 로컬 CA 를 시스템 신뢰 저장소에 넣는 일이다. 부트스트랩 몇 초를 편하려고
-치르기엔 범위가 너무 넓다. 다른 사유로 CA 를 설치해 두는 것은 각자의 판단이고 이 스킬이
-관여할 바 아니지만, **이 절차 때문에 설치할 이유는 없다.**
+**`mkcert -install` 은 하지 않는다.** 신뢰는 `--ignore-certificate-errors` 로 그 크롬
+세션에만 국한한다 — tirno 가 띄운 그 프로세스 하나에만 걸리고, 죽으면 같이 사라진다.
 
 ## 조사할 때 걸리는 것
 
