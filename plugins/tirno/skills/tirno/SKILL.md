@@ -27,6 +27,7 @@ npm link   # 또는 PATH에 bin/ 추가
 ```bash
 tirno new <name> [url] [-- chrome-flags...]  # Chrome 세션 생성
 tirno restart <name> [url] [-- flags...]     # 죽이고 새 플래그로 재생성
+tirno restart <name> --keep-cookies          # 세션 쿠키까지 넘긴다 — 로그인이 살아남는다
 tirno ls [--json] [--flags]                  # 세션 목록 (STATUS + OWNER 컬럼)
 tirno attach <name>                          # 활성 세션 설정
 tirno kill <name|--all> [--clean]            # 세션 종료 (foreign/ambiguous 는 거부)

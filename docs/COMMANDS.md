@@ -12,6 +12,7 @@
 | `ls` | 세션 목록 (port, status, **owner**, proxy, emulation, last access) |
 | `attach <name>` | active 세션 변경 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
+| `restart <name> [url] [--keep-cookies] [-- <flags>]` | 죽이고 새 flag 로 재생성. **`--keep-cookies` 는 세션 쿠키까지 넘겨 로그인이 살아남는다** — `Expires` 없는 쿠키는 브라우저 종료와 함께 사라지므로, 이걸 안 주면 프로필은 남아도 로그인은 안 남는다 |
 | `gc [--dry-run] [--older-than <N>]` | 낡은 장부 정리. 기본은 장부만(ghost/foreign 엔트리, 잔존 `DevToolsActivePort`). `--older-than <N>`일 때만 **N일 이상 안 쓴 orphan 프로필 삭제** |
 | `drift [name] [--all] [-- <flags>]` | 선언한 chrome flag 와 실행 중 프로세스 비교. 차이 있으면 재기동 명령 제안 + **exit 1** |
 | `rename <old> <new>` | 이름 변경 |
