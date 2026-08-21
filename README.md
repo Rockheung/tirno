@@ -65,15 +65,20 @@ claude plugin install tirno@tirno
 넷이 들어온다 — `tirno`(명령 레퍼런스) · `tirno-runbook`(작업 절차) ·
 `tirno-mcp`(chrome-devtools-mcp 대응) · `tirno-sw-override`(배포 전 빌드를 진짜 origin 에 얹기).
 
-스킬 본문은 `.claude/skills/` 가 정본이고 `plugins/tirno/skills/` 는 그리로 걸린 심링크다 —
-복사본이 낡는 일이 없다.
+갱신은 `tirno update`, 또는 `claude plugin marketplace update tirno && claude plugin update tirno`.
+마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.
+
+스킬 본문은 `.claude/skills/` 가 정본이고 `plugins/tirno/skills/` 는 **실물 복사본**이다.
+심링크로 두면 GitHub 설치에서 깨진다 — 플러그인 하위트리만 캐시로 가므로 레포 루트로
+올라가는 링크가 밖을 가리킨다. 사본이 낡지 않는 것은 링크여서가 아니라
+`test/plugin-skills.test.ts` 가 둘이 다르면 깨뜨리기 때문이다.
 
 ## 어디부터 볼까
 
 | 문서 | 무엇 |
 |---|---|
 | [docs/ONBOARDING.md](docs/ONBOARDING.md) | **처음이라면 여기.** 설치부터 첫 세션까지, 자주 걸리는 자리와 그 메시지 |
-| [docs/COMMANDS.md](docs/COMMANDS.md) | 70개 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수 |
+| [docs/COMMANDS.md](docs/COMMANDS.md) | 71개 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수 |
 | [AGENTS.md](AGENTS.md) | 에이전트가 읽을 것 — 명령·경계·함정 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 개발 · 테스트 · CI |
 | [docs/research-sw-cdn-proxy.md](docs/research-sw-cdn-proxy.md) | 배포 전 빌드를 진짜 origin 위에 얹기 — 서비스워커 오버레이 설계 |

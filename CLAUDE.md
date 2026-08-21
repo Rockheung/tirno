@@ -108,4 +108,4 @@ node bin/tirno.js kill test --clean
 `~/.tirno/metrics.jsonl` 의 옛 `llm.*` · `explore.*` 줄은 그대로 읽힌다. 집계에서
 빠질 뿐 `aggregate()` 가 깨지지 않는다.
 
-결과: 런타임 의존 **6개**, 엔드포인트 **70개**. 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).
+결과: 런타임 의존 **6개**, 엔드포인트 **71개**. 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).

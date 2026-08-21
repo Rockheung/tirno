@@ -222,7 +222,13 @@ tirno schema [--pretty]          # 명령 트리 전체를 JSON 으로 (The CLI 
 
 ```bash
 tirno stats                      # ~/.tirno/metrics.jsonl 집계
+tirno update [--check]           # 최신 릴리즈로 — 바이너리 + 스킬 플러그인
 ```
+
+`update` 는 bun 으로 컴파일한 단일 실행 파일일 때만 바이너리를 갈아 낀다(소스 체크아웃은
+`git pull && npm run build`). 받은 파일은 `SHA256SUMS` 와 대조하고 어긋나면 설치하지 않는다.
+스킬은 `claude plugin marketplace update tirno` → `claude plugin update tirno` 로 당긴다 —
+파일을 직접 만지면 Claude Code 가 들고 있는 플러그인 상태와 어긋난다.
 
 ## 세션 메타데이터
 

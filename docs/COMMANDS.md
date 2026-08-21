@@ -158,6 +158,24 @@ CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.*
 `NotAllowedError: Document is not focused` 로 거절된다. 백그라운드 탭이면 `cdp Page.bringToFront`
 를 먼저 보낸다.
 
+### 자기 갱신
+| 명령 | 설명 |
+|---|---|
+| `update [--check] [--binary-only] [--skills-only]` | 최신 릴리즈로 올린다 — 도는 바이너리를 제자리에서 갈아 끼우고, 스킬 플러그인은 `claude plugin` 으로 새로 당긴다 |
+
+바이너리는 **bun 으로 컴파일한 단일 실행 파일일 때만** 갈아 낀다. `node bin/tirno.js`·`bun run`·
+npm link 는 `process.execPath` 가 런타임을 가리키므로 대상이 아니다 — 그대로 두면 런타임을
+덮어쓴다. 소스 체크아웃은 `git pull && npm run build`.
+
+받은 파일은 릴리즈의 `SHA256SUMS` 와 대조하고, 항목이 없거나 어긋나면 설치하지 않는다.
+같은 디렉터리에 받아 `rename` 으로 바꿔치우므로 도중에 죽어도 반쯤 쓰인 바이너리가 남지
+않고, 실행 중인 자기 자신을 덮어써도 지금 프로세스는 옛 inode 로 끝까지 돈다.
+
+스킬은 파일을 직접 만지지 않는다. Claude Code 가 플러그인을 자기 상태로 관리하므로
+`claude plugin marketplace update tirno` → `claude plugin update tirno` 를 부른다 —
+마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.
+`claude` 가 PATH 에 없으면 그 두 줄을 안내하고 바이너리만 올린다.
+
 ### 서비스워커 (sw-proxy 조회)
 | 명령 | 설명 |
 |---|---|

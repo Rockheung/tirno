@@ -19,6 +19,7 @@ import { registerStatsCommand } from './commands/stats.js';
 import { registerAuditCommand } from './commands/audit.js';
 import { registerScreencastCommands } from './commands/screencast.js';
 import { registerSchemaCommand } from './commands/schema.js';
+import { registerUpdateCommand } from './commands/update.js';
 import { error } from './output/formatter.js';
 
 const program = new Command();
@@ -48,6 +49,7 @@ registerStatsCommand(program);
 registerAuditCommand(program);
 registerScreencastCommands(program);
 registerSchemaCommand(program);
+registerUpdateCommand(program);
 
 program.parseAsync(process.argv).catch(e => {
   error((e as Error).message);
