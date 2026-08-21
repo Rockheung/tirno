@@ -1,4 +1,5 @@
 ---
+name: tirno-runbook
 description: tirno 로 실제 브라우저 작업을 끝까지 수행하는 절차. 세션 기동 → 대상 파악(snapshot @ref) → 조작 → **결과 검증** → 정리, 그리고 막혔을 때의 진단 순서. 명령 레퍼런스가 아니라 "어떻게 일하는가" — 레퍼런스는 /tirno, mcp 매핑은 /tirno-mcp.
 ---
 

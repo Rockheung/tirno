@@ -1,4 +1,5 @@
 ---
+name: tirno-mcp
 description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사용법 매뉴얼. 브라우저 자동화 / 스크래핑 / 디버깅 / lighthouse audit / 트레이스 / 메모리 분석 / 화면 녹화. 미구현 영역은 명시. (chrome-devtools-mcp 의 list_pages / click / fill / take_screenshot / lighthouse_audit 등을 호출하려는 의도가 보이면 이 skill 을 참고)
 ---
 

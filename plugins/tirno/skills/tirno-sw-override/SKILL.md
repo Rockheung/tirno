@@ -1,4 +1,5 @@
 ---
+name: tirno-sw-override
 description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든다 — 서비스워커를 그 origin 에 한 번 심는 CDN 프록시. 배포 전 빌드를 실제 사이트에서 확인, 스테이징 없이 검증, 로컬 dist 를 실제 도메인으로. 목록에 없는 경로는 손대지 않아 API·인증·쿠키는 진짜 서버로 간다. "배포 안 하고 실제 사이트에서 확인" · "이 파일만 내 빌드로" · "CDN 올리기 전에" 류. **새로고침 후에도 유지돼야 할 때만 쓴다** — 한 번만 보면 되면 tirno eval 로 fetch 를 패치하는 게 훨씬 싸다.
 ---
 
@@ -138,8 +139,12 @@ tirno eval 'fetch("/admin/__tirno/mount").then(r => r.text())'      # layer 생�
 ### 2. 굽는다
 
 ```bash
-node scripts/sw-proxy/generate.mjs mounts.json --out .sw-proxy
+node <스킬>/scripts/generate.mjs mounts.json --out .sw-proxy
 ```
+
+생성기는 이 스킬 옆에 있다. 플러그인으로 설치했으면 그 설치 경로의
+`skills/tirno-sw-override/scripts/generate.mjs`, tirno 레포에서 직접이면
+`plugins/tirno/skills/tirno-sw-override/scripts/generate.mjs` 다.
 
 `__tirno-sw.js` · `__tirno-boot.html` · `serve.mjs` · 인증서가 나오고, 이어서 칠 명령을
 찍어 준다. 인증서는 있으면 다시 굽지 않는다.

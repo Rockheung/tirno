@@ -23,6 +23,16 @@ test('모든 스킬이 플러그인에 실려 있다', () => {
     '플러그인의 스킬 목록이 .claude/skills 와 다르다');
 });
 
+// 심링크로 두면 GitHub 설치에서 깨진다 — 플러그인 하위트리만 캐시로 가므로 레포 루트로
+// 올라가는 링크가 밖을 가리킨다. 실물 파일이어야 한다.
+test('플러그인 사본이 심링크가 아니다', () => {
+  for (const n of names) {
+    const st = fs.lstatSync(path.join(PLUGIN, n, 'SKILL.md'));
+    assert.ok(!st.isSymbolicLink(),
+      `${n}: SKILL.md 가 심링크다 — GitHub 설치에서 깨진다. 실물로 복사할 것`);
+  }
+});
+
 test('플러그인 사본이 원본과 같다', () => {
   for (const n of names) {
     const src = fs.readFileSync(path.join(SRC, `${n}.md`), 'utf-8');
@@ -40,6 +50,13 @@ test('모든 스킬에 description frontmatter 가 있다', () => {
     const fm = s.slice(4, s.indexOf('\n---', 4));
     assert.match(fm, /^description:\s*\S/m, `${n}: description 이 비었다`);
   }
+});
+
+// 스킬이 부르는 스크립트가 플러그인 안에 실려야 한다 — 레포 경로를 가리키면 설치본에 없다.
+test('스킬이 부르는 스크립트가 플러그인에 실려 있다', () => {
+  const gen = path.join(PLUGIN, 'tirno-sw-override', 'scripts', 'generate.mjs');
+  assert.ok(fs.existsSync(gen), 'sw-proxy 생성기가 스킬 안에 없다');
+  assert.ok(fs.existsSync(path.join(path.dirname(gen), 'sw-template.js')), 'sw-template 이 없다');
 });
 
 // 마켓플레이스가 가리키는 곳에 플러그인이 실제로 있어야 한다.

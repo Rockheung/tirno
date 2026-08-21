@@ -1,4 +1,5 @@
 ---
+name: tirno
 description: tirno CLI 레퍼런스 — 세션 관리(new/ls/kill/restart/gc)·소유권 판정·앵커·네비게이션·a11y @ref 조작·visual cache·기록/재생·emulation·진단(stall/audit/trace). 명령 표면과 그 의미를 찾을 때. "tirno 로 뭘 할 수 있나" · "이 명령 옵션이 뭐냐" 류. 작업 절차는 tirno-runbook, chrome-devtools-mcp 대응은 tirno-mcp.
 ---
 
