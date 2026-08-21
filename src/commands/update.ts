@@ -33,7 +33,7 @@ function updateSkills(): 'updated' | 'no-claude' {
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
     if (err.code === 'ENOENT') return 'no-claude';
-    throw new Error(`claude plugin update failed: ${(e as Error).message}`);
+    throw new Error(`claude plugin update failed: ${(e as Error).message}`, { cause: e });
   }
 }
 
