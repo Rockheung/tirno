@@ -95,8 +95,21 @@ if (!map.size) { console.error('마운트가 아무 파일도 가리키지 않�
 
 const paths = [...map.keys()].sort();
 
+// ── 페이지 안의 확인 창.
+//
+// 워커가 control 경로로 직접 내고, 마운트된 HTML 에만 태그가 들어간다. 원본 응답은
+// 건드리지 않는다 — 이 도구는 파일을 내는 것이지 응답을 고치는 것이 아니고, 배포 전
+// 빌드를 "실제 사이트에서" 확인하는 판에 문서를 변형하면 확인 대상 자체가 오염된다.
+//
+// 그래서 문서를 마운트하지 않는 구성에서는 창이 뜨지 않는다. 그것이 맞는 동작이다 —
+// 창이 있다는 것은 워커가 이 문서를 내주고 있다는 뜻이고, 안 내주면 할 말이 없다.
+const overlayOn = cfg.overlay !== false;
+const overlaySrc = overlayOn
+  ? fs.readFileSync(new URL('./overlay.js', import.meta.url), 'utf-8')
+  : '';
+
 // ── buildId — 경로와 그 내용에서 나온다. 무엇이든 바뀌면 activate 가 옛 캐시를 지운다.
-const h = crypto.createHash('sha1').update(scope);
+const h = crypto.createHash('sha1').update(scope).update(overlaySrc);
 for (const l of layers) {
   h.update(l.id);
   for (const p of l.paths) h.update(p).update(fs.readFileSync(layerFile.get(l.id + '\u0000' + p)));
@@ -108,7 +121,8 @@ fs.writeFileSync(path.join(outDir, '__tirno-sw.js'),
   fs.readFileSync(new URL('./sw-template.js', import.meta.url), 'utf-8')
     .replace('__CONFIG__', JSON.stringify({
       buildId, scope, generatedAt: new Date().toISOString(), layers,
-    }, null, 2)));
+    }, null, 2))
+    .replace('__OVERLAY__', JSON.stringify(overlaySrc)));
 
 fs.writeFileSync(path.join(outDir, '__tirno-boot.html'),
   `<!doctype html><meta charset="utf-8"><title>tirno sw-proxy</title>\n<h1>tirno sw-proxy</h1>\n<p>${cfg.origin} · build ${buildId} · ${paths.length} paths · ${cfg.mounts.length} mounts</p>\n`);
@@ -127,6 +141,11 @@ const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
 // SW 가 install 때 ?__tirno_layer=<id> 로 물어본다.
 const LAYERS = ${JSON.stringify(Object.fromEntries(layers.map(l => [l.id,
   Object.fromEntries(l.paths.map(p => [p, layerFile.get(l.id + '\u0000' + p)]))])), null, 2)};
+
+// 워커가 자기 control 경로로 내는 스크립트다. 워커가 없으면 404 라서 창이 안 뜬다.
+const OVERLAY_TAG = ${JSON.stringify(overlayOn
+  ? `<script src="${scope}__tirno/overlay.js" defer></script>`
+  : '')};
 
 // SW 는 캐시된 응답의 헤더를 그대로 넘긴다 — 여기서 붙인 타입이 그대로 굳는다.
 // 틀리면 브라우저가 거부한다: JS/CSS 는 nosniff 로 막히고, wasm 은
@@ -162,6 +181,17 @@ https.createServer({
   const ext = path.extname(file).toLowerCase();
   if (!TYPES[ext]) console.warn('  ! 모르는 확장자', ext, '— octet-stream 으로 나간다. 브라우저가 거부할 수 있다');
   res.setHeader('content-type', TYPES[ext] ?? 'application/octet-stream');
+
+  // 확인 창의 태그는 **낼 때** 끼운다. 빌드 산출물 파일은 손대지 않는다 —
+  // 원본을 고치면 다음 빌드가 덮어쓰거나, 고친 채로 배포될 수 있다.
+  if (OVERLAY_TAG && (ext === '.html' || ext === '.htm')) {
+    const html = fs.readFileSync(file, 'utf-8');
+    const out = html.includes('</body>')
+      ? html.replace('</body>', OVERLAY_TAG + '</body>')
+      : html + OVERLAY_TAG;
+    return res.end(out);
+  }
+
   fs.createReadStream(file).pipe(res);
 }).listen(${port}, '127.0.0.1', () => console.log('listening on https://127.0.0.1:${port}'));
 `);
@@ -184,6 +214,7 @@ console.log(`생성 완료 — ${outDir}
 for (const l of layers) {
   console.log(`    ${l.name.padEnd(16)} ${l.mount}  ←  ${l.from}  (${l.paths.length}${l.enabled ? '' : ', 꺼짐'})`);
 }
+
 console.log(`
 다음:
 

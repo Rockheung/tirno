@@ -10,6 +10,11 @@
 // 한 SW 에만 제어되므로 앱마다 SW 를 둘 수 없다 — 대신 앱을 레이어로 마운트한다.
 // 프로세스를 여럿 띄우는 대신 파일시스템을 마운트하는 쪽이 이 문제의 모양에 맞다.
 const CONFIG = __CONFIG__;
+
+// 페이지 안의 확인 창. 이 워커가 직접 내므로, 워커가 없으면 스크립트 태그가 404 를
+// 받고 창은 뜨지 않는다 — 창의 존재 자체가 워커 생존의 증거가 되게 하는 구조다.
+// 그래서 no-store 다: HTTP 캐시에서 되살아나면 그 증거가 거짓이 된다.
+const OVERLAY = __OVERLAY__;
 const state = { layers: CONFIG.layers.map(l => ({ ...l, enabled: l.enabled !== false, served: 0 })) };
 
 const cacheName = layer => 'tirno-sw:' + CONFIG.buildId + ':' + layer.id;
@@ -70,6 +75,17 @@ async function control(url) {
     });
   }
 
+  if (op === 'overlay.js') {
+    return new Response('const __TIRNO_SCOPE__ = ' + JSON.stringify(CONFIG.scope) + ';\n' + OVERLAY, {
+      status: 200,
+      headers: {
+        'content-type': 'text/javascript; charset=utf-8',
+        'cache-control': 'no-store',
+        'x-served-by': 'tirno-sw/' + CONFIG.buildId,
+      },
+    });
+  }
+
   if (op === 'mount' || op === 'unmount') {
     const targets = id ? state.layers.filter(l => l.id === id || l.name === id) : state.layers;
     if (!targets.length) return json({ error: `그런 레이어가 없다: ${id}` }, 404);
@@ -83,7 +99,7 @@ async function control(url) {
     return json({ off: true, buildId: CONFIG.buildId });
   }
 
-  return json({ error: `모르는 명령: ${op}`, ops: ['status', 'mount', 'unmount', 'off'] }, 404);
+  return json({ error: `모르는 명령: ${op}`, ops: ['status', 'overlay.js', 'mount', 'unmount', 'off'] }, 404);
 }
 
 async function fromLayer(layer, pathname, request) {

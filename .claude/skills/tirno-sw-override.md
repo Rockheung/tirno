@@ -56,7 +56,8 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 |---|---|
 | 프로필 | 그 origin 이 **계속** 바뀐 채로 남는다. tirno 없이 열어도 그렇다 |
 | `buildId` | scope·레이어·경로·파일 내용의 해시. 무엇이든 바뀌면 새 id 가 나오고 옛 캐시는 `activate` 가 지운다 |
-| 조회 | `tirno sw status` — 등록 정보와 Cache Storage 가 정본이고, 답하는 워커면 `GET <scope>__tirno/status` 의 레이어 정보(`buildId`, `layers[].enabled`·`served`)를 얹는다 |
+| 조회 | 페이지 안에서는 **확인 창**(아래), 밖에서는 `tirno sw status` |
+| 확인 창 | 마운트된 HTML 에 실리는 플로팅 창. 가장자리에 붙고 드래그되며, 열면 레이어 → 경로가 트리로 나온다. **창이 있다 = 워커가 이 문서를 내주고 있다** |
 | 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
 | 레이어 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
 | 레이어 제어 | `<scope>__tirno/mount\|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이. 생략하면 전부 |
@@ -108,6 +109,27 @@ tirno eval 'fetch("/admin/__tirno/unmount?layer=local-override").then(r => r.tex
 tirno eval 'fetch("/admin/__tirno/mount?layer=local-override").then(r => r.text())'
 tirno eval 'fetch("/admin/__tirno/mount").then(r => r.text())'      # layer 생략 = 전부
 ```
+
+### 확인 창 — 있다는 것 자체가 신호다
+
+마운트된 HTML 에 `<script src="<scope>__tirno/overlay.js" defer>` 한 줄이 실린다. 그 스크립트를
+내는 것은 워커 자신이고 `no-store` 다. 그래서:
+
+- 워커가 없으면 태그가 404 를 받고 **아무 일도 일어나지 않는다**
+- HTML 에 태그가 있다는 것 자체가 그 문서를 워커 캐시에서 받았다는 뜻이다
+- 뜬 뒤에 워커가 죽으면 창이 스스로 사라진다 — 컨트롤러·워커 상태·**등록** 세 가지를 본다.
+  `unregister()` 는 이벤트를 주지 않고 이미 제어 중인 문서를 계속 제어하므로(실측),
+  등록은 2초마다 `getRegistration()` 으로 확인한다. fetch 가 아니라 유휴 워커를 깨우지 않는다
+
+즉 창의 유무가 워커 생존의 지표다. 이 성질을 깨지 않으려면 창을 다른 데서 주입하지 않는다.
+
+**문서를 마운트하지 않는 구성에서는 창이 뜨지 않는다.** 원본 응답을 고쳐서까지 띄우지는
+않기 때문이다 — 배포 전 빌드를 실제 사이트에서 보는 판에 문서를 변형하면 확인 대상 자체가
+오염된다. 그런 구성은 페이지 밖에서 `tirno sw status` 로 본다.
+
+끄려면 설정에 `"overlay": false`.
+
+보기 전용이다. 레이어를 켜고 끄는 것은 아래의 `mount`/`unmount` 가 한다.
 
 ### 앱마다 SW 를 둘 수는 없다
 
