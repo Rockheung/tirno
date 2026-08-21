@@ -280,7 +280,17 @@
 
     panel.textContent = '';
     const total = data.caches.reduce((n, c) => n + c.paths.length, 0);
-    tabText.textContent = 'sw ' + total;
+
+    // 배지는 앱 수다 — 경로 수가 아니라. 129 라는 숫자는 규모일 뿐 무엇이 덮였는지를
+    // 말해 주지 않고, 사람이 세는 단위는 앱이다. 경로 총수는 패널 머리에 있다.
+    // 레이어 하나가 앱 하나이고, 꺼진 레이어는 아무것도 내지 않으므로 빼고 센다.
+    const apps = data.caches.filter(c => {
+      const meta = c.layerId ? data.layers.get(c.layerId) : null;
+      return !meta || meta.enabled !== false;
+    }).length;
+    tabText.textContent = 'sw ' + apps;
+    tab.title = `${apps} app(s) · ${total} path(s) served by this worker`;
+
     panel.append(el('div', 'meta',
       `${location.origin} · scope ${SCOPE}` +
       (data.buildId ? ` · build ${data.buildId}` : '') + ` · ${total} paths`));
