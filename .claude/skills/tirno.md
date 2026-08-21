@@ -134,6 +134,20 @@ user-data-dir 을 유지해도 그렇다. `permissions grant` 는 `SessionMetada
 `NotAllowedError: Document is not focused` 로 거절되므로, 백그라운드 탭이면
 `tirno cdp Page.bringToFront '{}'` 를 먼저 보낸다.
 
+### 서비스워커 — 무엇이 프록시되고 있나
+
+```bash
+tirno sw status              # 등록된 워커 + Cache Storage 의 경로 수 + (있으면) sw-proxy 레이어
+tirno sw status --paths      # 캐시된 경로를 전부 나열
+tirno sw status --json
+```
+
+정본은 **등록 정보와 Cache Storage** 다. sw-proxy 의 `<scope>__tirno/status` 만 믿으면 안 된다 —
+워커는 자기 스크립트를 내주던 로컬 서버보다 오래 살고, 프로필에는 tirno 가 굽지 않은 워커도
+들어 있을 수 있다. 실측한 세션에서는 스크립트가 origin 에서 404 이고 control 요청에 사이트의
+HTML 이 돌아왔는데, 프록시되는 경로 22개는 Cache Storage 에 남아 계속 서빙되고 있었다.
+control 응답은 답하는 워커에 한해 레이어별 `enabled` · `served` 로 얹는다.
+
 ### 성능 · 진단
 
 ```bash

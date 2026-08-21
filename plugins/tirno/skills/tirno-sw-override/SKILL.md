@@ -56,7 +56,7 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 |---|---|
 | 프로필 | 그 origin 이 **계속** 바뀐 채로 남는다. tirno 없이 열어도 그렇다 |
 | `buildId` | scope·레이어·경로·파일 내용의 해시. 무엇이든 바뀌면 새 id 가 나오고 옛 캐시는 `activate` 가 지운다 |
-| 조회 | `GET <scope>__tirno/status` → `{buildId, scope, layers: [{name, mount, paths, enabled, served}]}` |
+| 조회 | `tirno sw status` — 등록 정보와 Cache Storage 가 정본이고, 답하는 워커면 `GET <scope>__tirno/status` 의 레이어 정보(`buildId`, `layers[].enabled`·`served`)를 얹는다 |
 | 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
 | 레이어 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
 | 레이어 제어 | `<scope>__tirno/mount\|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이. 생략하면 전부 |
