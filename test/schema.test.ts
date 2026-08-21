@@ -26,7 +26,7 @@ async function realProgram(): Promise<Command> {
     ['record', 'registerRecordCommands'], ['replay', 'registerReplayCommand'],
     ['trail', 'registerTrailCommands'],
     ['stats', 'registerStatsCommand'], ['audit', 'registerAuditCommand'],
-    ['screencast', 'registerScreencastCommands'], ['schema', 'registerSchemaCommand'],
+    ['screencast', 'registerScreencastCommands'], ['schema', 'registerSchemaCommand'], ['update', 'registerUpdateCommand'],
   ] as const;
   for (const [file, fn] of mods) {
     const mod = await import(`../src/commands/${file}.js`) as Record<string, (p: Command) => void>;

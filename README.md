@@ -73,7 +73,7 @@ claude plugin install tirno@tirno
 | 문서 | 무엇 |
 |---|---|
 | [docs/ONBOARDING.md](docs/ONBOARDING.md) | **처음이라면 여기.** 설치부터 첫 세션까지, 자주 걸리는 자리와 그 메시지 |
-| [docs/COMMANDS.md](docs/COMMANDS.md) | 70개 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수 |
+| [docs/COMMANDS.md](docs/COMMANDS.md) | 71개 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수 |
 | [AGENTS.md](AGENTS.md) | 에이전트가 읽을 것 — 명령·경계·함정 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 개발 · 테스트 · CI |
 | [docs/research-sw-cdn-proxy.md](docs/research-sw-cdn-proxy.md) | 배포 전 빌드를 진짜 origin 위에 얹기 — 서비스워커 오버레이 설계 |
