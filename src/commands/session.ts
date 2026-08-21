@@ -2,6 +2,9 @@ import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
+import { connectWithoutPageSetup } from '../core/chrome-connector.js';
+import { getActivePage } from '../cdp/page-resolver.js';
+import type { Cookie } from 'puppeteer-core';
 import { isAlive, killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
 import { collectListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
@@ -173,6 +176,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--executable-path <path>', 'Chrome path')
     .option('--ephemeral', 'Use a temporary user-data-dir')
     .option('--group <name>', 'Group label')
+    .option('--keep-cookies', 'Carry cookies across the restart, session cookies included — otherwise the login dies with the browser')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
     .allowUnknownOption(true)
     .allowExcessArguments(true)
@@ -186,6 +190,23 @@ export function registerSessionCommands(program: Command): void {
       try {
         let existing: store.SessionMetadata | null = null;
         try { existing = store.get(name); } catch { /* none */ }
+
+        // 재기동은 브라우저를 죽인다. `Expires` 없는 쿠키는 거기서 같이 죽으므로
+        // 프로필은 남아도 로그인은 안 남는다 — 로그인 뒤의 화면을 보러 재기동하는
+        // 흐름에서는 그것이 기본 경로가 된다.
+        //
+        // 실패하면 재기동하지 않는다. 이 옵션을 준 이유가 그 쿠키인데, 못 챙긴 채
+        // 진행하면 되돌릴 수 없는 자리에서 목적만 조용히 사라진다.
+        let saved: Cookie[] = [];
+        if (opts.keepCookies && existing) {
+          const { browser } = await connectWithoutPageSetup(name);
+          try {
+            saved = await browser.cookies();
+          } finally {
+            browser.disconnect();
+          }
+        }
+
         if (existing) {
           const wasOurs = await killIfOurs(existing, 'restart');
           if (wasOurs && (opts.ephemeral || existing.userDataDir.startsWith(os.tmpdir()))) {
@@ -215,7 +236,20 @@ export function registerSessionCommands(program: Command): void {
         // so inheriting it would leave no way back to a headful browser.
         const group = opts.group ?? existing?.group;
         if (group) store.update(name, { group });
-        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${group ? `, group: ${group}` : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
+
+        if (saved.length) {
+          const { browser } = await connectWithoutPageSetup(name);
+          try {
+            await browser.setCookie(...saved);
+            // 쿠키보다 먼저 나간 첫 요청은 로그인 화면을 받는다. 그 상태로 두면
+            // 쿠키는 살렸는데 화면은 로그아웃인, 가장 헷갈리는 자리가 된다.
+            if (bootUrl) await (await getActivePage(browser)).reload();
+          } finally {
+            browser.disconnect();
+          }
+        }
+
+        success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${group ? `, group: ${group}` : ''}${bootUrl ? `, url: ${bootUrl}` : ''}${saved.length ? `, ${saved.length} cookie(s) carried` : ''})`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

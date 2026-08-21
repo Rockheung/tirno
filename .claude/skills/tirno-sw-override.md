@@ -47,8 +47,8 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 ### 세션 상태
 
 - **영속 프로필.** `--ephemeral` 이면 kill 할 때 SW 도 사라진다
-- **크롬 재기동 2회를 감당할 수 있을 것.** 그래서 **로그인은 이 절차 뒤에** 한다 —
-  `Expires` 없는 세션 쿠키는 재기동에 죽는다
+- **크롬 재기동 1회를 감당할 수 있을 것.** `Expires` 없는 세션 쿠키는 재기동에 죽지만,
+  `tirno restart --keep-cookies` 가 세션 쿠키까지 넘겨 준다 — 로그인을 먼저 해 둬도 된다
 
 ### 끝나고 나면 (호출자가 이어받는 상태)
 
@@ -61,7 +61,7 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 | 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
 | 레이어 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
 | 레이어 제어 | `<scope>__tirno/mount\|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이. 생략하면 전부 |
-| 로그인 | 풀려 있다 |
+| 로그인 | `--keep-cookies` 로 재기동했으면 그대로, 아니면 풀려 있다 |
 
 ### 엮이는 자리
 
@@ -202,7 +202,7 @@ tirno new preview --headless -- \
 tirno nav https://app.example.com/admin/__tirno-boot.html
 tirno eval "navigator.serviceWorker.register('/admin/__tirno-sw.js').then(r => r.scope)"
 
-tirno restart preview        # rule 없이 — 여기서부터 진짜 origin
+tirno restart preview --keep-cookies   # rule 없이 — 여기서부터 진짜 origin. 로그인은 넘어온다
 ```
 
 **`MAP host 127.0.0.1:8443` 처럼 포트를 받는다** — 443 이 아니어도 되니 `sudo` 가 필요 없다.
@@ -243,8 +243,10 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
   `/__tirno-sw.js` 를 진짜 origin 에 다시 물어본다. 404 면 갱신 실패로 끝나고 기존 SW 가
   살지만, **그 경로에 정상 JS 가 있으면 우리 SW 가 그것으로 교체된다.** `/sw.js` 는 위험하다.
 - **스코프는 스크립트가 놓인 디렉터리 기준.** 루트에 둬야 `/` 전체를 덮는다.
-- **`restart` 는 세션 쿠키를 죽인다.** `Expires` 없는 쿠키가 브라우저 종료와 함께 사라져
-  **로그인이 풀린다.** SW 는 남고 로그인은 안 남는다 — 3단계 뒤 다시 로그인해야 할 수 있다.
+- **`restart` 는 세션 쿠키를 죽인다 — `--keep-cookies` 를 주지 않으면.** `Expires` 없는 쿠키가
+  브라우저 종료와 함께 사라져 SW 는 남고 로그인은 안 남는다. `--keep-cookies` 는 재기동 전에
+  쿠키를 받아 두었다가 다시 심는다(`httpOnly`·`secure`·`sameSite`·세션 여부까지 그대로).
+  쿠키를 못 받아 오면 재기동하지 않는다 — 못 챙긴 채 진행하면 되돌릴 수 없다.
 - **첫 내비게이션은 SW 가 못 잡는다.** 템플릿이 `skipWaiting` + `clients.claim()` 을 넣지만,
   등록 직후 한 번 `reload` 하는 편이 확실하다.
 - **평문 HTTP 서버로는 안 된다.** URL 스킴이 `https` 로 고정이라 IP 만 바꿔도 크롬은 TLS
