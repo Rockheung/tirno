@@ -111,30 +111,17 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
   원인을 못 찾는다. tirno 세션 하나를 전용으로 쓰고, 확실히 되돌리려면
   `tirno kill <세션> --clean` 으로 프로필째 버린다(로그인도 같이 사라진다).
 
-## 원칙 — 로컬 CA 를 신뢰 저장소에 넣지 않는다
+## 인증서 — `mkcert -install` 은 이 절차에 없다
 
-인증서를 **mkcert 로 굽는 것은 상관없다.** 하지 말아야 할 것은 `mkcert -install` 이다.
+인증서는 생성기가 `openssl` 로 굽는다. `mkcert` 로 구워도 된다 — 굽는 도구는 상관없다.
 
-신뢰는 **`--ignore-certificate-errors` 로 그 크롬 세션에만** 국한한다. tirno 가 띄운 그
-프로세스 하나에만 걸리고, 죽으면 같이 사라진다.
+**하지 않는 것은 `mkcert -install` 이다.** mkcert 안내문이 으레 함께 시키지만, 이 절차에는
+필요 없다. 신뢰는 `--ignore-certificate-errors` 로 **그 크롬 세션에만** 국한한다 — tirno 가
+띄운 그 프로세스 하나에만 걸리고, 죽으면 같이 사라진다.
 
-이유는 값이 안 맞기 때문이다. 로컬 CA 가 신뢰 저장소에 들어가면 **아무 도메인 인증서나
-발급할 수 있는 권한**이 생기고, 그 개인키는 디스크에 평문으로 남는다. 부트스트랩 몇 초를
-편하려고 시스템 전역에 10년짜리 만능 발급권을 심는 셈이다. 그 키를 얻은 쪽은 그 사용자의
-**모든 HTTPS 를 경고 없이** 들여다볼 수 있다.
-
-같은 이유로 `mitmproxy`·`Proxyman` 류의 CA 도 작업이 끝나면 빼는 게 맞다. 넣기는 한 줄이고
-빼는 것은 잊힌다.
-
-지금 상태를 보려면:
-
-```bash
-security find-certificate -a -c mkcert                     # 키체인에 있나
-security dump-trust-settings ; security dump-trust-settings -d   # 신뢰 설정
-mkcert -uninstall                                          # 뺀다
-```
-
-생성기도 이 원칙을 검사한다 — 로컬 CA 가 신뢰 저장소에 보이면 경고를 찍는다.
+`-install` 은 로컬 CA 를 시스템 신뢰 저장소에 넣는 일이다. 부트스트랩 몇 초를 편하려고
+치르기엔 범위가 너무 넓다. 다른 사유로 CA 를 설치해 두는 것은 각자의 판단이고 이 스킬이
+관여할 바 아니지만, **이 절차 때문에 설치할 이유는 없다.**
 
 ## 조사할 때 걸리는 것
 
