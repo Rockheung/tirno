@@ -69,3 +69,15 @@ test('marketplace.json 이 실재하는 플러그인을 가리킨다', () => {
       `${p.name}: ${p.source} 에 plugin.json 이 없다`);
   }
 });
+
+// 버전이 세 곳에 산다 — package.json · src/main.ts 의 .version() · 플러그인 매니페스트.
+// 릴리즈 태그가 바이너리의 --version 과 다르면 받은 사람이 무엇을 쥔 건지 알 수 없다.
+test('버전이 세 곳에서 같다', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8')).version;
+  const main = fs.readFileSync(path.join(ROOT, 'src', 'main.ts'), 'utf-8');
+  const cli = /\.version\('([^']+)'\)/.exec(main)?.[1];
+  const plug = JSON.parse(fs.readFileSync(
+    path.join(ROOT, 'plugins', 'tirno', '.claude-plugin', 'plugin.json'), 'utf-8')).version;
+  assert.equal(cli, pkg, `src/main.ts 의 .version() 이 package.json 과 다르다`);
+  assert.equal(plug, pkg, `플러그인 매니페스트가 package.json 과 다르다`);
+});
