@@ -1,131 +1,237 @@
 ---
-description: 배포 전 빌드나 임의 응답을 진짜 origin 위에 얹는다. 서비스워커를 그 origin 에 한 번 심어 정적 경로만 가로채고, API·인증은 원본으로 흘린다. 심는 동안만 --host-resolver-rules 로 로컬 서버를 태운다. "이 요청만 다른 걸로 바꿔줘" · "배포 전 빌드를 실제 사이트에서 확인" · "응답 가로채기" 류에 쓴다.
+description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든다 — 서비스워커를 그 origin 에 한 번 심는 CDN 프록시. 배포 전 빌드를 실제 사이트에서 확인, 스테이징 없이 검증, 로컬 dist 를 실제 도메인으로. 목록에 없는 경로는 손대지 않아 API·인증·쿠키는 진짜 서버로 간다. "배포 안 하고 실제 사이트에서 확인" · "이 파일만 내 빌드로" · "CDN 올리기 전에" 류. **새로고침 후에도 유지돼야 할 때만 쓴다** — 한 번만 보면 되면 tirno eval 로 fetch 를 패치하는 게 훨씬 싸다.
 ---
 
-# 진짜 origin 위에 응답을 얹기 — 서비스워커 부트스트랩
+# origin 의 응답을 서비스워커가 내게 하기
 
-**언제 쓰나.** 진짜 서버는 살아 있어야 하는데(로그인·API·쿠키가 필요하니까) 정적 응답
-일부만 내 것으로 바꾸고 싶을 때.
+**하는 일은 하나다.** 지정한 경로들을 로컬 빌드에서 내고, 나머지는 손대지 않는다.
 
-**왜 다른 방법이 안 되나.**
+응답을 **수정**하는 것(원본을 받아 필드만 덮기 같은 것)은 여기서 다루지 않는다. 이건 CDN
+프록시다 — 파일을 낸다.
 
-| 방법 | 왜 안 되나 |
+## 쓸까 말까
+
+판정선은 하나다. **새로고침 후에도 유지돼야 하나?**
+
+| 상황 | 답 |
 |---|---|
-| `tirno eval` 로 `fetch`/`XHR` 패치 | 그 문서에서만 산다. 앱이 **초기화 때 읽는 것**에는 이미 늦고, 리로드하면 패치가 날아간다 |
-| `tirno cdp Page.addScriptToEvaluateOnNewDocument` | tirno 는 명령마다 connect/disconnect 한다. 세션이 끊기면 등록도 죽는다 (실측) |
-| `--host-resolver-rules` 만 | 호스트 **전체**가 로컬로 끌려온다. API 도 같이 온다 |
+| 앱이 **초기화 때** 읽는 파일이다 | **여기** — `eval` 패치는 심는 순간 이미 늦고, 심고 나서 reload 하면 패치가 사라진다 |
+| 리로드·재기동을 **넘겨야** 한다 | **여기** |
+| 진짜 origin 의 **로그인·API 는 살려야** 한다 | **여기** (`--host-resolver-rules` 만 쓰면 호스트 전체가 끌려와 API 도 온다) |
+| 버튼을 눌러야 나가는 요청이다, **한 번만** 보면 된다 | `tirno eval` 로 `fetch` 를 패치한다. 훨씬 싸다 |
+| 진짜 origin 의 쿠키·API 가 **필요 없다** | 그냥 `localhost` 를 연다 |
 
-서비스워커만 **프로필에 남고**, **요청 단위로** 가른다.
+## 필요조건
 
-## 절차 (2026-08-20 실측 완주)
+이 스킬은 **빌드하지 않고, 무엇을 얹을지 정하지 않는다.** 둘 다 호출자가 준다.
 
-`app.example.com` 의 `/path/to/thing.json` 을 바꾼다고 하자.
+### 호출자가 갖춰야 할 것
 
-### 1. 로컬 TLS 서버
+| | |
+|---|---|
+| `origin` | **https** URL. 실재하고 도달 가능해야 한다 (로그인 여부는 무관) |
+| `mounts` | origin 경로 ← 로컬 빌드. **이미 빌드돼 있어야 한다** — 이 스킬은 빌드를 돌리지 않는다 |
+| 경로 선정 | **origin 이 그 경로를 실제로 쓰는지는 호출자가 안다** — 이 스킬은 모른다. 가리키는 곳이 없으면 생성이 실패한다 |
+| `scope` | **볼 문서가 사는 곳.** 자산 경로가 아니다. 그 아래 문서를 열어야 SW 가 붙는다 — 아니면 아무 일도 안 일어난다 |
+| 레이어 이름 | 겹치면 생성이 실패한다. `x-tirno-layer` 와 status·mount/unmount 의 키가 된다 |
+| 레이어 **순서** | 경로가 겹치면 **먼저 선언한 것이 이긴다.** 로컬 작업본을 배포본 위에 얹으려면 위에 적는다 — 이건 오류가 아니라 이 스킬이 기대하는 쓰임이다 |
 
-부트스트랩 페이지와 SW 스크립트 **둘만** 서빙하면 된다. 사이트 전체를 흉내낼 필요 없다.
+### 환경
 
-```bash
-openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 1 -nodes \
-  -subj "/CN=app.example.com" -addext "subjectAltName=DNS:app.example.com"
+- `openssl` 이 PATH 에 (인증서를 굽는다)
+- Node 22+ · `tirno` 실행 가능
+- 지정 포트(기본 8443)가 비어 있을 것
+- **macOS/리눅스.** 키체인·`security` 에 의존하지는 않지만 `openssl` 과 셸을 쓴다
+
+### 세션 상태
+
+- **영속 프로필.** `--ephemeral` 이면 kill 할 때 SW 도 사라진다
+- **크롬 재기동 2회를 감당할 수 있을 것.** 그래서 **로그인은 이 절차 뒤에** 한다 —
+  `Expires` 없는 세션 쿠키는 재기동에 죽는다
+
+### 끝나고 나면 (호출자가 이어받는 상태)
+
+| | |
+|---|---|
+| 프로필 | 그 origin 이 **계속** 바뀐 채로 남는다. tirno 없이 열어도 그렇다 |
+| `buildId` | scope·레이어·경로·파일 내용의 해시. 무엇이든 바뀌면 새 id 가 나오고 옛 캐시는 `activate` 가 지운다 |
+| 조회 | `GET <scope>__tirno/status` → `{buildId, scope, layers: [{name, mount, paths, enabled, served}]}` |
+| 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
+| 레이어 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
+| 레이어 제어 | `<scope>__tirno/mount\|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이. 생략하면 전부 |
+| 로그인 | 풀려 있다 |
+
+### 엮이는 자리
+
+- **앞** — 빌드를 돌리는 쪽, 그리고 origin 의 어느 경로를 덮을지 아는 쪽.
+  그 둘이 `mounts` 를 만든다
+- **뒤** — 로그인이 필요하면 그때 한다. 조작·검증은 `tirno-runbook` 의 흐름을 탄다
+- **되돌리기** — `<scope>__tirno/off` 로 이 스킬의 효과만 걷거나,
+  `tirno kill <세션> --clean` 으로 프로필째 버린다(로그인도 같이 사라진다)
+
+## 절차
+
+### 1. 무엇을 낼지 적는다
+
+```json
+{
+  "origin": "https://app.example.com",
+  "port": 8443,
+  "scope": "/admin/",
+  "mounts": [
+    { "name": "local-override", "path": "/_/magnet/", "root": "../magnet/dist" },
+    { "name": "deployment-123", "path": "/_/magnet/", "root": "../artifacts/123" },
+    { "name": "modal",          "path": "/_/publish-modal/", "root": "../modal/dist" },
+    { "name": "vendor-patch",   "path": "/vendor/v.js", "file": "./patched/v.js" }
+  ]
+}
 ```
 
-`__tirno-boot.html` 은 빈 페이지면 되고, `__tirno-sw.js` 는 아래 형태다.
-python `http.server` 를 `ssl.SSLContext` 로 감싸 **8443** 에 띄운다 (`.js` 의 MIME 을
-`application/javascript` 로 등록할 것 — 아니면 등록이 거부된다).
+### 레이어 — 위에 있는 것이 이긴다
 
-### 2. rule 걸고 재기동
+마운트는 **레이어**다. 경로가 겹치면 오류가 아니라 우선순위다 — 먼저 선언된 쪽이 낸다.
+위 예에서 `/_/magnet/` 은 로컬 작업본이 배포 산출물을 덮고 있고, 로컬을 내리면 배포본이
+드러난다.
+
+```
+resolve("/_/magnet/assets/app.js")
+  1. local-override   ← 켜져 있고 그 경로를 가짐 → 낸다
+  2. deployment-123
+  3. (아무도 없으면) 원본
+```
+
+**런타임에 올리고 내린다.** 다시 굽거나 다시 심을 필요가 없다.
 
 ```bash
-tirno restart <session> -- \
+tirno eval 'fetch("/admin/__tirno/unmount?layer=local-override").then(r => r.text())'
+tirno eval 'fetch("/admin/__tirno/mount?layer=local-override").then(r => r.text())'
+tirno eval 'fetch("/admin/__tirno/mount").then(r => r.text())'      # layer 생략 = 전부
+```
+
+### 앱마다 SW 를 둘 수는 없다
+
+**scope 는 자산이 아니라 문서로 매칭된다.** 문서가 어느 SW 에 제어되는지가 먼저 정해지고,
+그 문서에서 나가는 요청은 **경로와 무관하게** 그 SW 로만 간다. 실측:
+
+| | |
+|---|---|
+| `/a/` scope SW, 문서 `/` 에서 `fetch('/a/x.js')` | **안 잡힌다.** 그 문서는 컨트롤러가 없다 |
+| `/admin/` scope SW, 문서 `/admin/…` 에서 `fetch('/_/app/x.js')` | **잡힌다.** scope 밖 경로여도 온다 |
+
+그래서 `/_/a-app/` ← a-sw, `/_/b-app/` ← b-sw 같은 구성은 **등록은 되지만 한 번도 안 불린다**
+— 요청을 보내는 문서가 그 scope 아래에 없기 때문이다. 앱이 자기 iframe 을 갖고 그 문서가
+그 경로 아래 있는 경우가 아니라면 성립하지 않는다.
+
+**`scope` 는 볼 화면이 사는 곳으로 잡는다.** 관리자만 볼 거면 `/admin/` 이면 되고, 그러면
+사이트의 나머지에는 SW 가 아예 안 붙는다. 기본값은 `/` 다.
+
+**앱은 레이어 이름으로 구분한다** — 응답의 `x-tirno-layer` 헤더, `<scope>__tirno/status` 의
+레이어별 집계, 생성 시 출력. `name` 을 안 주면 경로에서 만든다.
+
+`path` 가 `/` 로 끝나면 `root` 디렉터리 전부를 그 접두사 아래로, 아니면 `file` 하나를
+그 경로에. **origin 의 경로와 로컬 경로는 달라도 된다** — 앱의 `dist/` 는 자기 루트가
+`/` 지만 origin 에서는 `/_/app/` 아래 사는 것이 보통이고, 그 어긋남을 마운트가 흡수한다.
+
+가리키는 곳이 없거나 마운트가 겹치면 생성이 실패한다 — 어느 빌드가 이길지 모호한 채로
+심는 것보다 낫다.
+
+### 2. 굽는다
+
+```bash
+node scripts/sw-proxy/generate.mjs mounts.json --out .sw-proxy
+```
+
+`__tirno-sw.js` · `__tirno-boot.html` · `serve.mjs` · 인증서가 나오고, 이어서 칠 명령을
+찍어 준다. 인증서는 있으면 다시 굽지 않는다.
+
+### 3. 심는다 — 크롬은 두 번 뜨고, 첫 번은 headless 다
+
+```bash
+node .sw-proxy/serve.mjs &
+
+tirno new preview --headless -- \
   --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" \
   --ignore-certificate-errors
-tirno nav https://app.example.com/__tirno-boot.html
+tirno nav https://app.example.com/admin/__tirno-boot.html
+tirno eval "navigator.serviceWorker.register('/admin/__tirno-sw.js').then(r => r.scope)"
+
+tirno restart preview        # rule 없이 — 여기서부터 진짜 origin
 ```
 
-**`MAP host 127.0.0.1:8443` 처럼 포트를 받는다** — 443 이 아니어도 되므로 `sudo` 가 필요 없다.
+**`MAP host 127.0.0.1:8443` 처럼 포트를 받는다** — 443 이 아니어도 되니 `sudo` 가 필요 없다.
 
-### 3. 등록
+**`--ephemeral` 을 쓰지 마라.** kill 할 때 프로필이 사라지면 SW 도 같이 사라진다.
+
+부트스트랩 동안에는 그 origin 이 곧 로컬 서버라, SW 의 `install` 이 **상대 경로로**
+빌드를 받는다 — `http://127.0.0.1:PORT` 를 직접 부를 때 따라오는 CORS · mixed content ·
+Private Network Access 가 전부 안 걸린다. 이게 이 부트스트랩 방식의 이점이다.
+
+### 4. 확인 · 해제
 
 ```bash
-tirno eval "navigator.serviceWorker.register('/__tirno-sw.js').then(r => r.scope)"
-# → scope=https://app.example.com/
+tirno eval 'fetch("/admin/__tirno/status").then(r => r.text())'
+# {"buildId":"76fb0737063c","origin":"…","paths":3,"served":12,…}
+
+tirno eval 'fetch("/admin/__tirno/off").then(r => r.text())'   # unregister + 캐시 삭제
 ```
 
-### 4. rule 빼고 재기동
+`status` 와 `off` 는 **SW 안에** 있다. 로컬 서버가 꺼져 있어도 조회·해제가 된다.
+
+**세 가지를 다 본다.** 하나만 보면 "정적만 바꿨다" 가 증명되지 않는다.
 
 ```bash
-tirno restart <session>          # `--` 를 안 주면 플래그가 빠진다
-tirno nav https://app.example.com/...
-tirno eval "navigator.serviceWorker.controller?.scriptURL"
+tirno eval 'fetch("/…내 파일…").then(r => r.headers.get("x-served-by"))'   # tirno-sw/<build>
+tirno eval 'fetch("/…목록 밖…").then(r => r.headers.get("x-served-by"))'   # null → 원본
+tirno eval 'navigator.serviceWorker.controller?.scriptURL'
 ```
 
-**진짜 origin 이 `/__tirno-sw.js` 에 404 를 줘도 등록은 안 지워진다**(실측). 크롬은
-갱신을 시도하다 실패하고 기존 SW 를 그대로 둔다.
+## 새 빌드를 얹을 때
 
-### 5. 검증 — 이 셋을 다 본다
-
-```bash
-tirno eval 'fetch("/path/to/thing.json").then(r=>r.text())'                    # 내 것이 오나
-tirno eval 'fetch("/path/to/thing.json").then(r=>r.headers.get("x-served-by"))' # SW 가 준 게 맞나
-tirno eval 'fetch("/other/real.js").then(r=>r.status+" "+(r.headers.get("x-served-by")||"원본"))'
-```
-
-세 번째가 중요하다 — **목록에 없는 경로가 진짜로 원본에 가는지**를 봐야 "정적만 바꿨다"가
-증명된다.
-
-## 서비스워커
-
-```js
-const TARGET  = '/path/to/thing.json';
-const PAYLOAD = { /* 바꿔 넣을 것 */ };
-self.addEventListener('install',  e => e.waitUntil(self.skipWaiting()));
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', e => {
-  const u = new URL(e.request.url);
-  if (u.origin !== self.location.origin) return;   // 남의 origin 은 안 건드린다
-  if (u.pathname !== TARGET) return;               // 목록 밖 → respondWith 를 안 부른다 → 원본으로
-  e.respondWith(new Response(JSON.stringify(PAYLOAD), {
-    status: 200,
-    headers: { 'content-type': 'application/json', 'x-served-by': 'tirno-sw' },
-  }));
-});
-```
-
-**기본값이 통과다.** `/api/*` 를 막을 규칙을 따로 쓰지 않는다 — 목록에 없으면 손대지 않는
-것이 곧 통과라 규칙이 하나로 끝난다.
-
-여러 파일을 얹을 거면 `install` 에서 매니페스트를 읽어 `cache.addAll` 한다. **rule 이
-살아 있는 동안이라 상대 경로가 로컬 서버로 간다** — CORS·mixed content·Private Network
-Access 가 전부 안 걸린다. 이게 이 부트스트랩 방식의 진짜 이점이다.
+`generate` 를 다시 돌리고 3단계를 반복한다. `buildId` 는 **경로와 파일 내용의 해시**라,
+무엇이든 바뀌면 새 캐시가 생기고 `activate` 가 옛 캐시를 지운다 — 버전을 손으로 올릴 일이 없다.
 
 ## 함정
 
 - **스크립트 경로를 origin 이 안 쓰는 이름으로.** 크롬은 내비게이션마다(최대 24시간 간격)
-  그 경로를 진짜 origin 에 다시 물어본다. 404 면 기존 SW 가 살지만, **그 경로에 정상 JS 가
-  있으면 우리 SW 가 그것으로 교체된다.** `/sw.js` 는 위험하다.
+  `/__tirno-sw.js` 를 진짜 origin 에 다시 물어본다. 404 면 갱신 실패로 끝나고 기존 SW 가
+  살지만, **그 경로에 정상 JS 가 있으면 우리 SW 가 그것으로 교체된다.** `/sw.js` 는 위험하다.
 - **스코프는 스크립트가 놓인 디렉터리 기준.** 루트에 둬야 `/` 전체를 덮는다.
-- **프로필이 영속이어야 한다.** `--ephemeral` 이면 kill 할 때 SW 도 같이 사라진다.
-- **`restart` 는 세션 쿠키를 죽인다.** `Expires` 없는 쿠키는 브라우저 종료와 함께 사라져
-  **로그인이 풀린다.** SW 는 남고 로그인은 안 남는다 — 4단계 뒤 다시 로그인해야 할 수 있다.
-- **첫 내비게이션은 SW 가 못 잡는다.** `skipWaiting()` + `clients.claim()` 을 넣고 등록 후
-  한 번 `reload` 한다.
+- **`restart` 는 세션 쿠키를 죽인다.** `Expires` 없는 쿠키가 브라우저 종료와 함께 사라져
+  **로그인이 풀린다.** SW 는 남고 로그인은 안 남는다 — 3단계 뒤 다시 로그인해야 할 수 있다.
+- **첫 내비게이션은 SW 가 못 잡는다.** 템플릿이 `skipWaiting` + `clients.claim()` 을 넣지만,
+  등록 직후 한 번 `reload` 하는 편이 확실하다.
 - **평문 HTTP 서버로는 안 된다.** URL 스킴이 `https` 로 고정이라 IP 만 바꿔도 크롬은 TLS
-  핸드셰이크를 건다. 자체 서명 + `--ignore-certificate-errors`, 또는 mkcert.
-- **WebSocket 은 `fetch` 이벤트로 안 온다.** 크로스 오리진도 대상이 아니다(scope 는 origin 을
-  넘지 못한다).
+  핸드셰이크를 건다. 생성기가 자체 서명 인증서를 굽고 `--ignore-certificate-errors` 로 넘긴다.
+- **크로스 오리진은 대상이 아니다.** CDN 이 다른 호스트면 그 origin 에 따로 심는다 —
+  scope 는 origin 을 넘지 못한다. **WebSocket 도 `fetch` 이벤트로 안 온다.**
+- **이 SW 는 그 프로필에서 그 origin 을 계속 바꾼다.** 평소 쓰는 브라우저에 심으면 나중에
+  원인을 못 찾는다. tirno 세션 하나를 전용으로 쓰고, 확실히 되돌리려면
+  `tirno kill <세션> --clean` 으로 프로필째 버린다(로그인도 같이 사라진다).
 
-## 되돌리기
+## 인증서
 
-```bash
-tirno eval "navigator.serviceWorker.getRegistrations().then(r=>Promise.all(r.map(x=>x.unregister())))"
-tirno eval "caches.keys().then(k=>Promise.all(k.map(n=>caches.delete(n))))"
-# 확실히 하려면 프로필째 (로그인도 같이 사라진다)
-tirno kill <session> --clean
-```
+생성기가 `openssl` 로 굽는다. `mkcert` 로 구워도 된다.
 
-**이 SW 는 그 프로필에서 그 origin 을 계속 바꾼다.** 평소 쓰는 브라우저에 심으면 나중에
-원인을 못 찾는다. tirno 세션 하나를 전용으로 쓴다.
+**`mkcert -install` 은 하지 않는다.** 신뢰는 `--ignore-certificate-errors` 로 그 크롬
+세션에만 국한한다 — tirno 가 띄운 그 프로세스 하나에만 걸리고, 죽으면 같이 사라진다.
+
+## 계보
+
+뜬금없는 발명이 아니다. 검증된 세 조각의 조합이다.
+
+| | |
+|---|---|
+| [Wayne](https://github.com/jcubic/wayne) | "Express inside Service Worker". SW 를 브라우저 안의 HTTP 서버로 쓰고, VFS·커스텀 핸들러·네트워크 폴백으로 응답을 고른다 |
+| [CodeSandbox `static-browser-server`](https://github.com/codesandbox/static-browser-server) | 가상 파일을 SW 로 서빙하는 브라우저 내부 정적 서버 |
+| [MSW](https://github.com/mswjs/msw) | 앱 코드를 안 건드리고 네트워크 층에서 가로채되, 안 걸리는 요청은 실제 네트워크로 통과 — 이 문서의 "목록에 없으면 respondWith 를 안 부른다" 가 같은 규율이다 |
+
+이 스킬이 다른 점은 서빙 대상이 **가상 프로젝트가 아니라 아직 배포되지 않은 산출물**이고,
+얹는 곳이 **살아 있는 production 페이지**라는 것이다. 그래서 mock 보다는 **deployment
+overlay** 라고 부르는 편이 정확하다 — 페이지를 프리뷰용으로 다시 빌드하지 않고, URL 도
+production 그대로다.
+
+레이어 모델도 여기서 왔다. 앱마다 SW 를 띄우려는 충동이 자연스럽지만 그건 불가능하고,
+**SW 하나를 커널로 두고 배포본을 마운트/언마운트**하는 편이 이 문제의 모양에 맞다.
 
 ## 조사할 때 걸리는 것
 
