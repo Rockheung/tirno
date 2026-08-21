@@ -34,6 +34,7 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 | 경로 선정 | **origin 이 그 경로를 실제로 쓰는지는 호출자가 안다** — 이 스킬은 모른다. 가리키는 곳이 없으면 생성이 실패한다 |
 | `scope` | **볼 문서가 사는 곳.** 자산 경로가 아니다. 그 아래 문서를 열어야 SW 가 붙는다 — 아니면 아무 일도 안 일어난다 |
 | 레이어 이름 | 겹치면 생성이 실패한다. `x-tirno-layer` 와 status·mount/unmount 의 키가 된다 |
+| 레이어 **순서** | 경로가 겹치면 **먼저 선언한 것이 이긴다.** 로컬 작업본을 배포본 위에 얹으려면 위에 적는다 — 이건 오류가 아니라 이 스킬이 기대하는 쓰임이다 |
 
 ### 환경
 
@@ -53,11 +54,11 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 | | |
 |---|---|
 | 프로필 | 그 origin 이 **계속** 바뀐 채로 남는다. tirno 없이 열어도 그렇다 |
-| `buildId` | 경로와 파일 내용의 해시. 새 빌드는 새 id 를 갖고 옛 캐시는 자동으로 지워진다 |
+| `buildId` | scope·레이어·경로·파일 내용의 해시. 무엇이든 바뀌면 새 id 가 나오고 옛 캐시는 `activate` 가 지운다 |
 | 조회 | `GET <scope>__tirno/status` → `{buildId, scope, layers: [{name, mount, paths, enabled, served}]}` |
 | 해제 | `GET <scope>__tirno/off` → unregister + 캐시 삭제. **로컬 서버 없이도 된다** |
-| 앱 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
-| 앱 제어 | `<scope>__tirno/mount|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이 |
+| 레이어 구분 | 모든 응답에 `x-tirno-layer: <이름>` |
+| 레이어 제어 | `<scope>__tirno/mount\|unmount?layer=<이름>` — 런타임, 재부트스트랩 없이. 생략하면 전부 |
 | 로그인 | 풀려 있다 |
 
 ### 엮이는 자리
@@ -65,8 +66,8 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 - **앞** — 빌드를 돌리는 쪽, 그리고 origin 의 어느 경로를 덮을지 아는 쪽.
   그 둘이 `mounts` 를 만든다
 - **뒤** — 로그인이 필요하면 그때 한다. 조작·검증은 `tirno-runbook` 의 흐름을 탄다
-- **되돌리기** — `/__tirno/off` 로 이 스킬의 효과만 걷거나,
-  `tirno kill <세션> --clean` 으로 프로필째 버린다
+- **되돌리기** — `<scope>__tirno/off` 로 이 스킬의 효과만 걷거나,
+  `tirno kill <세션> --clean` 으로 프로필째 버린다(로그인도 같이 사라진다)
 
 ## 절차
 
