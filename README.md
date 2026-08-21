@@ -37,6 +37,21 @@ npm 레지스트리에는 없다 — 소스에서 받는다.
 | **여러 대에 동시에** | `broadcast … --group <g>` — 순차가 아니라 동시. 8세션 기준 1.35s → 0.35s |
 | **실패는 전부 exit 1** | 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서 받은 예외까지. `$?` 하나만 보면 된다 |
 
+## 스킬 — 에이전트에게 시키려면
+
+이 레포는 자기 스킬의 마켓플레이스이기도 하다.
+
+```bash
+claude plugin marketplace add Rockheung/tirno
+claude plugin install tirno@tirno
+```
+
+넷이 들어온다 — `tirno`(명령 레퍼런스) · `tirno-runbook`(작업 절차) ·
+`tirno-mcp`(chrome-devtools-mcp 대응) · `tirno-sw-override`(배포 전 빌드를 진짜 origin 에 얹기).
+
+스킬 본문은 `.claude/skills/` 가 정본이고 `plugins/tirno/skills/` 는 그리로 걸린 심링크다 —
+복사본이 낡는 일이 없다.
+
 ## 어디부터 볼까
 
 | 문서 | 무엇 |
