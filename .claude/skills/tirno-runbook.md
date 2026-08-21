@@ -229,6 +229,36 @@ tirno kill lab --clean
   한 페이지가 조합을 전부 돌고 결과 표를 내는 편이 재현이 쉽다.
 - 하네스가 안 끝나면 `tirno stall` 로 메인스레드가 포화됐는지 **렌더러 밖에서** 본다(§4.5).
 
+## 4.94 이동을 유발하는 조작은 `eval` 안에서 기다리지 마라
+
+`eval` 은 페이지의 실행 컨텍스트 안에서 돈다. 그 안에서 이동이 일어나면 **컨텍스트가 통째로
+없어져** 결과를 받을 곳이 사라진다.
+
+```bash
+# ✗ 로그인 버튼을 누르고 그 자리에서 기다린다 — 흔한 실수
+tirno eval '(async () => { btn.click(); await new Promise(r => setTimeout(r, 1500)); return "ok" })()'
+✗ Execution context was destroyed, most likely because of a navigation.   exit 1
+```
+
+**둘로 나눈다.** 지시하고 즉시 반환한 뒤, 다음 명령에서 확인한다.
+
+```bash
+tirno eval 'location.href = "…", "이동 지시함"'   # 쉼표 연산자로 즉시 반환
+tirno wait-for --network-idle --timeout 5000
+tirno eval 'location.href'                        # 여기서 확인
+```
+
+클릭이 이동을 유발하는 경우도 같다 — `eval` 안에서 클릭하고 기다리지 말고 명령을 가른다.
+
+```bash
+tirno click 'a'
+tirno wait-for --network-idle --timeout 5000
+tirno eval 'location.hostname'
+```
+
+`eval` 안에서 기다려도 되는 것은 **같은 문서 안에서 끝나는 일**뿐이다 — XHR 응답, 커스텀
+엘리먼트 정의, `window.__FINAL__` 이 차기(§4.9). 이동이 끼면 그 순간 죽는다.
+
 ## 4.95 schema 에 없는 기능은 `cdp` 로 간다
 
 `tirno schema` 에 없으면 그 명령은 없는 것이다. **`--help` 을 긁어 찾지 마라** — 없는 것을
