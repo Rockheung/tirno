@@ -59,7 +59,7 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 ### 엮이는 자리
 
 - **앞** — 빌드를 돌리는 쪽, 그리고 origin 의 어느 경로를 덮을지 아는 쪽.
-  그 둘이 `root` 와 `serve` 를 만든다
+  그 둘이 `mounts` 를 만든다
 - **뒤** — 로그인이 필요하면 그때 한다. 조작·검증은 `tirno-runbook` 의 흐름을 탄다
 - **되돌리기** — `/__tirno/off` 로 이 스킬의 효과만 걷거나,
   `tirno kill <세션> --clean` 으로 프로필째 버린다
@@ -93,7 +93,7 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 ### 2. 굽는다
 
 ```bash
-node scripts/sw-proxy/generate.mjs serve.json --out .sw-proxy
+node scripts/sw-proxy/generate.mjs mounts.json --out .sw-proxy
 ```
 
 `__tirno-sw.js` · `__tirno-boot.html` · `serve.mjs` · 인증서가 나오고, 이어서 칠 명령을
