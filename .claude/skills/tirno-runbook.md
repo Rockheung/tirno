@@ -229,6 +229,45 @@ tirno kill lab --clean
   한 페이지가 조합을 전부 돌고 결과 표를 내는 편이 재현이 쉽다.
 - 하네스가 안 끝나면 `tirno stall` 로 메인스레드가 포화됐는지 **렌더러 밖에서** 본다(§4.5).
 
+## 4.95 schema 에 없는 기능은 `cdp` 로 간다
+
+`tirno schema` 에 없으면 그 명령은 없는 것이다. **`--help` 을 긁어 찾지 마라** — 없는 것을
+찾다 없는 플래그를 만들어낸다. 대신 raw CDP 로 내려간다.
+
+```bash
+tirno cdp Page.bringToFront          # 창을 앞으로 (실측: exit 0)
+tirno cdp Input.dispatchMouseEvent '{"type":"mousePressed", ...}'
+tirno cdp Browser.grantPermissions '{"origin":"https://…","permissions":["geolocation"]}' --browser
+```
+
+브라우저 수준 도메인(`Browser.*`)은 `--browser` 를 붙인다. **다만 tirno 는 명령마다
+connect/disconnect 하므로, 연결에 매인 상태(인터셉트 등록·이벤트 구독)는 명령이 끝나면
+사라진다.** 지속이 필요하면 페이지 쪽에 남는 수단(서비스워커 등)을 쓴다.
+
+## 4.96 비밀번호 — argv 에 넣지 마라
+
+`eval` 의 인자는 **`ps` 에 그대로 보인다.** 실측:
+
+```
+$ ps -A -o command= | grep 'bin/tirno.js eval'
+node bin/tirno.js eval (async()=>{...})() -s ps1
+```
+
+명령이 도는 동안 같은 머신의 누구나 읽을 수 있고, 셸 히스토리에도 남는다.
+
+**클립보드로 우회하는 길은 막혀 있다.** 페이지에서 `navigator.clipboard.readText()` 를
+쓰려면 포커스와 권한이 둘 다 필요한데, `Page.bringToFront` 로 포커스는 잡히지만
+`Browser.grantPermissions` 로 `clipboardReadWrite` 를 줘도 권한이 안 열린다 —
+`navigator.permissions.query({name:'clipboard-read'})` 가 여전히 `prompt` 고
+`readText()` 는 `NotAllowedError` 다(2026-08-21 실측).
+
+**그래서 지금의 답은 하나다 — 사람이 직접 입력한다.** headful 로 띄우고 로그인 화면에서
+멈춘 뒤, 사용자가 치기를 기다린다. 자격을 모르는 채로 이어가는 편이 옳기도 하다.
+
+로그인 뒤 상태는 프로필에 남으므로 이후 명령은 그 세션에 계속 붙는다. 단
+**`restart` 는 세션 쿠키를 죽인다** — `Expires` 없는 쿠키가 브라우저 종료와 함께 사라져
+로그인이 풀린다.
+
 ## 5. 정리
 
 ```bash
