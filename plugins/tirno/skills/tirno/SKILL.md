@@ -84,6 +84,7 @@ tirno network --show <id>          # 그 요청의 헤더·본문
 ```bash
 tirno click <selector|@N> [--dbl]      # selector 또는 @N ref (snapshot에서 부여된 번호)
 tirno fill <selector|@N> <value>
+tirno fill <selector|@N> --value-stdin  # 값을 stdin 에서. 인자로 준 값은 ps 에 남는다
 tirno type <text> [--delay ms]
 tirno press <key>                       # Enter, Tab, Escape, ArrowDown...
 tirno hover <selector|@N>
@@ -101,7 +102,11 @@ tirno wait-for --network-idle [--timeout ms]
 tirno eval <expression>
 tirno eval "document.title"
 tirno eval "JSON.stringify(performance.timing)" --json
+tirno eval "<expr>" --timeout 60000     # 기본 30초. 0 이면 연결이 허용하는 만큼
 ```
+
+settle 하지 않는 promise 를 페이지가 돌려주면 기본 30초에서 끊고 그렇게 말한다 —
+`navigator.clipboard.readText()` 가 권한 없이 그렇게 된다. 페이지 쪽 실행을 멈추지는 않는다.
 
 ### 에뮬레이션
 
