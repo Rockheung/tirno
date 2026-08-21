@@ -1,11 +1,26 @@
 import { Command } from 'commander';
-import { intArg } from '../util/parsers.js';
+import { intArg, stripTrailingNewline } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
 import { clickByRef, fillByRef, hoverByRef } from '../cdp/dom-actions.js';
 import * as refStore from '../core/ref-store.js';
 import type { Page } from 'puppeteer-core';
+
+/**
+ * 파이프로 들어온 값 전부.
+ *
+ * TTY 면 바로 거절한다 — 붙여넣기를 기다리는 것처럼 보이지만 실제로는 아무도
+ * 끝내 주지 않아 그대로 매달린다.
+ */
+async function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) {
+    throw new Error('--value-stdin needs piped input, e.g. `pbpaste | tirno fill \'input[type=password]\' --value-stdin`');
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString('utf-8');
+}
 
 async function elemCenter(page: Page, selector: string): Promise<[number, number]> {
   const box = await page.evaluate((sel) => {
@@ -76,8 +91,19 @@ export function registerInputCommands(program: Command): void {
     .argument('[value]', 'Value to fill (omit when --batch)')
     .option('-s, --session <name>', 'Session name')
     .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},...]')
+    .option('--value-stdin', 'Read the value from stdin instead of the argument, e.g. `pbpaste | tirno fill \'input[type=password]\' --value-stdin`. The value is never printed.')
     .action(async (target: string | undefined, value: string | undefined, opts) => {
       try {
+        // 값이 인자로 오면 `ps` 와 셸 히스토리에 남는다. 비밀번호를 넣는 흔한 자리라
+        // 파이프 경로를 둔다 — 넣고 나서 되돌릴 수 없는 종류의 노출이다.
+        let fromStdin = false;
+        if (opts.valueStdin) {
+          if (opts.batch) throw new Error('--value-stdin and --batch are mutually exclusive');
+          if (value !== undefined) throw new Error('--value-stdin takes the value from stdin — do not also pass <value>');
+          value = stripTrailingNewline(await readStdin());
+          fromStdin = true;
+        }
+
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
@@ -122,7 +148,11 @@ export function registerInputCommands(program: Command): void {
         }
 
         browser.disconnect();
-        success(`Filled ${target} with "${value}"`);
+        // stdin 으로 받은 값은 찍지 않는다 — argv 를 피해 넣은 것을 터미널에
+        // 도로 남기면 피한 의미가 없다.
+        success(fromStdin
+          ? `Filled ${target} (${value.length} chars from stdin)`
+          : `Filled ${target} with "${value}"`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);

@@ -126,6 +126,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `click <selector\|@N>` | 클릭 |
 | `fill <selector\|@N> <value>` | input clear + type |
+| `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N>` | 키보드/마우스 |
 | `scroll up\|down\|<pixels>` | 스크롤 |
 | `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
@@ -135,7 +136,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 ### 실행 / emulation
 | 명령 | 설명 |
 |---|---|
-| `eval <expression>` | 페이지에서 JS 실행 |
+| `eval <expression> [--timeout <ms>]` | 페이지에서 JS 실행. 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
 | `cdp <method> [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
 | `emulate [--device <name>] [--dpr <n>] [--network <p>] [--cpu <n>] [--reset]` | 영속 emulation |
 
