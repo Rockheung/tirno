@@ -93,6 +93,9 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'permissions grant':  { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'permissions revoke': { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
 
+  // ---- service workers
+  'sw status':          { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+
   // ---- navigation
   'nav':          { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'reload':       { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },

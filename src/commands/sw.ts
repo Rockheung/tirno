@@ -1,0 +1,172 @@
+import { Command } from 'commander';
+import { connect } from '../core/chrome-connector.js';
+import { getActivePage } from '../cdp/page-resolver.js';
+import { formatTable, info, error } from '../output/formatter.js';
+
+/**
+ * What a service worker is actually proxying, read from the browser rather than
+ * from whatever generated it.
+ *
+ * The obvious source is the sw-proxy's own `<scope>__tirno/status`, and it is
+ * not enough: a worker outlives the local server that served its script, and a
+ * profile can carry one this CLI never generated. Measured on a live session —
+ * script 404 at the origin, control endpoint answering with the site's HTML,
+ * caches named by a scheme the current template does not produce, and the 22
+ * proxied paths still sitting in Cache Storage and still being served.
+ *
+ * So registrations and Cache Storage are the source of truth here, and the
+ * control endpoint is an optional overlay for the workers that do answer it.
+ */
+
+interface Registration {
+  scope: string;
+  scriptURL: string | null;
+  state: string | null;
+  controlsThisDocument: boolean;
+}
+
+interface CacheEntry {
+  name: string;
+  paths: string[];
+}
+
+interface ControlStatus {
+  scope: string;
+  buildId?: string;
+  layers?: Array<{ name?: string; mount?: string; enabled?: boolean; served?: number; paths?: number }>;
+}
+
+interface SwReport {
+  url: string;
+  registrations: Registration[];
+  caches: CacheEntry[];
+  control: ControlStatus[];
+}
+
+async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise<SwReport> {
+  return await page.evaluate(async () => {
+    const out = {
+      url: location.origin + location.pathname,
+      registrations: [] as Registration[],
+      caches: [] as CacheEntry[],
+      control: [] as ControlStatus[],
+    };
+
+    if ('serviceWorker' in navigator) {
+      const controller = navigator.serviceWorker.controller;
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) {
+        const worker = r.active ?? r.waiting ?? r.installing;
+        out.registrations.push({
+          scope: r.scope,
+          scriptURL: worker ? worker.scriptURL : null,
+          state: worker ? worker.state : null,
+          controlsThisDocument: !!controller && !!worker && controller.scriptURL === worker.scriptURL,
+        });
+
+        // Optional overlay. A worker that is not an sw-proxy answers with the
+        // site's own 404 page, so the content-type decides — not the status.
+        try {
+          const scopePath = new URL(r.scope).pathname;
+          const res = await fetch(scopePath + '__tirno/status', { cache: 'no-store' });
+          if (res.ok && (res.headers.get('content-type') ?? '').includes('json')) {
+            const body = await res.json();
+            out.control.push({ ...body, scope: r.scope });
+          }
+        } catch { /* no control endpoint — the common case */ }
+      }
+    }
+
+    if ('caches' in self) {
+      for (const name of await caches.keys()) {
+        const c = await caches.open(name);
+        const reqs = await c.keys();
+        out.caches.push({ name, paths: reqs.map(q => new URL(q.url).pathname).sort() });
+      }
+    }
+
+    return out;
+  }) as SwReport;
+}
+
+function render(report: SwReport, showPaths: boolean): void {
+  console.log(`URL: ${report.url}`);
+
+  if (report.registrations.length === 0) {
+    info('No service worker registered for this origin.');
+  } else {
+    console.log('\nService workers');
+    console.log(formatTable(['SCOPE', 'SCRIPT', 'STATE', 'CONTROLS'], report.registrations.map(r => [
+      r.scope,
+      r.scriptURL ?? '-',
+      r.state ?? '-',
+      r.controlsThisDocument ? 'yes' : 'no',
+    ])));
+  }
+
+  for (const c of report.control) {
+    console.log(`\nsw-proxy control @ ${c.scope}${c.buildId ? ` (build ${c.buildId})` : ''}`);
+    const layers = c.layers ?? [];
+    if (layers.length === 0) {
+      info('  no layers reported');
+      continue;
+    }
+    console.log(formatTable(['LAYER', 'MOUNT', 'ENABLED', 'SERVED', 'PATHS'], layers.map(l => [
+      l.name ?? '-',
+      l.mount ?? '-',
+      l.enabled === false ? 'no' : 'yes',
+      String(l.served ?? '-'),
+      String(l.paths ?? '-'),
+    ])));
+  }
+
+  if (report.caches.length === 0) {
+    console.log('');
+    info('No cache storage for this origin — nothing is being served from a cache.');
+    return;
+  }
+
+  console.log('\nProxied resources (Cache Storage)');
+  console.log(formatTable(['CACHE', 'PATHS'], report.caches.map(c => [c.name, String(c.paths.length)])));
+
+  if (!showPaths) {
+    const total = report.caches.reduce((n, c) => n + c.paths.length, 0);
+    console.log('');
+    info(`${total} path(s) total — pass --paths to list them.`);
+    return;
+  }
+  for (const c of report.caches) {
+    console.log(`\n${c.name}`);
+    for (const p of c.paths) console.log(`  ${p}`);
+  }
+}
+
+export function registerSwCommands(program: Command): void {
+  const sw = program
+    .command('sw')
+    .description('Service workers on the active page — what a CDN proxy is registered for and which resources it serves');
+
+  sw
+    .command('status')
+    .description('Registered workers, the resources they serve from Cache Storage, and sw-proxy layers when the worker answers its control endpoint')
+    .option('-s, --session <name>', 'Session name')
+    .option('--paths', 'List every cached path instead of the count')
+    .option('--json', 'Output as JSON')
+    .action(async (opts) => {
+      try {
+        const { browser } = await connect(opts.session);
+        const page = await getActivePage(browser);
+        const report = await collect(page);
+        browser.disconnect();
+
+        if (opts.json) {
+          console.log(JSON.stringify(report, null, 2));
+          return;
+        }
+        render(report, !!opts.paths);
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+}

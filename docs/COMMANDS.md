@@ -157,6 +157,17 @@ CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.*
 `NotAllowedError: Document is not focused` 로 거절된다. 백그라운드 탭이면 `cdp Page.bringToFront`
 를 먼저 보낸다.
 
+### 서비스워커 (sw-proxy 조회)
+| 명령 | 설명 |
+|---|---|
+| `sw status [--paths] [--json]` | 등록된 워커, 그 워커가 Cache Storage 에서 내고 있는 경로, 그리고 control 엔드포인트가 응답하면 레이어별 enabled·served |
+
+정본은 **등록 정보와 Cache Storage** 다. sw-proxy 자신의 `<scope>__tirno/status` 만 믿으면
+안 되는 이유는 실측으로 확인했다 — 워커는 자기 스크립트를 내주던 로컬 서버보다 오래 살고,
+프로필에는 이 CLI 가 굽지 않은 워커도 들어 있을 수 있다. 그런 세션에서는 스크립트가 origin
+에서 404 이고 control 요청에 사이트의 HTML 이 돌아오는데, 프록시되는 경로 22개는 Cache
+Storage 에 그대로 남아 계속 서빙되고 있었다. control 응답은 답하는 워커에 한해 얹는다.
+
 ### 성능
 | 명령 | 설명 |
 |---|---|
