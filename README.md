@@ -12,8 +12,9 @@
 어디까지 왔는지는 [아직 구현이 아닌 것](#아직-구현이-아닌-것-drift)에 적어뒀다.
 
 ```bash
-git clone https://github.com/Rockheung/tirno.git && cd tirno
-npm install && npm run build && npm link
+# 받아서 바로 — Node 없이 돈다 (macOS arm64; 다른 타깃은 릴리즈 페이지에)
+curl -fsSL https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64 -o tirno
+chmod +x tirno && sudo mv tirno /usr/local/bin/
 
 tirno new demo https://example.com --headless   # 세션 하나 — 0.6초
 tirno snapshot                                  # a11y 트리를 @ref 로
@@ -21,8 +22,23 @@ tirno click @7                                  # 셀렉터를 몰라도 누른�
 tirno kill demo --clean
 ```
 
-**필요한 것**: Node 22+ · Chrome(경로 4곳 자동 탐색, 없으면 `--executable-path`).
-npm 레지스트리에는 없다 — 소스에서 받는다.
+**필요한 것**: Chrome 하나뿐이다(경로 4곳 자동 탐색, 없으면 `--executable-path`).
+바이너리에 런타임이 들어 있어 Node 를 안 깔아도 된다.
+
+바이너리는 넷이다 — `darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64`.
+**Windows 는 대상이 아니다**: 소유권 판정이 `lsof` 와 `ps` 를 읽는다.
+릴리즈의 `SHA256SUMS` 로 검증할 수 있다.
+
+<details>
+<summary>소스에서 (고칠 사람)</summary>
+
+```bash
+git clone https://github.com/Rockheung/tirno.git && cd tirno
+npm install && npm run build && npm link
+```
+
+Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
+</details>
 
 ---
 
@@ -60,6 +76,7 @@ claude plugin install tirno@tirno
 | [docs/COMMANDS.md](docs/COMMANDS.md) | 66개 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수 |
 | [AGENTS.md](AGENTS.md) | 에이전트가 읽을 것 — 명령·경계·함정 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 개발 · 테스트 · CI |
+| [docs/research-sw-cdn-proxy.md](docs/research-sw-cdn-proxy.md) | 배포 전 빌드를 진짜 origin 위에 얹기 — 서비스워커 오버레이 설계 |
 | [docs/JOURNAL.md](docs/JOURNAL.md) · [docs/RESEARCH.md](docs/RESEARCH.md) | 작업 일지 · 비교 도구 리서치 |
 
 명령 표면의 **정본은 `tirno schema`** 다. commander 트리에서 실행 시점에 뽑으므로 문서보다

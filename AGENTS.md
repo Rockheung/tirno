@@ -5,12 +5,17 @@ tirno — raw CDP 위의 다중 세션 브라우저 자동화 CLI. **이 도구�
 
 ## Setup
 
+받아서 쓸 거면 릴리즈의 바이너리가 빠르다 — 런타임이 들어 있어 Node 가 필요 없다.
+`darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64` 넷이고 Windows 는 대상이 아니다.
+
+고칠 거면 소스에서:
+
 ```bash
 npm install
 npm run build            # tsc → dist/. 안 하면 bin/tirno.js 가 아무것도 못 한다
-npm test                 # 유닛 183건 (~0.6s, Chrome 안 띄움)
+npm test                 # 유닛 190건 (~0.6s, Chrome 안 띄움)
 npm run lint             # eslint, 경고 0 유지
-node scripts/smoke.mjs   # 전 명령 188건 (~60s, 진짜 Chrome + 네트워크)
+node scripts/smoke.mjs   # 전 명령 190건 (~55s, 진짜 Chrome + 네트워크)
 ```
 
 `npm test` 와 스모크 **둘 다 PR 게이트**다(`.github/workflows/ci.yml`).
@@ -64,6 +69,10 @@ tirno kill s1 --clean
 - `src/cdp/` — 페이지 리졸버, emulation, dom-actions
 - `src/core/schema.ts` — 새 명령을 `SEMANTICS` 에 분류 없이 추가하면 `test/schema.test.ts`
   가 깨진다. 그게 이 표가 안 낡는 이유다
+- `.claude/skills/` — 스킬 원본. `plugins/tirno/skills/<이름>/SKILL.md` 는 사본이고,
+  고쳤으면 `cp` 로 맞춘다(`test/plugin-skills.test.ts` 가 어긋나면 깨뜨린다)
+- `plugins/tirno/skills/tirno-sw-override/scripts/` — sw-proxy 생성기. 스킬 안에 있어야
+  플러그인으로 설치했을 때도 딸려간다
 
 ### 지켜지는 불변식 (깨면 검사가 잡는다)
 
@@ -73,6 +82,8 @@ tirno kill s1 --clean
   schema 와 대조한다
 - **스모크의 `known` 표시는 고쳐지면 `STALE` 로 실패한다.** 결함이 사라졌는데 표시가 남으면
   그 검사는 아무것도 안 지키므로, 표시를 떼라고 알린다
+- **버전은 세 곳이 같아야 한다** — `package.json` · `src/main.ts` 의 `.version()` ·
+  플러그인 매니페스트. 릴리즈 태그와 바이너리의 `--version` 이 다르면 안 된다
 
 ### 커밋 · PR
 
