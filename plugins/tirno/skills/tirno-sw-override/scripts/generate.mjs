@@ -65,6 +65,20 @@ for (const [i, m] of cfg.mounts.entries()) {
   if (seenName.has(name)) { errors.push(`${label}: 이름이 겹친다 — ${name}`); continue; }
   seenName.add(name);
 
+  // navigateFallback 은 낼 문서가 하나로 정해질 때만 뜻이 있다.
+  let navigateFallback;
+  if (m.navigateFallback !== undefined) {
+    if (m.path.endsWith('/')) {
+      errors.push(`${label}: navigateFallback 은 파일 마운트에만 쓴다 — 디렉터리는 어느 문서를 낼지 정해지지 않는다`);
+      continue;
+    }
+    if (typeof m.navigateFallback !== 'string' || !m.navigateFallback.startsWith('/')) {
+      errors.push(`${label}: navigateFallback 은 "/" 로 시작하는 경로여야 한다 — 지금 ${JSON.stringify(m.navigateFallback)}`);
+      continue;
+    }
+    navigateFallback = m.navigateFallback;
+  }
+
   if (m.path.endsWith('/')) {
     if (!m.root) { errors.push(`${label}: 디렉터리 마운트에는 "root" 가 필요하다`); continue; }
     const root = path.resolve(cfgDir, m.root);
@@ -87,7 +101,8 @@ for (const [i, m] of cfg.mounts.entries()) {
     layerFile.set(`${i}-${name}\u0000${m.path}`, file);
     if (!map.has(m.path)) map.set(m.path, file);
     layers.push({ id: `${i}-${name}`, name, mount: m.path, from: m.file,
-                  enabled: m.enabled !== false, paths: [m.path] });
+                  enabled: m.enabled !== false, paths: [m.path],
+                  ...(navigateFallback ? { navigateFallback } : {}) });
   }
 }
 if (errors.length) { console.error(errors.map(e => '✗ ' + e).join('\n')); process.exit(1); }
@@ -111,7 +126,7 @@ const overlaySrc = overlayOn
 // ── buildId — 경로와 그 내용에서 나온다. 무엇이든 바뀌면 activate 가 옛 캐시를 지운다.
 const h = crypto.createHash('sha1').update(scope).update(overlaySrc);
 for (const l of layers) {
-  h.update(l.id);
+  h.update(l.id).update(l.navigateFallback ?? '');
   for (const p of l.paths) h.update(p).update(fs.readFileSync(layerFile.get(l.id + '\u0000' + p)));
 }
 const buildId = h.digest('hex').slice(0, 12);
@@ -212,7 +227,8 @@ console.log(`생성 완료 — ${outDir}
   build ${buildId} · scope ${scope} · 레이어 ${layers.length} · 경로 ${paths.length}개
   (위에 있는 레이어가 이긴다)`);
 for (const l of layers) {
-  console.log(`    ${l.name.padEnd(16)} ${l.mount}  ←  ${l.from}  (${l.paths.length}${l.enabled ? '' : ', 꺼짐'})`);
+  const fb = l.navigateFallback ? `, navigate ${l.navigateFallback}/* → 이 문서` : '';
+  console.log(`    ${l.name.padEnd(16)} ${l.mount}  ←  ${l.from}  (${l.paths.length}${l.enabled ? '' : ', 꺼짐'}${fb})`);
 }
 
 console.log(`
