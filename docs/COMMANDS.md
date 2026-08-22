@@ -203,9 +203,21 @@ npm link 는 `process.execPath` 가 런타임을 가리키므로 대상이 아�
 않고, 실행 중인 자기 자신을 덮어써도 지금 프로세스는 옛 inode 로 끝까지 돈다.
 
 스킬은 파일을 직접 만지지 않는다. Claude Code 가 플러그인을 자기 상태로 관리하므로
-`claude plugin marketplace update tirno` → `claude plugin update tirno` 를 부른다 —
+`claude plugin marketplace update tirno` → `claude plugin update tirno@tirno` 를 부른다 —
 마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.
 `claude` 가 PATH 에 없으면 그 두 줄을 안내하고 바이너리만 올린다.
+
+**바이너리와 플러그인은 따로 설치되고 따로 낡으므로 각각 판정한다.** 릴리즈 바이너리를 직접
+받아 쓰다가 `update` 로 갈아타면 바이너리만 최신이고 플러그인은 처음 설치 시점에 멈춰 있다.
+플러그인 설치 버전은 `~/.claude/plugins/installed_plugins.json`(또는 `CLAUDE_CONFIG_DIR`)의
+`tirno@tirno` 항목에서 읽는다.
+
+```
+$ tirno update --check
+binary  0.2.2    · latest 0.2.2 · up to date
+plugin  0.2.0    · latest 0.2.2 · behind
+→ Run "tirno update" to move both to 0.2.2.
+```
 
 ### 서비스워커 (sw-proxy 조회)
 | 명령 | 설명 |

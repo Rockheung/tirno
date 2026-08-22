@@ -234,8 +234,9 @@ tirno update [--check]           # 최신 릴리즈로 — 바이너리 + 스킬
 
 `update` 는 bun 으로 컴파일한 단일 실행 파일일 때만 바이너리를 갈아 낀다(소스 체크아웃은
 `git pull && npm run build`). 받은 파일은 `SHA256SUMS` 와 대조하고 어긋나면 설치하지 않는다.
-스킬은 `claude plugin marketplace update tirno` → `claude plugin update tirno` 로 당긴다 —
-파일을 직접 만지면 Claude Code 가 들고 있는 플러그인 상태와 어긋난다.
+스킬은 `claude plugin marketplace update tirno` → `claude plugin update tirno@tirno` 로 당긴다 —
+파일을 직접 만지면 Claude Code 가 들고 있는 플러그인 상태와 어긋난다. 바이너리와 플러그인은
+따로 낡으므로 각각 판정한다(`--check` 가 두 줄로 보고한다).
 
 ## 세션 메타데이터
 
