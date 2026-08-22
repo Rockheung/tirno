@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assetNameFor, compareVersions, parseChecksums, selfReplaceTarget } from '../src/core/update.js';
+import { assetNameFor, compareVersions, installedPluginsPath, parseChecksums, pluginVersionFrom, selfReplaceTarget } from '../src/core/update.js';
 
 // 문자열 비교로는 0.2.10 이 0.2.9 보다 낮다고 나오고, 그러면 밀린 상태에서
 // "최신입니다" 를 말하게 된다 — 틀린 답이 조용히 나가는 자리다.
@@ -52,4 +52,41 @@ test('selfReplaceTarget only accepts a compiled single-file binary', () => {
   assert.equal(selfReplaceTarget('/usr/local/bin/tirno', '1.2.3'), '/usr/local/bin/tirno');
   assert.equal(selfReplaceTarget('/usr/local/bin/bun', '1.2.3'), null);   // bun run
   assert.equal(selfReplaceTarget('/usr/local/bin/node', undefined), null); // node bin/tirno.js
+});
+
+// 바이너리와 플러그인은 따로 낡는다. 이 값을 못 읽으면 플러그인이 0.2.0 인 채로
+// "최신입니다" 가 나간다 — 이 명령이 묶으려던 바로 그 갈래가 조용히 빠진다.
+test('pluginVersionFrom reads the installed entry', () => {
+  const raw = JSON.stringify({
+    version: 2,
+    plugins: {
+      'other@mkt': [{ scope: 'user', version: 'cedd013e118f' }],
+      'tirno@tirno': [{ scope: 'user', version: '0.2.0', installPath: '/x' }],
+    },
+  });
+  assert.equal(pluginVersionFrom(raw), '0.2.0');
+});
+
+// scope 마다 항목이 하나씩 들어간다. 하나라도 낡았으면 갱신할 것이 있다.
+test('pluginVersionFrom takes the lowest version across scopes', () => {
+  const raw = JSON.stringify({
+    plugins: { 'tirno@tirno': [{ version: '0.2.2' }, { version: '0.2.0' }] },
+  });
+  assert.equal(pluginVersionFrom(raw), '0.2.0');
+});
+
+test('pluginVersionFrom returns null when there is nothing usable', () => {
+  assert.equal(pluginVersionFrom('not json'), null);
+  assert.equal(pluginVersionFrom('{}'), null);
+  assert.equal(pluginVersionFrom(JSON.stringify({ plugins: {} })), null);
+  assert.equal(pluginVersionFrom(JSON.stringify({ plugins: { 'tirno@tirno': [] } })), null);
+  // 커밋 sha 로 설치된 것은 버전 비교가 안 된다 — 없는 것으로 본다.
+  assert.equal(pluginVersionFrom(JSON.stringify({
+    plugins: { 'tirno@tirno': [{ version: 'cedd013e118f' }] },
+  })), null);
+});
+
+test('installedPluginsPath honours CLAUDE_CONFIG_DIR', () => {
+  assert.equal(installedPluginsPath('/home/u'), '/home/u/.claude/plugins/installed_plugins.json');
+  assert.equal(installedPluginsPath('/home/u', '/cfg'), '/cfg/plugins/installed_plugins.json');
 });

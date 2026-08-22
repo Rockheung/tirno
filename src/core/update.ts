@@ -74,6 +74,40 @@ export function selfReplaceTarget(execPath: string, bunVersion: string | undefin
   return execPath;
 }
 
+/**
+ * Claude Code 가 설치해 둔 플러그인 버전.
+ *
+ * 바이너리와 플러그인은 따로 설치되고 따로 낡는다 — 릴리즈 바이너리를 직접 받아
+ * 쓰다가 `update` 로 갈아타면 바이너리만 최신이고 플러그인은 처음 설치 시점에
+ * 멈춰 있다. 그래서 각각 읽어야 한다.
+ *
+ * 항목은 scope(user/local)마다 하나씩 배열로 들어 있다. 하나라도 낡았으면 갱신할
+ * 것이 있으므로 가장 낮은 버전을 기준으로 삼는다.
+ */
+export function pluginVersionFrom(raw: string, key = 'tirno@tirno'): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const plugins = (parsed as { plugins?: Record<string, unknown> })?.plugins;
+  const entries = plugins?.[key];
+  if (!Array.isArray(entries)) return null;
+
+  const versions = entries
+    .map(e => (e as { version?: unknown })?.version)
+    .filter((v): v is string => typeof v === 'string' && /^\d+\.\d+/.test(v));
+  if (!versions.length) return null;
+
+  return versions.reduce((lowest, v) => (compareVersions(v, lowest) < 0 ? v : lowest));
+}
+
+/** `~/.claude/plugins/installed_plugins.json`. CLAUDE_CONFIG_DIR 가 있으면 그쪽. */
+export function installedPluginsPath(home: string, configDir?: string): string {
+  return path.join(configDir ?? path.join(home, '.claude'), 'plugins', 'installed_plugins.json');
+}
+
 export function sha256(buf: Buffer): string {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
