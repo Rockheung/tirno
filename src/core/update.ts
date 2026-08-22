@@ -74,17 +74,31 @@ export function selfReplaceTarget(execPath: string, bunVersion: string | undefin
   return execPath;
 }
 
+/** 설치된 플러그인 하나 — `claude plugin` 이 받는 식별자와 그 버전. */
+export interface InstalledPlugin {
+  /** `tirno@tirno` — `<플러그인>@<마켓플레이스>` */
+  id: string;
+  /** `@` 뒤. `claude plugin marketplace update` 가 받는다 */
+  marketplace: string;
+  /** scope 마다 항목이 하나씩이라 그중 가장 낮은 것 */
+  version: string;
+}
+
 /**
- * Claude Code 가 설치해 둔 플러그인 버전.
+ * Claude Code 가 설치해 둔 플러그인. 식별자와 버전을 **한 번에** 돌려준다.
  *
  * 바이너리와 플러그인은 따로 설치되고 따로 낡는다 — 릴리즈 바이너리를 직접 받아
  * 쓰다가 `update` 로 갈아타면 바이너리만 최신이고 플러그인은 처음 설치 시점에
  * 멈춰 있다. 그래서 각각 읽어야 한다.
  *
+ * 식별자를 값으로 돌려주는 이유는, 버전을 읽는 쪽과 갱신을 부르는 쪽이 `tirno@tirno`
+ * 라는 같은 가정을 각자 들고 있으면 한쪽만 어긋나도 **버전은 읽으면서 갱신은 다른
+ * 곳을 부르는** 상태가 되기 때문이다. 설치된 키가 하나뿐인 출처다.
+ *
  * 항목은 scope(user/local)마다 하나씩 배열로 들어 있다. 하나라도 낡았으면 갱신할
  * 것이 있으므로 가장 낮은 버전을 기준으로 삼는다.
  */
-export function pluginVersionFrom(raw: string, key = 'tirno@tirno'): string | null {
+export function installedPluginFrom(raw: string, name = 'tirno'): InstalledPlugin | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -92,7 +106,14 @@ export function pluginVersionFrom(raw: string, key = 'tirno@tirno'): string | nu
     return null;
   }
   const plugins = (parsed as { plugins?: Record<string, unknown> })?.plugins;
-  const entries = plugins?.[key];
+  if (!plugins || typeof plugins !== 'object') return null;
+
+  // 마켓플레이스 이름은 `marketplace.json` 이 정하므로 저장소를 fork 하면 달라진다.
+  // 이름으로 찾고 뒤는 읽어 쓴다.
+  const id = Object.keys(plugins).find(k => k.startsWith(`${name}@`));
+  if (!id) return null;
+
+  const entries = plugins[id];
   if (!Array.isArray(entries)) return null;
 
   const versions = entries
@@ -100,7 +121,11 @@ export function pluginVersionFrom(raw: string, key = 'tirno@tirno'): string | nu
     .filter((v): v is string => typeof v === 'string' && /^\d+\.\d+/.test(v));
   if (!versions.length) return null;
 
-  return versions.reduce((lowest, v) => (compareVersions(v, lowest) < 0 ? v : lowest));
+  return {
+    id,
+    marketplace: id.slice(name.length + 1),
+    version: versions.reduce((lowest, v) => (compareVersions(v, lowest) < 0 ? v : lowest)),
+  };
 }
 
 /** `~/.claude/plugins/installed_plugins.json`. CLAUDE_CONFIG_DIR 가 있으면 그쪽. */
