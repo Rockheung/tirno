@@ -1,7 +1,7 @@
 {
   "name": "tirno",
   "description": "raw CDP 위의 다중 세션 브라우저 자동화 CLI 를 쓰기 위한 스킬 넷. 명령 레퍼런스 · 작업 절차(조작했다고 됐다고 하지 않는다 — 페이지에서 다시 읽어 확인) · chrome-devtools-mcp 대응표 · 진짜 origin 위에 로컬 빌드를 얹는 서비스워커 CDN 프록시. 도구는 github.com/Rockheung/tirno.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": {
     "name": "Rockheung",
     "email": "rockheung@gmail.com"
