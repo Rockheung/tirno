@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assetNameFor, compareVersions, installedPluginsPath, parseChecksums, pluginVersionFrom, selfReplaceTarget } from '../src/core/update.js';
+import { assetNameFor, compareVersions, installedPluginFrom, installedPluginsPath, parseChecksums, selfReplaceTarget } from '../src/core/update.js';
 
 // 문자열 비교로는 0.2.10 이 0.2.9 보다 낮다고 나오고, 그러면 밀린 상태에서
 // "최신입니다" 를 말하게 된다 — 틀린 답이 조용히 나가는 자리다.
@@ -56,7 +56,7 @@ test('selfReplaceTarget only accepts a compiled single-file binary', () => {
 
 // 바이너리와 플러그인은 따로 낡는다. 이 값을 못 읽으면 플러그인이 0.2.0 인 채로
 // "최신입니다" 가 나간다 — 이 명령이 묶으려던 바로 그 갈래가 조용히 빠진다.
-test('pluginVersionFrom reads the installed entry', () => {
+test('installedPluginFrom reads id, marketplace and version together', () => {
   const raw = JSON.stringify({
     version: 2,
     plugins: {
@@ -64,25 +64,36 @@ test('pluginVersionFrom reads the installed entry', () => {
       'tirno@tirno': [{ scope: 'user', version: '0.2.0', installPath: '/x' }],
     },
   });
-  assert.equal(pluginVersionFrom(raw), '0.2.0');
+  assert.deepEqual(installedPluginFrom(raw), { id: 'tirno@tirno', marketplace: 'tirno', version: '0.2.0' });
+});
+
+// 마켓플레이스 이름은 marketplace.json 이 정하므로 fork 하면 달라진다. 그때도
+// 버전을 읽는 쪽과 갱신을 부르는 쪽이 같은 식별자를 써야 한다.
+test('installedPluginFrom follows a renamed marketplace', () => {
+  const raw = JSON.stringify({ plugins: { 'tirno@my-fork': [{ version: '0.2.1' }] } });
+  assert.deepEqual(installedPluginFrom(raw), { id: 'tirno@my-fork', marketplace: 'my-fork', version: '0.2.1' });
 });
 
 // scope 마다 항목이 하나씩 들어간다. 하나라도 낡았으면 갱신할 것이 있다.
-test('pluginVersionFrom takes the lowest version across scopes', () => {
+test('installedPluginFrom takes the lowest version across scopes', () => {
   const raw = JSON.stringify({
     plugins: { 'tirno@tirno': [{ version: '0.2.2' }, { version: '0.2.0' }] },
   });
-  assert.equal(pluginVersionFrom(raw), '0.2.0');
+  assert.equal(installedPluginFrom(raw)?.version, '0.2.0');
 });
 
-test('pluginVersionFrom returns null when there is nothing usable', () => {
-  assert.equal(pluginVersionFrom('not json'), null);
-  assert.equal(pluginVersionFrom('{}'), null);
-  assert.equal(pluginVersionFrom(JSON.stringify({ plugins: {} })), null);
-  assert.equal(pluginVersionFrom(JSON.stringify({ plugins: { 'tirno@tirno': [] } })), null);
+test('installedPluginFrom returns null when there is nothing usable', () => {
+  assert.equal(installedPluginFrom('not json'), null);
+  assert.equal(installedPluginFrom('{}'), null);
+  assert.equal(installedPluginFrom(JSON.stringify({ plugins: {} })), null);
+  assert.equal(installedPluginFrom(JSON.stringify({ plugins: { 'tirno@tirno': [] } })), null);
   // 커밋 sha 로 설치된 것은 버전 비교가 안 된다 — 없는 것으로 본다.
-  assert.equal(pluginVersionFrom(JSON.stringify({
+  assert.equal(installedPluginFrom(JSON.stringify({
     plugins: { 'tirno@tirno': [{ version: 'cedd013e118f' }] },
+  })), null);
+  // 이름이 접두사로만 겹치는 것은 다른 플러그인이다.
+  assert.equal(installedPluginFrom(JSON.stringify({
+    plugins: { 'tirno-extra@mkt': [{ version: '1.0.0' }] },
   })), null);
 });
 

@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { success, info, warn, error } from '../output/formatter.js';
 import {
-  REPO, assetNameFor, compareVersions, installedPluginsPath, parseChecksums,
-  pluginVersionFrom, replaceBinary, selfReplaceTarget, sha256, type Release,
+  REPO, assetNameFor, compareVersions, installedPluginFrom, installedPluginsPath,
+  parseChecksums, replaceBinary, selfReplaceTarget, sha256,
+  type InstalledPlugin, type Release,
 } from '../core/update.js';
 
 async function latestRelease(): Promise<Release> {
@@ -27,21 +28,25 @@ async function download(url: string): Promise<Buffer> {
  * `claude plugin` 을 부른다. 마켓플레이스를 먼저 당기지 않으면 플러그인 갱신이 옛
  * 매니페스트를 보고 "최신" 이라고 답한다.
  */
-function installedPluginVersion(): string | null {
+function readInstalledPlugin(): InstalledPlugin | null {
   try {
-    return pluginVersionFrom(fs.readFileSync(
+    return installedPluginFrom(fs.readFileSync(
       installedPluginsPath(os.homedir(), process.env.CLAUDE_CONFIG_DIR), 'utf-8'));
   } catch {
     return null;                     // 설치된 적이 없거나 읽을 수 없다
   }
 }
 
-function updateSkills(): 'updated' | 'no-claude' {
+/**
+ * 식별자는 설치 기록에서 온다. `claude plugin` 은 `<플러그인>@<마켓플레이스>` 를
+ * 요구하고 이름만 넘기면 "not found" 로 끝나는데, 그 이름을 여기서 다시 지어내면
+ * 버전을 읽은 곳과 어긋날 수 있다.
+ */
+function updateSkills(plugin: InstalledPlugin): 'updated' | 'no-claude' {
   try {
-    execFileSync('claude', ['plugin', 'marketplace', 'update', 'tirno'], { stdio: 'pipe' });
-    // 마켓플레이스를 밝힌다. 같은 이름의 플러그인이 다른 마켓플레이스에도 있으면
-    // 이름만으로는 어느 것인지 정해지지 않는다.
-    execFileSync('claude', ['plugin', 'update', 'tirno@tirno'], { stdio: 'pipe' });
+    // 마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.
+    execFileSync('claude', ['plugin', 'marketplace', 'update', plugin.marketplace], { stdio: 'pipe' });
+    execFileSync('claude', ['plugin', 'update', plugin.id], { stdio: 'pipe' });
     return 'updated';
   } catch (e) {
     const err = e as NodeJS.ErrnoException;
@@ -50,7 +55,7 @@ function updateSkills(): 'updated' | 'no-claude' {
     // tirno 가 아니라 등록이므로, 무엇을 하라는지까지 말한다.
     throw new Error(
       `claude plugin update failed: ${(e as Error).message}\n` +
-      'If the marketplace is missing: claude plugin marketplace add Rockheung/tirno',
+      `If the marketplace is missing: claude plugin marketplace add ${REPO}`,
       { cause: e });
   }
 }
@@ -70,16 +75,16 @@ export function registerUpdateCommand(program: Command): void {
 
         // 바이너리와 플러그인은 따로 낡는다. 하나로 판정하면 다른 하나가 낡은 채
         // "최신입니다" 가 나가고, 두 갈래를 묶는 것이 이 명령의 존재 이유다.
-        const plugin = installedPluginVersion();
+        const plugin = readInstalledPlugin();
         const binaryBehind = compareVersions(current, latest) < 0;
-        const pluginBehind = plugin !== null && compareVersions(plugin, latest) < 0;
+        const pluginBehind = plugin !== null && compareVersions(plugin.version, latest) < 0;
 
         const state = (v: string | null) =>
           v === null ? 'not installed'
             : compareVersions(v, latest) < 0 ? 'behind'
               : compareVersions(v, latest) > 0 ? 'ahead' : 'up to date';
         console.log(`binary  ${current.padEnd(8)} · latest ${latest} · ${state(current)}`);
-        console.log(`plugin  ${(plugin ?? '-').padEnd(8)} · latest ${latest} · ${state(plugin)}`);
+        console.log(`plugin  ${(plugin?.version ?? '-').padEnd(8)} · latest ${latest} · ${state(plugin?.version ?? null)}${plugin ? ` · ${plugin.id}` : ''}`);
 
         if (opts.check) {
           if (binaryBehind || pluginBehind) info('Run "tirno update" to move both to ' + latest + '.');
@@ -122,12 +127,12 @@ export function registerUpdateCommand(program: Command): void {
           }
         }
 
-        if (!opts.binaryOnly && pluginBehind) {
-          const skills = updateSkills();
+        if (!opts.binaryOnly && pluginBehind && plugin) {
+          const skills = updateSkills(plugin);
           if (skills === 'no-claude') {
             warn('`claude` not on PATH — skills unchanged. Update them with `claude plugin marketplace update tirno && claude plugin update tirno`.');
           } else {
-            success(`Skills ${plugin} → ${latest} (restart Claude Code to apply)`);
+            success(`Skills ${plugin.version} → ${latest} (restart Claude Code to apply)`);
           }
         } else if (!opts.binaryOnly && plugin === null) {
           info('Skill plugin is not installed — `claude plugin marketplace add Rockheung/tirno && claude plugin install tirno@tirno`.');

@@ -209,8 +209,11 @@ npm link 는 `process.execPath` 가 런타임을 가리키므로 대상이 아�
 
 **바이너리와 플러그인은 따로 설치되고 따로 낡으므로 각각 판정한다.** 릴리즈 바이너리를 직접
 받아 쓰다가 `update` 로 갈아타면 바이너리만 최신이고 플러그인은 처음 설치 시점에 멈춰 있다.
-플러그인 설치 버전은 `~/.claude/plugins/installed_plugins.json`(또는 `CLAUDE_CONFIG_DIR`)의
-`tirno@tirno` 항목에서 읽는다.
+플러그인 설치 버전과 **식별자**는 `~/.claude/plugins/installed_plugins.json`(또는
+`CLAUDE_CONFIG_DIR`)에서 함께 읽는다. `claude plugin` 은 `<플러그인>@<마켓플레이스>` 를
+요구하고 이름만 넘기면 "not found" 로 끝나는데, 그 이름을 갱신할 때 다시 지어내면 버전을
+읽은 곳과 어긋날 수 있다 — 마켓플레이스 이름은 `marketplace.json` 이 정하므로 저장소를
+fork 하면 달라진다. 설치된 키가 하나뿐인 출처다.
 
 ```
 $ tirno update --check
