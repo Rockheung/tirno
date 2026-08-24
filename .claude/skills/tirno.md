@@ -59,8 +59,22 @@ tirno new mobile -- --window-size=375,812
 
 ```bash
 tirno new dev --extensions
-tirno cdp --browser Extensions.loadUnpacked '{"path":"/abs/path/to/ext"}'
+tirno cdp --browser Extensions.loadUnpacked '{"path":"/abs/path/to/ext"}'  # id 를 돌려준다
 tirno reload            # content script 는 다음 문서부터
+```
+
+`path` 는 **디렉터리**(manifest.json 이 든 곳)여야 한다. zip 은 먼저 풀고, 압축 안에
+한 겹 더 있으면 그 안쪽을 가리킨다 — `find <풀린곳> -name manifest.json` 으로 확인.
+
+로드됐는지: `tirno cdp --browser Extensions.getExtensions '{}'` (name·version·enabled·id).
+
+**액션(팝업)은 핀 없이 부른다.** `triggerAction` 은 `page` 가 아니라 **tab** 타깃을 받는다:
+
+```bash
+tirno cdp --browser Target.getTargets '{"filter":[{"type":"tab"},{}]}'   # tab id
+tirno cdp --browser Extensions.triggerAction '{"id":"<ext id>","targetId":"<tab id>"}'
+# → 팝업이 chrome-extension://<id>/popup.html page 타깃으로 뜬다
+tirno nav chrome-extension://<id>/popup.html   # 또는 그냥 연다
 ```
 
 **재기동하면 사라진다** — 프로필에 안 남으므로 `restart` 뒤에 다시 로드한다(id 는 같다).
