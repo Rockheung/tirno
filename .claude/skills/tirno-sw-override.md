@@ -213,6 +213,46 @@ tirno restart preview --keep-cookies   # rule 없이 — 여기서부터 진짜 
 빌드를 받는다 — `http://127.0.0.1:PORT` 를 직접 부를 때 따라오는 CORS · mixed content ·
 Private Network Access 가 전부 안 걸린다. 이게 이 부트스트랩 방식의 이점이다.
 
+### 앱 자신의 SW 도 개발 버전으로 (선택)
+
+앱이 **이미 자기 서비스워커를 쓰는 경우**, 그 SW 도 로컬 개발 버전으로 심을 수 있다 —
+sw-proxy 커널과 **공존**한다(다른 scope). 실측으로 확인했다.
+
+**핵심**: SW 스크립트 요청은 다른 SW 의 `fetch` 를 우회하지만(순환 방지, spec) **네트워크는
+우회하지 않는다.** register 하는 그 순간 `/app-sw.js` 가 실제로 나가니, 부트스트랩 중
+(host-resolver 로 로컬 서빙)에 register 하면 로컬 버전이 프로필에 박힌다. 이후 진짜 origin 으로
+돌아가도 SW 는 등록 때 받은 스크립트를 저장해 두므로 재요청 없이 유지된다.
+
+그러니 sw-proxy 를 **못 쓰는** 대상이 아니라, 같은 부트스트랩에 한 줄 더 얹는 것이다:
+
+```bash
+# 굽기: mounts 에 앱 SW 스크립트를 파일 마운트로 추가
+{ "name": "app-sw", "path": "/app-sw.js", "file": "./app/dist/sw.js" }
+
+# 3번 심기 단계에서, 커널과 함께 앱 SW 도 register (로컬 서빙 중)
+tirno eval "Promise.all([
+  navigator.serviceWorker.register('/admin/__tirno-sw.js'),
+  navigator.serviceWorker.register('/app-sw.js', { scope: '/app-scope/' })
+]).then(() => 'both')"
+
+tirno restart preview --keep-cookies   # 진짜 origin — 둘 다 넘어온다
+```
+
+실측 검증(진짜 origin, host-resolver 뗀 뒤):
+
+```
+getRegistrations → [{scope:/, __tirno-sw.js, activated}, {scope:/app-scope/, app-sw.js, activated}]
+앱 SW 에 postMessage → "appsw:LOCAL-DEV"   ← 로컬 개발 버전이 돌고 있다
+```
+
+**scope 는 앱이 쓰는 그대로 맞춘다.** 앱 코드가 특정 scope 로 등록한다면 같은 scope 로 먼저
+등록해 선점하거나, 앱 문서를 로드해 앱이 스스로 등록하게 두되 그 스크립트 요청만 로컬이 받게 한다.
+
+**한계 — update 체크.** 브라우저는 24h·navigation 마다 SW 스크립트를 다시 받아 비교한다. 그때는
+진짜 origin 의 `/app-sw.js`(원본)와 대조되므로, 오래 두면 개발 버전이 원본으로 갈릴 수 있다
+(sw-proxy 커널도 같은 리스크). 짧은 QA 세션엔 문제없고, 길게는 그 URL 을 계속 로컬로 두거나
+update 를 막는다.
+
 ### 4. 확인 · 해제
 
 ```bash
