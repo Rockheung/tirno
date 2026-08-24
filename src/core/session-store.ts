@@ -56,6 +56,11 @@ export interface SessionMetadata {
    * survive a command ending — see cdp/permissions.
    */
   permissions?: Record<string, string[]>;
+  /**
+   * 모든 요청에 붙일 고정 헤더(name → value). connect 마다 재적용한다 —
+   * Network.setExtraHTTPHeaders 는 CDP 연결 수명에 묶여, 명령이 끝나면 사라진다.
+   */
+  extraHeaders?: Record<string, string>;
   group?: string;
   /**
    * Set by `record start`. The recorder itself lives in the page and its buffer

@@ -95,6 +95,9 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'permissions ls':     { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'permissions grant':  { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'permissions revoke': { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'headers set':        { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'headers rm':         { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'headers ls':         { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
 
   // ---- service workers
   'sw status':          { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },

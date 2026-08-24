@@ -215,8 +215,15 @@ undefined 를 밀어 넣으면 그쪽이 더 조용한 오답이 된다. 호출 
 | `permissions grant <origin> <permission...>` | origin 에 권한을 주고 세션에 기록. origin 은 `new URL(x).origin` 으로 정규화되므로 경로·쿼리를 붙여도 된다 |
 | `permissions revoke [origin]` | 한 origin, 또는 인자 없으면 전부 해제 |
 | `permissions ls [--json]` | 이 세션에 기록된 grant 목록 |
+| `headers set <name> <value>` | 모든 요청에 붙일 고정 헤더. 세션에 기록되고 connect 마다 재적용된다 |
+| `headers rm [name]` | 헤더 하나, 인자 없으면 전부 |
+| `headers ls [--json]` | 이 세션의 고정 헤더 |
 
 `perm` 으로 줄여 쓸 수 있다.
+
+`headers` 는 `Network.setExtraHTTPHeaders` 라 **전역**이다 — 특정 호스트만 필터하려면 Fetch
+인터셉트(상주 연결)가 필요해 지금은 지원하지 않는다. 헤더도 CDP 연결 수명에 묶여, permissions
+와 같은 자리에서 connect 마다 재적용된다.
 
 CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.** tirno 는 명령마다 붙었다
 끊으므로, `cdp Browser.grantPermissions` 로 직접 준 권한은 그 명령이 끝나는 순간 `prompt`

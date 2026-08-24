@@ -19,6 +19,7 @@ async function realProgram(): Promise<Command> {
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
+    ['headers', 'registerHeaderCommands'],
     ['sw', 'registerSwCommands'],
     ['perf', 'registerPerfCommands'],
     ['multi', 'registerMultiCommands'], ['cache', 'registerCacheCommands'],
