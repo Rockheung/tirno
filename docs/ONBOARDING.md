@@ -34,19 +34,36 @@ Node 22+ 가 필요하다.
 ## 설치 — 받아서 바로
 
 ```bash
-curl -fsSL https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64 -o tirno
-chmod +x tirno && sudo mv tirno /usr/local/bin/
+mkdir -p ~/.local/bin
+curl -fsSL https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64 -o ~/.local/bin/tirno
+chmod +x ~/.local/bin/tirno
 tirno --version
 ```
+
+`tirno: command not found` 면 `~/.local/bin` 이 `PATH` 에 없는 것이다:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"     # 셸 설정에도 넣어둔다
+```
+
+**sudo 를 쓰는 자리가 없다.** 도구는 `~/.local/bin`, 브라우저는 `tirno setup` 이 받아
+`~/.tirno/chrome/` 에 둔다. 시스템 경로가 편하면 `sudo mv ~/.local/bin/tirno /usr/local/bin/`
+로 옮기면 되지만, 그것은 선택이지 전제가 아니다 — 자동 탐색이 실패했을 때 사용자가
+시스템 경로에 손대는 쪽으로 몰리던 것이 고치려던 문제였다(#139).
 
 타깃 넷 — `darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64`.
 자기 것으로 파일명만 바꾼다. **Windows 는 대상이 아니다**(소유권 판정이 `lsof`·`ps` 를 읽는다).
 
-검증하려면:
+검증까지 하려면 **받고 → 확인하고 → 설치**한다. 순서가 반대면 확인이 늦고, 설치한 것을
+다시 그 이름으로 복사해 두는 군더더기가 생긴다:
 
 ```bash
+curl -fsSLO https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64
 curl -fsSLO https://github.com/Rockheung/tirno/releases/latest/download/SHA256SUMS
-shasum -a 256 -c SHA256SUMS 2>/dev/null | grep darwin-arm64     # → OK
+shasum -a 256 -c SHA256SUMS 2>/dev/null | grep darwin-arm64     # → OK  (리눅스는 sha256sum)
+
+mkdir -p ~/.local/bin
+mv tirno-bun-darwin-arm64 ~/.local/bin/tirno && chmod +x ~/.local/bin/tirno
 ```
 
 여기까지가 끝이다. **아래는 도구를 고칠 사람만** 본다.

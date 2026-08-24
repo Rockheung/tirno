@@ -13,8 +13,8 @@
 
 ```bash
 # 받아서 바로 — Node 없이 돈다 (macOS arm64; 다른 타깃은 릴리즈 페이지에)
-curl -fsSL https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64 -o tirno
-chmod +x tirno && sudo mv tirno /usr/local/bin/
+mkdir -p ~/.local/bin && curl -fsSL https://github.com/Rockheung/tirno/releases/latest/download/tirno-bun-darwin-arm64 -o ~/.local/bin/tirno
+chmod +x ~/.local/bin/tirno       # PATH 에 없으면: export PATH="$HOME/.local/bin:$PATH"
 
 tirno new demo https://example.com --headless   # 세션 하나 — 0.6초
 tirno snapshot                                  # a11y 트리를 @ref 로
@@ -28,6 +28,10 @@ tirno kill demo --clean
 **linux-arm64 에는 Google Chrome 이 아예 없다** — 구글이 amd64 만 배포한다. 그 플랫폼에서는
 Playwright 가 빌드한 chromium 을 받아온다.
 바이너리에 런타임이 들어 있어 Node 를 안 깔아도 된다.
+
+**sudo 를 쓰는 자리가 없다** — 도구도 `~/.local/bin`, 브라우저도 `~/.tirno/chrome/` 이다.
+시스템 경로에 넣고 싶으면 `sudo mv ~/.local/bin/tirno /usr/local/bin/` 로 옮기면 되지만,
+그것은 선택이지 전제가 아니다.
 
 바이너리는 넷이다 — `darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64`.
 **Windows 는 대상이 아니다**: 소유권 판정이 `lsof` 와 `ps` 를 읽는다.
