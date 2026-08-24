@@ -19,6 +19,41 @@
 | `rename <old> <new>` | 이름 변경 |
 | `export <name>` | 메타데이터 출력 |
 
+#### 어느 Chrome 을 쓰나
+
+| 명령 | 설명 |
+|---|---|
+| `chrome` | 고를 바이너리와 **후보 전체를 순서대로** 출력. 못 찾으면 exit 1 |
+| `chrome set <path>` | 그 경로를 `~/.tirno/config.json` 에 적어둔다 — 이후 세션은 `--executable-path` 가 필요 없다 |
+| `chrome rm` | 적어둔 것을 지운다 |
+
+순서는 **구체적인 것이 이긴다**:
+
+```
+--executable-path  →  $TIRNO_CHROME  →  $CHROME_PATH  →  $PUPPETEER_EXECUTABLE_PATH
+                   →  ~/.tirno/config.json  →  고정 경로 탐색
+```
+
+명시적으로 가리킨 경로(플래그·env·설정)가 틀렸으면 **다음 후보로 넘어가지 않고 실패한다.**
+조용히 다른 chrome 으로 넘어가면, 지정한 바이너리가 돌고 있다고 믿은 채 다른 것을 관측하게 된다.
+
+탐색 목록(linux)에는 배포판 `chromium`, snap, 그리고 playwright·puppeteer 캐시가 들어 있다:
+
+```
+/usr/bin/google-chrome · google-chrome-stable · chromium · chromium-browser
+/snap/bin/chromium · /usr/lib/chromium/chromium
+~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome
+~/.cache/puppeteer/chrome/*/chrome-linux*/chrome
+```
+
+**linux-arm64 에는 Google Chrome 이 아예 없다** — 구글은 리눅스용을 amd64 로만 배포한다.
+릴리즈에 `tirno-bun-linux-arm64` 가 있으므로 이쪽이 실사용 경로다:
+
+```bash
+npx playwright install chromium     # arm64 빌드를 받는다
+tirno chrome                        # 캐시 경로가 ok 로 잡히는지 확인
+```
+
 #### 소유권 (`ls` 의 OWNER)
 
 세션 메타는 기동 시점의 주장이지 현재 사실이 아니다 — pid 는 재사용되고 포트는 다른
@@ -407,6 +442,7 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 | `~/.tirno/metrics.jsonl` | `stats` 가 읽는 이벤트 로그 |
 | `~/.tirno/tmp/` | 스크린샷 기본 출력 위치 |
 | `~/.tirno/active` | 현재 active 세션 |
+| `~/.tirno/config.json` | `chrome set` 이 적어둔 Chrome 실행 파일 경로 |
 
 `~/.tirno/models/` 가 있다면 지워도 된다 — 삭제된 OCR 백엔드가 받아둔 것으로, 지금 코드는
 참조하지 않는다(수백 MB 를 차지한다).
@@ -416,6 +452,8 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 | 이름 | 기본값 | 용도 |
 |---|---|---|
 | `TIRNO_DIR` | `~/.tirno` | 데이터 루트 전체 |
+| `TIRNO_CHROME` | (없음) | Chrome 실행 파일. 설정 파일보다 우선 |
+| `CHROME_PATH` · `PUPPETEER_EXECUTABLE_PATH` | (없음) | 같은 용도. `TIRNO_CHROME` 다음 순서로 본다 |
 | `TIRNO_CACHE_DIR` | `<루트>/visual-cache` | visual cache |
 | `TIRNO_RECORDINGS_DIR` | `<루트>/recordings` | 기록 |
 | `TIRNO_TRAILS_DIR` | `<루트>/trails` | 시연 |
