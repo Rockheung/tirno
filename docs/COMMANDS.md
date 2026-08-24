@@ -19,6 +19,43 @@
 | `rename <old> <new>` | 이름 변경 |
 | `export <name>` | 메타데이터 출력 |
 
+#### 샌드박스 — Ubuntu 23.10+ 에서 기동이 안 될 때
+
+Ubuntu 23.10 부터 `kernel.apparmor_restrict_unprivileged_userns=1` 이라 chromium 이
+자기 샌드박스를 못 띄운다:
+
+```
+✗ Failed to launch the browser process:
+[...] FATAL: No usable sandbox! ... you can try using --no-sandbox.
+```
+
+chromium stderr 는 그대로 통과시킨다 — 원인과 해법을 정확히 짚어주기 때문이다. 다만
+그 플래그를 tirno 에 넘기는 방법은 tirno 가 알려준다. 실패 메시지 끝에 **실행한 명령줄
+그대로에 플래그만 얹은 한 줄**이 붙으므로 복붙하면 된다:
+
+```
+→ tirno new smoke https://example.com --headless --ephemeral -- --no-sandbox
+```
+
+**`--no-sandbox` 는 우회지 해법이 아니다.** 샌드박스를 켠 채로 돌리려면 그 바이너리에만
+`userns` 를 허용하는 AppArmor 프로파일을 준다:
+
+```
+# /etc/apparmor.d/tirno-chromium
+abi <abi/4.0>,
+include <tunables/global>
+profile tirno-chromium /path/to/chrome flags=(unconfined) {
+  userns,
+}
+```
+
+```bash
+sudo apparmor_parser -r /etc/apparmor.d/tirno-chromium
+tirno new smoke https://example.com --headless      # 이제 -- --no-sandbox 없이 뜬다
+```
+
+경로는 `tirno chrome` 이 출력하는 실제 바이너리여야 한다 — 심링크가 아니라 그 끝이다.
+
 #### 어느 Chrome 을 쓰나
 
 | 명령 | 설명 |
