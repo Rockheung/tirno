@@ -28,7 +28,7 @@ const program = new Command();
 program
   .name('tirno')
   .description('Multi-session browser automation CLI on raw CDP')
-  .version('0.2.6');
+  .version('0.2.7');
 
 registerSessionCommands(program);
 registerAnchorCommands(program);
