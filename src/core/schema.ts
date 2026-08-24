@@ -183,7 +183,12 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
  * not tirno's, so no schema can enumerate them — but a caller has to know the
  * door exists.
  */
-const PASSTHROUGH = new Set(['new', 'restart', 'drift']);
+/**
+ * `-- <chrome-flags>` 를 받는 명령. 목록을 따로 들지 않고 **usage line 에서 읽는다** —
+ * 하나를 고치고 다른 하나를 잊는 자리를 없앤다. `--help` 에는 있는데 schema 에는 없던
+ * 상태(그 반대도)가 #134 의 절반이었다.
+ */
+const PASSTHROUGH_MARKER = '-- <chrome-flags>';
 
 /** Exit codes are uniform: every command exits 1 on failure. */
 const ERRORS = [
@@ -230,7 +235,7 @@ function walk(cmd: Command, prefix: string, out: SchemaCommand[]): void {
       summary: cmd.description() || '',
       args: argsOf(cmd),
       options: optionsOf(cmd),
-      ...(PASSTHROUGH.has(path) ? { passthrough: true as const } : {}),
+      ...(cmd.usage().includes(PASSTHROUGH_MARKER) ? { passthrough: true as const } : {}),
       ...(sem ?? { effects: 'non_idempotent' as const, output_kind: 'opaque' as const }),
     });
   }

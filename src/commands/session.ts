@@ -17,6 +17,19 @@ import os from 'node:os';
 
 const NEW_DEFAULT_DESC = 'Create a new Chrome session';
 
+/**
+ * 옵션 목록 어디에도 "임의 chrome flag" 얘기가 없어서, chromium 이 stderr 로 권한
+ * `--no-sandbox` 를 어떻게 넘기는지 알아내려면 GitHub 에서 docs/COMMANDS.md 를
+ * 열어야 했다 (#134). `--help` 만 보는 사람이 거기서 멈추지 않게 한다.
+ */
+const CHROME_FLAGS_HELP = `
+Chrome flags:
+  Everything after \`--\` goes to chrome verbatim.
+    tirno new work https://example.com --headless -- --no-sandbox --proxy-server=…
+  Ubuntu 23.10+ blocks chromium's own sandbox (unprivileged userns);
+  \`-- --no-sandbox\` is the quick way past it, an AppArmor profile is the real one.
+`;
+
 function summarizeFlags(flags: string[]): string {
   // user flags only — strip the ones tirno injects
   const builtins = new Set([
@@ -82,6 +95,10 @@ export function registerSessionCommands(program: Command): void {
   const newCmd = program
     .command('new')
     .description(NEW_DEFAULT_DESC)
+    // `--` 뒤가 chrome 으로 그대로 간다는 사실이 usage line 에만 없어서, --help 만
+    // 보는 사람(과 에이전트)은 chromium 이 권하는 --no-sandbox 를 넘길 방법을
+    // 찾지 못하고 멈췄다 (#134). schema 의 passthrough 도 이 문자열에서 나온다.
+    .usage('[options] <name> [url] [-- <chrome-flags>]')
     .argument('<name>', 'Session name')
     .argument('[url]', 'Optional URL — chrome opens directly, skipping about:blank')
     .option('-p, --port <port>', 'Pin a fixed DevTools port. Omit to let the OS assign one — required for browser-MCP anchoring', intArg)
@@ -96,6 +113,7 @@ export function registerSessionCommands(program: Command): void {
   // Chrome flags come after "--": tirno new test -- --no-proxy-server
   newCmd.allowUnknownOption(true);
   newCmd.allowExcessArguments(true);
+  newCmd.addHelpText('after', CHROME_FLAGS_HELP);
 
   newCmd.action(async (name: string, urlArg: string | undefined, opts) => {
     try {
@@ -171,6 +189,7 @@ export function registerSessionCommands(program: Command): void {
   program
     .command('restart')
     .description('Kill existing session (if any) and re-create with new chrome flags')
+    .usage('[options] <name> [url] [-- <chrome-flags>]')
     .argument('<name>', 'Session name')
     .argument('[url]', 'Optional URL — chrome opens directly, skipping about:blank')
     .option('-p, --port <port>', 'Pin a fixed DevTools port (omit to let the OS assign one)', intArg)
@@ -183,6 +202,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
     .allowUnknownOption(true)
     .allowExcessArguments(true)
+    .addHelpText('after', CHROME_FLAGS_HELP)
     .action(async (name: string, urlArg: string | undefined, opts) => {
       const rawArgs = process.argv;
       const dashDashIdx = rawArgs.indexOf('--');
@@ -467,10 +487,12 @@ export function registerSessionCommands(program: Command): void {
   const driftCmd = program
     .command('drift')
     .description('Compare chrome flags against the running process; pass "-- <flags>" to check what you want now instead of what was declared. Exits non-zero when they differ')
+    .usage('[options] [name] [-- <chrome-flags>]')
     .argument('[name]', 'Session name (default: active session)')
     .option('--all', 'Also print the full running command line')
     .allowUnknownOption(true)
-    .allowExcessArguments(true);
+    .allowExcessArguments(true)
+    .addHelpText('after', CHROME_FLAGS_HELP);
 
   driftCmd.action(async (name: string | undefined, opts) => {
     try {

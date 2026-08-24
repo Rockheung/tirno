@@ -6,6 +6,7 @@ import { profileDir } from './session-store.js';
 import { allocate } from './port-allocator.js';
 import { waitForActivePort, clearActivePort } from './devtools-port.js';
 import { resolveChrome } from './chrome-finder.js';
+import { sandboxHint } from './launch-hint.js';
 
 function portFromWsEndpoint(wsEndpoint: string): number | null {
   try {
@@ -67,6 +68,24 @@ function seedProfilePrefs(userDataDir: string): void {
   }
 }
 
+/**
+ * puppeteer 의 기동 실패는 chromium stderr 를 그대로 싣고 오는데, 거기 적힌 조언
+ * (`--no-sandbox` 를 써봐라)을 tirno 문법으로 옮기는 일은 사용자 몫이었다.
+ * 그 번역만 얹어서 다시 던진다 — 원문은 건드리지 않는다.
+ */
+async function launchOrExplain(
+  options: Parameters<typeof puppeteer.launch>[0],
+): Promise<Awaited<ReturnType<typeof puppeteer.launch>>> {
+  try {
+    return await puppeteer.launch(options);
+  } catch (e) {
+    const err = e as Error;
+    const hint = sandboxHint(err.message, process.argv);
+    if (hint) err.message = `${err.message}${hint}`;
+    throw err;
+  }
+}
+
 export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata> {
   // Default to `--remote-debugging-port=0`: the OS picks a free port and chrome
   // records it in DevToolsActivePort. That removes the port-collision class
@@ -110,7 +129,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   // signal handlers by option, the exit listener by hand below.
   const exitListenersBefore = new Set(process.listeners('exit'));
 
-  const browser = await puppeteer.launch({
+  const browser = await launchOrExplain({
     executablePath,
     headless: opts.headless ?? false,
     userDataDir,
