@@ -116,18 +116,24 @@ function lsTree(dir, prefix = '') {
 }
 
 // 메타 보존 검사에는 실존하는 chrome 경로가 필요하다. 못 찾으면 그 검사만 건너뛴다.
+/**
+ * 스모크가 쓸 chrome 경로. **tirno 자신에게 묻는다** — 여기에 탐색 목록을 한 벌 더
+ * 두면 그쪽만 낡는다(실제로 그랬다: 이 목록에는 playwright 캐시도 /snap/bin 도 없어서
+ * linux-arm64 에서 성립하는 경로가 0개였다, #133).
+ */
 function resolveChrome() {
   if (process.env.CHROME) return process.env.CHROME;
-  const mac = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  if (fs.existsSync(mac)) return mac;
-  for (const name of ['google-chrome', 'google-chrome-stable', 'chromium-browser', 'chromium']) {
-    try {
-      const p = execFileSync('which', [name], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-      if (p) return p;
-    } catch { /* next */ }
+  try {
+    const out = execFileSync('node', [TIRNO, 'chrome', '--json'], {
+      env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return JSON.parse(out).resolved?.path ?? null;
+  } catch {
+    return null;
   }
-  return null;
 }
+
+const CHROME_BIN = resolveChrome();
 
 const homeBefore = new Set(lsTree(HOME_TIRNO));
 const wallT0 = Date.now();
@@ -223,7 +229,18 @@ function main() {
   const snap = run('snapshot', ['snapshot', ...S]);
   // a11y 트리에 픽스처의 버튼이 보여야 스냅샷이 "내용을 본" 것이다.
   check('snapshot 에 버튼이 보인다', snap.out.includes('click me'), snap.out.slice(0, 80));
-  run('snapshot --verbose', ['snapshot', '--verbose', ...S]);
+  const snapVerbose = run('snapshot --verbose', ['snapshot', '--verbose', ...S]);
+  // 기본 출력은 InlineTextBox 복창과 빈 컨테이너를 접는다 — --verbose 보다 짧아야 하고,
+  // 접었다는 사실을 말해야 한다. "이 페이지에 이것뿐" 과 구별되지 않으면 안 된다.
+  check('snapshot 기본이 --verbose 보다 짧다',
+    snap.out.split('\n').length < snapVerbose.out.split('\n').length,
+    `실측: 기본 ${snap.out.split('\n').length}줄 / verbose ${snapVerbose.out.split('\n').length}줄`);
+  check('snapshot 이 접은 줄 수를 밝힌다', /line\(s\) folded/.test(snap.out), snap.out.split('\n').at(-2) ?? '');
+  // 끝줄의 접힘 요약에는 그 단어가 들어간다 — 트리 줄만 본다.
+  const snapTree = snap.out.split('\n').filter(l => !l.startsWith('\u001b') && !l.includes('folded'));
+  check('접힌 트리에 InlineTextBox 가 없다', !snapTree.join('\n').includes('InlineTextBox'),
+    snapTree.find(l => l.includes('InlineTextBox')) ?? '');
+  check('--verbose 에는 InlineTextBox 가 있다', snapVerbose.out.includes('InlineTextBox'));
   run('console', ['console', ...S]);
   // --reload 는 페이지 로드 시점의 로그를 다시 잡는 게 존재 이유다.
   run('console --reload', ['console', '--reload', ...S], { expectMatch: /smoke page loaded/ });
@@ -236,12 +253,52 @@ function main() {
     Array.isArray(netRows) && netRows.some(r => String(r.url).endsWith('smoke-page.html') && r.status === 200),
     net.out.slice(0, 80));
 
+  // net 은 reload 없이 **이미 받아둔 것**을 본다 — 그래서 여기서 증명할 것은 목록이
+  // 나온다가 아니라 **바이트가 나온다** 이다. 픽스처의 dot.png 는 70바이트 PNG 다.
+  const netLs = run('net ls --json', ['net', 'ls', '--json', ...S]);
+  let resources = null;
+  try { resources = JSON.parse(netLs.out); } catch { /* ignore */ }
+  check('net ls 가 페이지의 이미지를 잡는다',
+    Array.isArray(resources) && resources.some(r => String(r.url).endsWith('dot.png') && r.type === 'Image'),
+    netLs.out.slice(0, 80));
+  run('net ls --type --filter', ['net', 'ls', '--type', 'image', '--filter', '*.png', ...S]);
+  const NETOUT = `${OUT}/net`;
+  run('net save', ['net', 'save', '*.png', '--out', NETOUT, ...S], { expectMatch: /1 file\(s\)/ });
+  const savedDot = path.join(NETOUT, 'dot.png');
+  const dotBytes = fs.existsSync(savedDot) ? fs.readFileSync(savedDot) : Buffer.alloc(0);
+  // PNG 시그니처까지 본다 — 파일이 생겼다와 그 파일이 그 응답이다는 다르다.
+  check('net save 가 실제 응답 바이트를 썼다',
+    dotBytes.length === 70 && dotBytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a',
+    `실측: ${dotBytes.length}B ${dotBytes.subarray(0, 8).toString('hex')}`);
+  run('net save (매치 없음 → exit≠0)', ['net', 'save', 'zzz-no-such', '--out', `${OUT}/net-none`, ...S],
+    { expectFail: true });
+  check('매치가 없으면 디렉터리도 안 만든다', !fs.existsSync(`${OUT}/net-none`));
+  run('net save (--limit 초과 → exit≠0)', ['net', 'save', '--out', `${OUT}/net-limit`, '--limit', '0', ...S],
+    { expectFail: true });
+
   // ── 입력
   run('eval', ['eval', 'document.title', ...S]);
   // 이 인자는 공백·따옴표·괄호·유니코드를 전부 품는다 — 셸을 태우면 반드시 깨진다.
   run('eval (공백·따옴표·괄호·유니코드 인자)',
     ['eval', "['가','b c'].join(' + ') + ' (ok)'", ...S],
     { expectMatch: /가 \+ b c \(ok\)/ });
+
+  // 여러 줄 JS 를 인자로 넘기는 것이 #137 의 통증이었다. 이 파일에는 셸 지뢰가 전부
+  // 들어 있다 — 따옴표 두 종류, `$`, 백틱, 줄바꿈. 인자로 넣으면 반드시 깨진다.
+  const JSFILE = path.join(OUT, 'collect.js');
+  fs.writeFileSync(JSFILE, [
+    '(() => {',
+    '  const t = document.title;',
+    '  const note = `${t} — "quoted" \'single\' $HOME`;',
+    '  return { t, note };',
+    '})()',
+  ].join('\n'));
+  run('eval --file', ['eval', '--file', JSFILE, ...S], { expectMatch: /\$HOME/ });
+  run('eval --file (없는 파일 → exit≠0)', ['eval', '--file', `${OUT}/no-such.js`, ...S], { expectFail: true });
+  // stdin 은 /dev/null 이라 비어 있다. 그대로 페이지에 밀어 넣으면 undefined 가 나오고,
+  // 그것은 "빈 입력을 줬다" 가 아니라 "결과가 undefined 다" 로 읽힌다.
+  run('eval (인자도 --file 도 없음 → exit≠0)', ['eval', ...S], { expectFail: true });
+  run('eval (인자 + --file 동시 → exit≠0)', ['eval', '1', '--file', JSFILE, ...S], { expectFail: true });
   run('click (selector)', ['click', '#btn', ...S]);
   check('click 이 페이지 상태를 바꿨다', q("document.getElementById('status').textContent") === 'clicked');
   run('click (coords)', ['click', '100,100', ...S]);
@@ -360,6 +417,30 @@ function main() {
       && schemaJson.commands.every(c => c.effects),
     schema.out.slice(0, 80));
   run('schema --pretty', ['schema', '--pretty']);
+  // 별칭은 사람이 실제로 치는 이름이다 — 기계가 읽는 표면에도 있어야 한다.
+  check('schema 가 별칭을 싣는다',
+    schemaJson?.commands?.some(c => c.name === 'permissions ls' && (c.aliases ?? []).includes('perm ls')),
+    JSON.stringify(schemaJson?.commands?.find(c => c.name === 'permissions ls')?.aliases ?? null));
+
+  // ── chrome — 어느 바이너리를 쓰는지, 그리고 그 답을 적어둘 수 있는지.
+  const chromeShow = run('chrome', ['chrome']);
+  check('chrome 이 고른 바이너리와 후보 표를 낸다',
+    /SOURCE/.test(chromeShow.out) && /\$TIRNO_CHROME/.test(chromeShow.out),
+    chromeShow.out.split('\n')[0] ?? '');
+  if (CHROME_BIN) run('chrome set', ['chrome', 'set', CHROME_BIN], { expectMatch: /chrome = / });
+  const cfgPath = path.join(ROOT, 'config.json');
+  let cfg = null;
+  try { cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch { /* ignore */ }
+  // 적어둔 다음에는 --executable-path 없이도 그 바이너리로 뜬다 — 그게 이 명령의 존재 이유다.
+  if (CHROME_BIN) check('chrome set 이 설정에 남는다', cfg?.chromePath === CHROME_BIN, `실측: ${cfg?.chromePath ?? '(없음)'}`);
+  if (CHROME_BIN) {
+    const chromeAfterSet = run('chrome (설정 반영)', ['chrome']);
+    check('설정한 경로가 판정 결과가 된다', chromeAfterSet.out.includes(CHROME_BIN),
+      chromeAfterSet.out.split('\n')[0] ?? '');
+  }
+  run('chrome set (실행파일 아님 → exit≠0)', ['chrome', 'set', `${OUT}/not-a-binary`], { expectFail: true });
+  run('chrome rm', ['chrome', 'rm']);
+  run('chrome rm (두 번째는 조용히)', ['chrome', 'rm'], { expectMatch: /Nothing was configured/ });
 
   // ── cdp
   run('cdp', ['cdp', 'Runtime.evaluate', '{"expression":"1+1","returnByValue":true}', ...S]);
@@ -529,7 +610,6 @@ function main() {
   run('kill --clean', ['kill', 'smoke-renamed', '--clean']);
 
   // ── 레거시 고정 포트 + 메타 보존 — restart 가 launch 옵션을 물려받는지가 요점이다.
-  const CHROME_BIN = resolveChrome();
   if (CHROME_BIN) {
     run('new --port --executable-path --group', ['new', 'smokefixed', '--ephemeral', '--port', '9411',
       '--headless', '--executable-path', CHROME_BIN, '--group', 'smokegrp',

@@ -19,6 +19,7 @@ async function realProgram(): Promise<Command> {
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
+    ['net', 'registerNetCommands'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
     ['headers', 'registerHeaderCommands'],
     ['sw', 'registerSwCommands'],
@@ -116,7 +117,9 @@ test('args and options carry through from commander', async () => {
 // that do not exist (`trail start`, `trace stop --out <p>`). Nothing checks
 // prose, so the only way these stay true is to compare them against the schema.
 test('every "tirno <cmd>" in a message names a real command', async () => {
-  const names = new Set(buildSchema(await realProgram()).commands.map(c => c.name));
+  // 별칭도 진짜 이름이다 — `tirno net ls` 는 사람이 실제로 치는 형태다.
+  const names = new Set(buildSchema(await realProgram()).commands
+    .flatMap(c => [c.name, ...(c.aliases ?? [])]));
   const srcDir = path.join(import.meta.dirname, '..', '..', 'src');
 
   const files: string[] = [];
