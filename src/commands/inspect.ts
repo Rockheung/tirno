@@ -6,6 +6,7 @@ import { writeScreenshot } from '../output/image-writer.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 import { captureRequests, type CapturedRequest } from '../cdp/network-capture.js';
 import * as refStore from '../core/ref-store.js';
+import type { RefStore } from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
@@ -72,6 +73,13 @@ export function registerInspectCommands(program: Command): void {
 
         const tree = await cdp.send('Accessibility.getFullAXTree') as { nodes: AXNode[] };
 
+        // 이 스냅샷이 어느 문서의 것인지. loaderId 는 문서가 다시 로드되면 바뀌므로,
+        // 나중에 nav/reload 를 지난 ref 를 구별하는 근거가 된다.
+        const pageUrl = page.url();
+        const loaderId = await cdp.send('Page.getFrameTree')
+          .then(t => (t as unknown as { frameTree: { frame: { loaderId?: string } } }).frameTree.frame.loaderId ?? '')
+          .catch(() => '');
+
         if (!tree.nodes.length) {
           await cdp.detach();
           browser.disconnect();
@@ -133,10 +141,21 @@ export function registerInspectCommands(program: Command): void {
         await cdp.detach();
         browser.disconnect();
 
-        // flat refs for ref-store (backward compatible — a11y only)
-        const flatRefs: refStore.RefMap = {};
-        for (const [k, v] of Object.entries(detailed)) flatRefs[k] = v.backendId;
-        refStore.save(meta.name, flatRefs);
+        // ref 는 번호만으로는 부족하다. 무엇이었는지(role·name)와 어느 문서였는지
+        // (loaderId)를 같이 적어야, 나중에 "아직 그때 그것이 맞나" 를 물을 수 있다 (#138).
+        const previous = refStore.load(meta.name);
+        const storedRefs: RefStore['refs'] = {};
+        for (const [k, v] of Object.entries(detailed)) {
+          storedRefs[k] = { backendId: v.backendId, role: v.role, name: v.name };
+        }
+        refStore.save(meta.name, {
+          schemaVersion: refStore.STORE_SCHEMA_VERSION,
+          generation: previous.generation + 1,
+          url: pageUrl,
+          loaderId,
+          capturedAt: new Date().toISOString(),
+          refs: storedRefs,
+        });
 
         if (cachePayload) {
           try { visualCache.save(cachePayload); } catch { /* non-fatal */ }
@@ -146,6 +165,10 @@ export function registerInspectCommands(program: Command): void {
 
         // 접었다는 사실은 말해준다 — 안 그러면 "이 페이지에 이것뿐" 과 구별되지 않고,
         // --verbose 가 있다는 것도 알 길이 없다.
+        // 이 번호들이 어느 세대의 것인지 말한다. @ref 는 한 스냅샷 안에서만 안전한데,
+        // 그 경계가 사용자에게 안 보이는 것이 문제의 절반이었다 (#138).
+        info(`generation ${previous.generation + 1} — these refs describe this snapshot only. "tirno click @v${previous.generation + 1}:N" pins it.`);
+
         const foldedTotal = folded.inlineTextBox + folded.bareGeneric;
         if (foldedTotal > 0) {
           info(`${foldedTotal} line(s) folded — ${folded.inlineTextBox} InlineTextBox (same text as its StaticText), ${folded.bareGeneric} bare container(s). --verbose shows the full tree.`);

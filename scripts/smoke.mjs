@@ -349,6 +349,22 @@ function main() {
   // 않아, 검사가 hover 를 안 해도 통과하거나(옛 값) 해도 실패한다.
   execFileSync('node', [TIRNO, 'hover', '#text', ...S], { env, stdio: 'ignore' });
   q("document.getElementById('status').textContent = ''");
+  // @ref 는 한 스냅샷 안에서만 안전하다. 그 경계를 도구가 지키는지 본다 (#138).
+  const snapGen = run('snapshot (세대 확인)', ['snapshot', ...S]);
+  const gen = Number((/generation (\d+)/.exec(snapGen.out) ?? [])[1]);
+  check('snapshot 이 세대를 밝힌다', Number.isFinite(gen) && gen > 0, `실측: ${gen}`);
+  const btnRef = (/@(\d+)[^\n]*button "click me"/.exec(snapGen.out) ?? [])[1];
+  run('click @vG:N (맞는 세대)', ['click', `@v${gen}:${btnRef}`, ...S], { expectMatch: /Clicked/ });
+  run('click @vG:N (틀린 세대 → exit≠0)', ['click', `@v${gen + 99}:${btnRef}`, ...S], { expectFail: true });
+  // 같은 문서 안에서 DOM 만 갈아치운다 — loaderId 는 안 바뀌므로 요소 identity 로만 잡힌다.
+  run('eval (DOM 교체)', ['eval', `document.querySelector('form').innerHTML = '<button id=x type=button>other</button>'`, ...S]);
+  const stale = run('click @N (교체된 DOM → exit≠0)', ['click', `@${btnRef}`, ...S], { expectFail: true });
+  check('거부 메시지가 무엇이 무엇으로 바뀌었는지 말한다',
+    /was button "click me"/.test(stale.out + stale.err), (stale.out + stale.err).slice(0, 110));
+  run('click --stale-ok (알고도 진행)', ['click', `@${btnRef}`, '--stale-ok', ...S], { expectMatch: /Clicked/ });
+  run('reload (세대 무효화)', ['reload', ...S]);
+  run('snapshot (새 세대)', ['snapshot', ...S]);
+
   const snapForHover = run('snapshot (hover @ref 용)', ['snapshot', ...S]);
   const linkRef = (/@(\d+)[^\n]*link/.exec(snapForHover.out) ?? [])[1];
   run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });

@@ -6,6 +6,7 @@ import { success, error } from '../output/formatter.js';
 import { clickByRef, fillByRef, hoverByRef } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
+import { checkRef } from '../cdp/ref-guard.js';
 import type { Page } from 'puppeteer-core';
 
 /**
@@ -41,6 +42,7 @@ export function registerInputCommands(program: Command): void {
     .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
     .option('-s, --session <name>', 'Session name')
     .option('--dbl', 'Double click')
+    .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .action(async (target: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -69,7 +71,7 @@ export function registerInputCommands(program: Command): void {
         }
 
         if (refStore.isRef(target)) {
-          const backendId = refStore.resolveRef(meta.name, target);
+          const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
           await clickByRef(page, backendId, opts.dbl);
         } else if (opts.dbl) {
           await page.click(target, { count: 2 });
@@ -93,6 +95,7 @@ export function registerInputCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},...]')
     .option('--value-stdin', 'Read the value from stdin instead of the argument, e.g. `pbpaste | tirno fill \'input[type=password]\' --value-stdin`. The value is never printed.')
+    .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .action(async (target: string | undefined, value: string | undefined, opts) => {
       try {
         // 값이 인자로 오면 `ps` 와 셸 히스토리에 남는다. 비밀번호를 넣는 흔한 자리라
@@ -122,7 +125,7 @@ export function registerInputCommands(program: Command): void {
               throw new Error(`--batch entries need {target, value}`);
             }
             if (refStore.isRef(entry.target)) {
-              const backendId = refStore.resolveRef(meta.name, entry.target);
+              const backendId = await refToBackendId(page, meta.name, entry.target, !!opts.staleOk);
               await fillByRef(page, backendId, entry.value);
             } else {
               await page.click(entry.target, { count: 3 });
@@ -139,7 +142,7 @@ export function registerInputCommands(program: Command): void {
         }
 
         if (refStore.isRef(target)) {
-          const backendId = refStore.resolveRef(meta.name, target);
+          const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
           await fillByRef(page, backendId, value);
         } else {
           // triple-click to select all, then type to replace
@@ -240,13 +243,14 @@ export function registerInputCommands(program: Command): void {
     .description('Hover over an element (CSS selector or @ref)')
     .argument('<target>', 'CSS selector or @ref from snapshot')
     .option('-s, --session <name>', 'Session name')
+    .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .action(async (target: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
         if (refStore.isRef(target)) {
-          await hoverByRef(page, refStore.resolveRef(meta.name, target));
+          await hoverByRef(page, await refToBackendId(page, meta.name, target, !!opts.staleOk));
         } else {
           await page.hover(target);
         }
@@ -447,4 +451,33 @@ export function registerInputCommands(program: Command): void {
         process.exit(1);
       }
     });
+}
+
+
+/**
+ * `@N` 을 backendNodeId 로 바꾸되, **그것이 아직 그때 그 요소인지 확인하고** 바꾼다.
+ *
+ * 예전에는 확인이 없었다. 그래서 스냅샷 뒤 페이지가 바뀌면 옛 ref 가 조용히 다른 요소를
+ * 눌렀다 — 실패가 에러가 아니라 오동작으로 나왔다 (#138). `--stale-ok` 는 그 판정을
+ * 알고도 진행하겠다는 선언이다(라벨이 정상적으로 바뀌는 카운터 버튼 같은 자리).
+ */
+async function refToBackendId(
+  page: import('puppeteer-core').Page,
+  session: string,
+  target: string,
+  staleOk: boolean,
+): Promise<number> {
+  const { stored, store } = refStore.resolveStored(session, target);
+  if (staleOk) return stored.backendId;
+
+  const cdp = await page.createCDPSession();
+  try {
+    const verdict = await checkRef(cdp, target, stored, store);
+    if (!verdict.ok) {
+      throw new Error(`Refusing ${target}: ${verdict.reason} (--stale-ok proceeds anyway)`);
+    }
+  } finally {
+    await cdp.detach();
+  }
+  return stored.backendId;
 }

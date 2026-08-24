@@ -49,7 +49,7 @@ after(() => {
 
 test('every store writes under TIRNO_DIR and nothing escapes to the real home', () => {
   const now = new Date().toISOString();
-  refs.save('sess', { '1': 42 });
+  refs.save('sess', { ...refs.emptyStore(), refs: { '1': { backendId: 42, role: 'link', name: 'x' } } });
   trails.setActive({ name: 't', goal: 'goal', startUrl: 'about:blank', startedAt: now });
   trails.save({ name: 't', goal: 'goal', startUrl: 'about:blank', capturedAt: now, durationMs: 0, steps: [] });
   records.save({ name: 'r', startUrl: 'about:blank', capturedAt: now, durationMs: 0, events: [] });
