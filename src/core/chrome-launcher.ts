@@ -1,5 +1,6 @@
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
+import path from 'node:path';
 import * as store from './session-store.js';
 import { profileDir } from './session-store.js';
 import { allocate } from './port-allocator.js';
@@ -40,6 +41,40 @@ export interface LaunchOptions {
   bootUrl?: string;
 }
 
+/**
+ * 번역 제안을 끈다. 프로필의 `Default/Preferences` 에 심는다.
+ *
+ * `--disable-features=Translate` 로는 부족하다 — puppeteer 가 이미 그것을 넣고 있는데도
+ * 번역 UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 있었다(실측).
+ *
+ * 번역 버블은 페이지 위에 겹쳐 뜨고 레이아웃을 밀어낸다. 좌표로 클릭하고 스크린샷을
+ * 비교하는 도구에서 그것은 관측 대상이 아니라 잡음이다 — 뷰포트를 1920x1080 으로
+ * 고정하는 것과 같은 이유로 고정한다.
+ *
+ * 이미 있는 값은 건드리지 않는다. 사용자가 그 프로필에서 켰다면 그쪽이 나중 의사다.
+ */
+function seedProfilePrefs(userDataDir: string): void {
+  const file = path.join(userDataDir, 'Default', 'Preferences');
+  let prefs: Record<string, unknown> = {};
+  try {
+    prefs = JSON.parse(fs.readFileSync(file, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    // 아직 없다(첫 기동) 또는 읽을 수 없다 — 어느 쪽이든 새로 쓴다.
+  }
+
+  const translate = (prefs.translate ?? {}) as Record<string, unknown>;
+  if (translate.enabled !== undefined) return;
+  translate.enabled = false;
+  prefs.translate = translate;
+
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(prefs));
+  } catch {
+    // 못 써도 기동은 막지 않는다. 번역 버블이 뜰 뿐이다.
+  }
+}
+
 export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata> {
   // Default to `--remote-debugging-port=0`: the OS picks a free port and chrome
   // records it in DevToolsActivePort. That removes the port-collision class
@@ -56,6 +91,8 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   // never removes it — measured, see devtools-port.ts). Clear it first so the
   // file we read back below can only have been written by the chrome we launch.
   clearActivePort(userDataDir);
+
+  seedProfilePrefs(userDataDir);
 
   // Default viewport 1920x1080 — fixed size is required for tirno's
   // visual cache / journaling to be reproducible. User can override by

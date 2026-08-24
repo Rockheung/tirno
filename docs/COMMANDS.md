@@ -67,6 +67,17 @@ puppeteer·Chrome 이 자기 기본 인자를 수십 개 붙이므로 **"선언�
 보존한다. `foreign` 은 대장 엔트리(tirno 자기 json)만 지우고 프로세스·프로필은 건드리지
 않는다. `ambiguous` 는 아무것도 하지 않는다. 먼저 `tirno gc --dry-run` 으로 확인할 것.
 
+#### 번역 제안은 꺼진 채로 시작한다
+
+세션을 만들 때 프로필의 `Default/Preferences` 에 `translate.enabled = false` 를 심는다.
+
+`--disable-features=Translate` 로는 부족하다 — puppeteer 가 이미 그것을 넣고 있는데도 번역
+UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 있었다(실측). 번역 버블은
+페이지 위에 겹쳐 뜨고 레이아웃을 밀어내므로, 좌표로 클릭하고 스크린샷을 비교하는 도구에서는
+관측 대상이 아니라 잡음이다 — 뷰포트를 1920x1080 으로 고정하는 것과 같은 이유다.
+
+**이미 값이 있으면 건드리지 않는다.** 그 프로필에서 켰다면 그쪽이 나중 의사다.
+
 ### 앵커 (브라우저 MCP 접속 대상)
 
 | 명령 | 설명 |

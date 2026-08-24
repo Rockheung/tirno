@@ -49,6 +49,10 @@ tirno new mitmproxy -- --proxy-server=http://127.0.0.1:8888
 tirno new mobile -- --window-size=375,812
 ```
 
+세션을 만들 때 프로필에 `translate.enabled = false` 를 심는다 — 번역 버블이 페이지 위에 겹쳐
+뜨면 좌표와 스크린샷이 흔들린다. `--disable-features=Translate` 만으로는 안 막혔다(실측).
+이미 값이 있으면 건드리지 않는다.
+
 ## CDP 명령
 
 모든 CDP 명령에 `-s <session>` 옵션. 생략하면 `tirno attach`로 설정한 활성 세션 사용.
