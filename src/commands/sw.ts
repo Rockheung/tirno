@@ -41,6 +41,8 @@ interface SwReport {
   registrations: Registration[];
   caches: CacheEntry[];
   control: ControlStatus[];
+  servedBy: string | null;   // 현재 문서 응답의 x-served-by (오버레이면 tirno-sw/…, 원본이면 null)
+  servedLayer: string | null;
 }
 
 async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise<SwReport> {
@@ -50,6 +52,8 @@ async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise
       registrations: [] as Registration[],
       caches: [] as CacheEntry[],
       control: [] as ControlStatus[],
+      servedBy: null as string | null,
+      servedLayer: null as string | null,
     };
 
     if ('serviceWorker' in navigator) {
@@ -77,6 +81,16 @@ async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise
       }
     }
 
+    // 이 문서가 오버레이에서 왔나 원본에서 왔나. SW 는 자기가 낸 응답에만
+    // x-served-by/x-tirno-layer 를 붙이므로(sw-template fromLayer), 문서 URL 을
+    // 다시 받아 헤더를 본다. navigateFallback 없이 하위 경로로 착지하면 SW 가
+    // 컨트롤해도 문서는 원본이라 이 헤더가 없다 — CONTROLS=yes 만으로는 못 가른다.
+    try {
+      const res = await fetch(location.href, { cache: 'no-store' });
+      out.servedBy = res.headers.get('x-served-by');
+      out.servedLayer = res.headers.get('x-tirno-layer');
+    } catch { /* 못 받아도 판정만 빈다 */ }
+
     if ('caches' in self) {
       for (const name of await caches.keys()) {
         const c = await caches.open(name);
@@ -102,6 +116,14 @@ function render(report: SwReport, showPaths: boolean): void {
       r.state ?? '-',
       r.controlsThisDocument ? 'yes' : 'no',
     ])));
+
+    // 이 문서가 실제로 오버레이 빌드냐 원본이냐 — CONTROLS=yes 여도 원본일 수 있다.
+    const served = report.servedBy
+      ? `${report.servedBy}${report.servedLayer ? `  (layer ${report.servedLayer})` : ''}  ← 오버레이`
+      : 'origin (원본 — 오버레이가 이 문서를 내지 않았다)';
+    console.log(`
+Current document: ${report.url}`);
+    console.log(`Served by       : ${served}`);
   }
 
   for (const c of report.control) {
