@@ -233,6 +233,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `network [--type <t>] [--no-reload]` | reload 하고 networkidle2 까지의 요청 캡처. **`--no-reload` 는 리로드하지 않는다** — 페이지 상태를 잃지 않는 대신, 그 창(`--ms`) 동안 페이지가 스스로 내는 요청만 잡는다 |
 | `net ls [--filter <p>] [--type <t>]` | **이미 받아둔** 리소스 목록. reload 안 한다 |
 | `net save [pattern] --out <dir>` | 그 응답 **본문을 그대로** 저장 |
+| `net export --out <file.har>` | 세션 네트워크를 **HAR 한 파일**로. DevTools 에 끌어다 놓거나 CI 아티팩트로 |
 
 #### net — 본 것의 바이트
 
@@ -282,6 +283,31 @@ FROM 열이 그 바이트의 출처다. `cache` 는 브라우저가 실제로 �
 
 `--limit`(기본 200) 을 넘으면 **한 개도 쓰지 않고 멈춘다.** 패턴이 넓은 줄 모르고 부른 것과
 정말 그만큼 원한 것은 다르고, 그 차이는 디렉터리에 2000개가 쌓인 뒤에는 되돌리기 어렵다.
+
+#### net export — HAR
+
+`network --show <id> --json` 은 건별로 헤더·상태·본문을 다 준다. 없던 것은 **세션 전체를
+하나로 넘길 형식**이었다. HAR 은 이 영역의 유일한 상호운용 포맷이라, 한 파일이 나오면
+DevTools Network 패널에 그대로 끌어다 놓고, CI 아티팩트로 붙이고, 다른 도구에 먹인다.
+에이전트도 `--show 0` … `--show 49` 를 50번 부르는 대신 한 번에 읽는다.
+
+```bash
+tirno net export --out session.har                 # 지금 창(--ms) 동안의 요청
+tirno net export --out load.har --reload           # 전체 로드 — 페이지 상태를 버린다
+tirno net export --out api.har --filter '*/api/*' --no-bodies
+```
+
+**기본이 no-reload 인 것은 `network` 와 반대다.** export 는 "지금 이 세션을 통째로 넘긴다"
+는 명령이고, 그 첫걸음이 페이지 상태를 버리는 리로드일 수는 없다.
+
+스펙에서 조심한 자리 둘 — 모르는 값은 `0` 이 아니라 **`-1`** 이고(0 은 "0바이트/0ms" 라는
+주장이다), `time` 은 `-1` 이 아닌 timings 구간의 합이다. 안 맞으면 DevTools 가 그 항목의
+폭포를 못 그린다. 바이너리 본문은 `encoding: "base64"` 로 싣고 `content.size` 는 **디코드된**
+크기를 적는다. 캐시에서 나온 응답은 `cache` 에 표시한다 — 전송량 0 을 "빠른 서버" 로
+읽으면 안 된다.
+
+`--no-bodies` 는 헤더·타이밍만 남긴다. 파일이 작아지고, 응답에 실린 것이 같이 흘러가지도
+않는다(실측: 위키백과 한 페이지가 2.7MB → 36KB).
 
 #### snapshot 은 무엇을 접나
 

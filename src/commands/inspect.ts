@@ -4,6 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
+import { captureRequests, type CapturedRequest } from '../cdp/network-capture.js';
 import * as refStore from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
@@ -254,79 +255,12 @@ export function registerInspectCommands(program: Command): void {
         const page = await getActivePage(browser);
 
         const cdp = await page.createCDPSession();
-        await cdp.send('Network.enable');
-
-        interface FullReq {
-          id: number;
-          requestId: string;
-          url: string;
-          method: string;
-          status: number;
-          type: string;
-          requestHeaders?: Record<string, string>;
-          responseHeaders?: Record<string, string>;
-          postData?: string;
-          mimeType?: string;
-        }
-
-        const completed: FullReq[] = [];
-        const pending = new Map<string, Partial<FullReq>>();
-
-        cdp.on('Network.requestWillBeSent', (params) => {
-          const req = params as unknown as {
-            requestId: string;
-            request: { url: string; method: string; headers: Record<string, string>; postData?: string };
-            type: string;
-          };
-          pending.set(req.requestId, {
-            requestId: req.requestId,
-            url: req.request.url,
-            method: req.request.method,
-            type: req.type,
-            requestHeaders: req.request.headers,
-            postData: req.request.postData,
-          });
+        const completed = await captureRequests(cdp, page, {
+          reload: opts.reload !== false,
+          ms: opts.ms,
         });
 
-        cdp.on('Network.responseReceived', (params) => {
-          const resp = params as unknown as {
-            requestId: string;
-            response: { status: number; headers: Record<string, string>; mimeType: string };
-            type: string;
-          };
-          const partial = pending.get(resp.requestId);
-          if (partial) {
-            const full: FullReq = {
-              id: completed.length,
-              requestId: partial.requestId!,
-              url: partial.url!,
-              method: partial.method!,
-              status: resp.response.status,
-              type: resp.type,
-              requestHeaders: partial.requestHeaders,
-              responseHeaders: resp.response.headers,
-              mimeType: resp.response.mimeType,
-              postData: partial.postData,
-            };
-            completed.push(full);
-            pending.delete(resp.requestId);
-          }
-        });
-
-        // reload 는 **현재 상태를 버리고 다시 받는다.** 캐러셀을 7번 넘겨둔 페이지에서
-        // 이걸 부르면 1번으로 돌아간다 — 이미 본 리소스를 회수하려는 바로 그 순간에
-        // 그것을 보게 만든 상태가 사라진다 (#136). 그래서 끌 수 있어야 한다.
-        //
-        // 끄면 이 창 동안 페이지가 스스로 내는 요청만 잡힌다. **이미 받아둔 것**은
-        // 여기 안 나온다 — 그쪽은 `net ls` 다(렌더러가 들고 있는 것을 읽으므로
-        // reload 도 리스너도 필요 없다).
-        if (opts.reload === false) {
-          await new Promise(r => setTimeout(r, opts.ms));
-        } else {
-          await page.reload({ waitUntil: 'networkidle2' }).catch(() => {});
-        }
-
-        let filtered = completed;
+        let filtered: CapturedRequest[] = completed;
         if (opts.type) {
           filtered = completed.filter(r => r.type.toLowerCase() === opts.type.toLowerCase());
         }
