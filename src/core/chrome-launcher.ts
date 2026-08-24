@@ -5,20 +5,7 @@ import * as store from './session-store.js';
 import { profileDir } from './session-store.js';
 import { allocate } from './port-allocator.js';
 import { waitForActivePort, clearActivePort } from './devtools-port.js';
-
-const CHROME_PATHS = [
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/chromium-browser',
-];
-
-function findChrome(): string {
-  for (const p of CHROME_PATHS) {
-    if (fs.existsSync(p)) return p;
-  }
-  throw new Error('Chrome not found. Install Google Chrome or set --executable-path');
-}
+import { resolveChrome } from './chrome-finder.js';
 
 function portFromWsEndpoint(wsEndpoint: string): number | null {
   try {
@@ -88,7 +75,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   // An explicit --port keeps the legacy fixed-port path, which writes no
   // DevToolsActivePort and so cannot be an anchor target (`tirno new` warns).
   const requestedPort = opts.port === undefined ? 0 : await allocate(opts.port);
-  const executablePath = opts.executablePath ?? findChrome();
+  const executablePath = resolveChrome(opts.executablePath).path;
   const userDataDir = opts.userDataDir ?? profileDir(opts.name);
   fs.mkdirSync(userDataDir, { recursive: true });
 

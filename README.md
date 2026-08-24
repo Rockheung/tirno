@@ -22,7 +22,10 @@ tirno click @7                                  # 셀렉터를 몰라도 누른�
 tirno kill demo --clean
 ```
 
-**필요한 것**: Chrome 하나뿐이다(경로 4곳 자동 탐색, 없으면 `--executable-path`).
+**필요한 것**: Chrome 하나뿐이다. 어디를 보는지·무엇을 고르는지는 `tirno chrome` 이 그대로 보여준다.
+찾은 것이 없으면 한 번만 적어두면 된다 — `tirno chrome set <path>` (또는 `$TIRNO_CHROME`).
+**linux-arm64 에는 Google Chrome 이 없다** — 구글이 amd64 만 배포한다. chromium 이나
+playwright/puppeteer 가 받아둔 arm64 빌드를 쓰면 되고, 그 캐시 경로는 탐색 목록에 이미 있다.
 바이너리에 런타임이 들어 있어 Node 를 안 깔아도 된다.
 
 바이너리는 넷이다 — `darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64`.
