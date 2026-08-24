@@ -271,6 +271,7 @@ plugin  0.2.0    · latest 0.2.2 · behind
 | 명령 | 설명 |
 |---|---|
 | `sw status [--paths] [--json]` | 등록된 워커, 그 워커가 Cache Storage 에서 내고 있는 경로, 그리고 control 엔드포인트가 응답하면 레이어별 enabled·fetched(이번 SW 인스턴스 fetch 횟수, 캐시 히트는 0)·paths |
+| — | + **Served by**: 현재 문서가 오버레이(`tirno-sw/…`)에서 왔나 원본에서 왔나. CONTROLS=yes 여도 원본일 수 있다(navigateFallback 없이 하위 경로 착지) |
 
 정본은 **등록 정보와 Cache Storage** 다. sw-proxy 자신의 `<scope>__tirno/status` 만 믿으면
 안 되는 이유는 실측으로 확인했다 — 워커는 자기 스크립트를 내주던 로컬 서버보다 오래 살고,
