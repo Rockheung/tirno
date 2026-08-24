@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { registerSessionCommands } from './commands/session.js';
 import { registerChromeCommands } from './commands/chrome.js';
+import { registerSetupCommand } from './commands/setup.js';
 import { registerAnchorCommands } from './commands/anchor.js';
 import { registerNavCommands } from './commands/nav.js';
 import { registerInspectCommands } from './commands/inspect.js';
@@ -34,6 +35,7 @@ program
 
 registerSessionCommands(program);
 registerChromeCommands(program);
+registerSetupCommand(program);
 registerAnchorCommands(program);
 registerNavCommands(program);
 registerInspectCommands(program);

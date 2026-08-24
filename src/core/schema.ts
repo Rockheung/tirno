@@ -93,6 +93,7 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'chrome show':  { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
   'chrome set':   { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'chrome rm':    { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'setup':        { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
 
   // ---- anchors
   'anchor ls':    { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },

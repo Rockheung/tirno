@@ -16,6 +16,7 @@ async function realProgram(): Promise<Command> {
   program.name('tirno').description('test').version('0.0.0');
   const mods = [
     ['session', 'registerSessionCommands'], ['chrome', 'registerChromeCommands'],
+    ['setup', 'registerSetupCommand'],
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
