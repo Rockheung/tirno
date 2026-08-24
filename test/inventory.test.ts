@@ -101,6 +101,23 @@ test('keeps spaces inside a profile path', () => {
   );
 });
 
+// #123: --extensions 는 --disable-extensions 를 빼서 about:blank 가 값에 바로 붙는다.
+test('strips a trailing start-URL positional from --user-data-dir', () => {
+  assert.equal(
+    parseUserDataDir('/x/chrome --user-data-dir=/Users/me/.tirno/profiles/s about:blank'),
+    '/Users/me/.tirno/profiles/s');
+  assert.equal(
+    parseUserDataDir('/x/chrome --user-data-dir=/Users/me/.tirno/profiles/s https://example.com/'),
+    '/Users/me/.tirno/profiles/s');
+});
+
+// 경로 안의 공백은 트레일링 URL 이 아니므로 안 뗀다.
+test('keeps a genuine space in the path even with a trailing URL', () => {
+  assert.equal(
+    parseUserDataDir('/x/chrome --user-data-dir=/Users/me/my profiles/a about:blank'),
+    '/Users/me/my profiles/a');
+});
+
 test('returns null when there is no --user-data-dir', () => {
   assert.equal(parseUserDataDir('/Applications/OtherAgentApp.app/Contents/MacOS/OtherAgentApp'), null);
 });

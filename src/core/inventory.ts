@@ -132,7 +132,14 @@ export function parseFlags(cmdline: string): Map<string, string | null> {
       // `--no-first-run about:blank` — the positional after it is not a value
       flags.set(segment.split(/\s/)[0], null);
     } else {
-      flags.set(segment.slice(0, eq), segment.slice(eq + 1).trim());
+      // 크롬이 cmdline 끝에 붙이는 트레일링 positional(start URL)이 마지막 세그먼트의
+      // 값에 섞인다 — 보통은 그 앞에 다른 --flag 가 와서 잘리지만, --extensions 로
+      // --disable-extensions 를 빼면 `--user-data-dir=/path about:blank` 처럼 값에
+      // 바로 붙는다. 값에 정당한 공백이 있을 수 있어(경로) 무조건 자르지 않고,
+      // **마지막 토큰이 start-URL 꼴일 때만** 떼어낸다.
+      const raw = segment.slice(eq + 1).trim();
+      const url = raw.match(/\s+(?:about:|chrome:\/\/|https?:\/\/|file:\/\/|data:)\S*$/);
+      flags.set(segment.slice(0, eq), url ? raw.slice(0, url.index).trim() : raw);
     }
   }
 
