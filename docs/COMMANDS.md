@@ -12,6 +12,7 @@
 | `ls` | 세션 목록 (port, status, **owner**, proxy, emulation, last access) |
 | `attach <name>` | active 세션 변경 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
+| `new`/`restart` `--extensions` | 확장이 돌게 한다. **기본은 꺼짐** — 확장은 페이지가 하는 일을 바꾸고, 이 도구는 페이지를 있는 그대로 관측하려고 있다 |
 | `restart <name> [url] [--keep-cookies] [-- <flags>]` | 죽이고 새 flag 로 재생성. **`--keep-cookies` 는 세션 쿠키까지 넘겨 로그인이 살아남는다** — `Expires` 없는 쿠키는 브라우저 종료와 함께 사라지므로, 이걸 안 주면 프로필은 남아도 로그인은 안 남는다 |
 | `gc [--dry-run] [--older-than <N>]` | 낡은 장부 정리. 기본은 장부만(ghost/foreign 엔트리, 잔존 `DevToolsActivePort`). `--older-than <N>`일 때만 **N일 이상 안 쓴 orphan 프로필 삭제** |
 | `drift [name] [--all] [-- <flags>]` | 선언한 chrome flag 와 실행 중 프로세스 비교. 차이 있으면 재기동 명령 제안 + **exit 1** |
@@ -77,6 +78,32 @@ UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 �
 관측 대상이 아니라 잡음이다 — 뷰포트를 1920x1080 으로 고정하는 것과 같은 이유다.
 
 **이미 값이 있으면 건드리지 않는다.** 그 프로필에서 켰다면 그쪽이 나중 의사다.
+#### 확장 — `--extensions` 없이는 방법이 없다
+
+puppeteer 가 `--disable-extensions` 를 기본으로 넣고, **그것은 뒤에서 되돌릴 수 없다.**
+`--load-extension` 을 뒤에 붙여도 상쇄되지 않고, `Extensions.loadUnpacked` 는 확장 id 를
+돌려주면서 실제로는 아무것도 활성화하지 않는다 — 확장 타깃이 안 생기고 content script 도
+안 돈다. **성공한 것처럼 보이는 응답이 돌아오는 것**이 이 실패의 고약한 점이라, 기동 때
+빼는 것 말고는 길이 없다.
+
+`--load-extension` 자체도 Chrome 151 에서 죽었다(tirno 를 안 거친 크롬에서도 안 먹는다).
+그래서 로드는 CDP 로 한다:
+
+```bash
+tirno new dev --extensions
+tirno cdp --browser Extensions.loadUnpacked '{"path":"/abs/path/to/ext"}'
+tirno reload                      # content script 는 다음 문서부터 붙는다
+```
+
+**재기동하면 사라진다.** `loadUnpacked` 로 얹은 확장은 프로필에 남지 않아, `restart` 뒤에는
+`--extensions` 를 다시 줘도 확장 타깃이 0 이다 — 로드를 다시 해야 한다(id 는 같다).
+
+확장 페이지도 평범한 페이지처럼 다룬다:
+
+```bash
+tirno nav chrome-extension://<id>/popup.html
+tirno eval "chrome.runtime.getManifest().name"
+```
 
 ### 앵커 (브라우저 MCP 접속 대상)
 

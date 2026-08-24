@@ -26,6 +26,7 @@ npm link   # 또는 PATH에 bin/ 추가
 
 ```bash
 tirno new <name> [url] [-- chrome-flags...]  # Chrome 세션 생성
+tirno new <name> --extensions                # 확장이 돌게 한다 (기본은 꺼짐)
 tirno restart <name> [url] [-- flags...]     # 죽이고 새 플래그로 재생성
 tirno restart <name> --keep-cookies          # 세션 쿠키까지 넘긴다 — 로그인이 살아남는다
 tirno ls [--json] [--flags]                  # 세션 목록 (STATUS + OWNER 컬럼)
@@ -52,6 +53,17 @@ tirno new mobile -- --window-size=375,812
 세션을 만들 때 프로필에 `translate.enabled = false` 를 심는다 — 번역 버블이 페이지 위에 겹쳐
 뜨면 좌표와 스크린샷이 흔들린다. `--disable-features=Translate` 만으로는 안 막혔다(실측).
 이미 값이 있으면 건드리지 않는다.
+확장은 기본으로 꺼져 있다. `--extensions` 없이는 **어떤 방법으로도 못 켠다** — puppeteer 의
+`--disable-extensions` 를 뒤에서 되돌릴 수 없고, `Extensions.loadUnpacked` 는 id 를 돌려주면서
+아무것도 활성화하지 않는다. `--load-extension` 은 Chrome 151 에서 죽었으므로 로드는 CDP 로 한다:
+
+```bash
+tirno new dev --extensions
+tirno cdp --browser Extensions.loadUnpacked '{"path":"/abs/path/to/ext"}'
+tirno reload            # content script 는 다음 문서부터
+```
+
+**재기동하면 사라진다** — 프로필에 안 남으므로 `restart` 뒤에 다시 로드한다(id 는 같다).
 
 ## CDP 명령
 
