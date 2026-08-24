@@ -158,7 +158,7 @@ tirno sw status --json
 워커는 자기 스크립트를 내주던 로컬 서버보다 오래 살고, 프로필에는 tirno 가 굽지 않은 워커도
 들어 있을 수 있다. 실측한 세션에서는 스크립트가 origin 에서 404 이고 control 요청에 사이트의
 HTML 이 돌아왔는데, 프록시되는 경로 22개는 Cache Storage 에 남아 계속 서빙되고 있었다.
-control 응답은 답하는 워커에 한해 레이어별 `enabled` · `served` 로 얹는다.
+control 응답은 답하는 워커에 한해 레이어별 `enabled` · `fetched` · `paths` 로 얹는다. fetched 는 이번 SW 인스턴스의 fetch 처리 횟수라 캐시 히트/bfcache 로드엔 0 이다 — 덮임 여부는 paths(Cache Storage 적재분)로 본다.
 
 ### 성능 · 진단
 
