@@ -266,7 +266,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 ### 실행 / emulation
 | 명령 | 설명 |
 |---|---|
-| `eval <expression> [--timeout <ms>]` | 페이지에서 JS 실행. **함수 리터럴은 호출한다**(아래). 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
+| `eval [expression\|-] [--file <path>] [--timeout <ms>]` | 페이지에서 JS 실행. **입력은 인자·`--file`·stdin 셋 중 하나**(아래). **함수 리터럴은 호출한다**(아래). **함수 리터럴은 호출한다**(아래). 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
 | `cdp <method> [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
 | `emulate [--device <name>] [--dpr <n>] [--network <p>] [--cpu <n>] [--reset]` | 영속 emulation |
 
@@ -280,6 +280,23 @@ tirno eval '() => { const a = 1, b = 2; return { sum: a + b }; }'   # → {"sum"
 
 인자를 받는 함수는 **부르지 않고 그렇게 말한다**(exit 1) — 무엇을 넘길지는 부르는 쪽만 알고,
 undefined 를 밀어 넣으면 그쪽이 더 조용한 오답이 된다. 호출 결과가 또 함수일 때도 같다.
+
+#### 여러 줄 JS 는 인자로 넘기지 않는다
+
+인자로 넣으면 JS 안의 `"` 와 셸의 `'`, `$`, 백틱, 줄바꿈이 전부 지뢰다. 셋 중 아무거나 쓴다:
+
+```bash
+tirno eval --file ./collect.js      # 파일 — 셸이 내용을 한 글자도 안 건드린다
+cat ./collect.js | tirno eval       # 파이프 (인자를 비우면 stdin 을 읽는다)
+tirno eval - < ./collect.js         # `-` 로 명시해도 같다
+```
+
+에이전트에게 시키는 용도에서 특히 값이 크다 — LLM 이 여러 줄 JS 를 셸 인자로 안전하게
+escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로만 넘기는 것은 사실상 0 이다.
+
+인자와 `--file` 을 같이 주면 **거절한다**(exit 1). 하나를 조용히 이기게 하면 어느 쪽이
+돌았는지 출력만 보고는 알 수 없다. 빈 파일·빈 stdin 도 거절한다 — 그대로 밀어 넣으면
+`undefined` 가 돌아오고, 그것은 "빈 입력을 줬다" 가 아니라 "결과가 undefined 다" 로 읽힌다.
 
 ### 권한
 | 명령 | 설명 |

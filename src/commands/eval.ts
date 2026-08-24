@@ -1,19 +1,85 @@
 import { Command } from 'commander';
+import fs from 'node:fs';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { error } from '../output/formatter.js';
 
+/**
+ * 어디서 JS 를 읽어오나.
+ *
+ * 입력이 **인자 전용**이었다. 출력에는 `--json` 이 있는데 입력에는 대응물이 없어서,
+ * 여러 줄 JS 는 JS 안의 `"` 와 셸의 `'`, `$`, 백틱, 줄바꿈이 전부 지뢰였다 (#137).
+ * `docs/COMMANDS.md` 의 예시가 전부 한 줄인 것도 이 제약 때문이었다.
+ *
+ * 에이전트에게 시키는 용도에서 특히 값이 크다 — LLM 이 여러 줄 JS 를 셸 인자로
+ * 안전하게 escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로만 넘기는 것은
+ * 실패율이 사실상 0 이다.
+ */
+export async function resolveExpression(
+  expression: string | undefined,
+  file: string | undefined,
+  readStdin: () => Promise<string>,
+  stdinIsTTY: boolean,
+): Promise<string> {
+  if (file !== undefined && expression !== undefined) {
+    throw new Error('Pass either <expression> or --file, not both.');
+  }
+
+  let source: string;
+  let origin: string;
+  if (file !== undefined) {
+    try {
+      source = fs.readFileSync(file, 'utf-8');
+    } catch (e) {
+      throw new Error(`Cannot read --file ${file}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`, { cause: e });
+    }
+    origin = `--file ${file}`;
+  } else if (expression === '-') {
+    source = await readStdin();
+    origin = 'stdin';
+  } else if (expression !== undefined) {
+    source = expression;
+    origin = '<expression>';
+  } else if (!stdinIsTTY) {
+    // 파이프로 들어온 것이 있는데 인자가 없다 — 그것 말고 읽을 것이 없다.
+    source = await readStdin();
+    origin = 'stdin';
+  } else {
+    throw new Error(
+      'Nothing to evaluate. Pass an expression, --file <path>, or pipe it in:\n' +
+      '  tirno eval \'document.title\'\n' +
+      '  tirno eval --file ./collect.js\n' +
+      '  cat ./collect.js | tirno eval'
+    );
+  }
+
+  if (source.trim().length === 0) throw new Error(`Nothing to evaluate — ${origin} was empty.`);
+  return source;
+}
+
+export async function readAllStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString('utf-8');
+}
+
 export function registerEvalCommand(program: Command): void {
   program
     .command('eval')
-    .description('Evaluate JavaScript expression')
-    .argument('<expression>', 'JavaScript expression')
+    .description('Evaluate JavaScript — as an argument, from --file, or from stdin')
+    .usage('[options] [expression|-]')
+    .argument('[expression]', 'JavaScript expression. "-" reads stdin; omit it entirely when piping')
     .option('-s, --session <name>', 'Session name')
+    .option('--file <path>', 'Read the JavaScript from a file instead of the argument — no shell quoting')
     .option('--json', 'Output as JSON')
     .option('--timeout <ms>', 'Give up when the expression has not settled. 0 waits as long as the CDP connection allows (~3 min).', intArg, 30000)
-    .action(async (expression: string, opts) => {
+    .action(async (expressionArg: string | undefined, opts) => {
       try {
+        const expression = await resolveExpression(
+          expressionArg, opts.file, readAllStdin, process.stdin.isTTY === true,
+        );
+
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
