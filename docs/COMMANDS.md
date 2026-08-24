@@ -228,9 +228,36 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | 명령 | 설명 |
 |---|---|
 | `screenshot [--full] [--out path]` | 스크린샷 |
-| `snapshot [--no-cache]` | a11y 트리 + visual cache 적재 |
+| `snapshot [--verbose] [--no-cache]` | a11y 트리 + visual cache 적재. 기본은 **조작 가능한 것 위주**로 접는다(아래) |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>]` | reload 하고 networkidle2 에 이를 때까지의 요청 캡처 |
+
+#### snapshot 은 무엇을 접나
+
+전체 트리를 그대로 내면 출력이 에이전트 컨텍스트를 두 방향으로 태운다. 기본값은 접는다:
+
+- **`InlineTextBox`** — 바로 위 `StaticText` 를 그대로 복창하고 `@ref` 도 안 붙는다
+  (= 조작 대상이 아니다). 줄바꿈된 텍스트는 여러 개로 쪼개지므로 2배보다 나빠진다
+- **이름도 역할값도 없는 컨테이너**(`generic`/`none`) 중 **통과용 래퍼**(자식 0~1개).
+  자식이 둘 이상이면 남긴다 — 그때는 묶음이라는 사실 자체가 정보다.
+  `focusable` 이면 이름이 없어도 남긴다(이름 없는 클릭 가능한 div 는 흔하다)
+
+접는 노드는 줄만 안 내는 것이 아니라 **`@ref` 번호도 안 받는다.** 번호를 먹는 것이
+부수적 손해가 아니다 — 의미 있는 요소의 ref 가 뒤로 밀리면 "@7 을 눌러라" 가 페이지
+구조 변화에 더 민감해진다.
+
+```
+@1  RootWebArea "Example Domain"      # 예전에는 link 가 @10 이었다
+@2    heading "Example Domain"
+...
+@7      link "Learn more"
+→ 3 line(s) folded — 3 InlineTextBox …, 0 bare container(s). --verbose shows the full tree.
+```
+
+접었다는 사실은 끝줄에 적는다 — 안 그러면 "이 페이지에 이것뿐" 과 구별되지 않는다.
+`--verbose` 는 ignored 노드까지 포함해 전부 낸다.
+
+실측(2026-08-24): instagram.com 269→124 줄, github.com 2277→1134 줄.
 
 ### 입력
 | 명령 | 설명 |
