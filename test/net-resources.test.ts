@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fileNameFor, flattenResourceTree, matchesFilter } from '../src/cdp/resources.js';
+import { fetchBody, fileNameFor, flattenResourceTree, matchesFilter, type PageResource } from '../src/cdp/resources.js';
 import { select } from '../src/commands/net.js';
 
 // Chrome 은 안 띄운다. 여기서 증명하는 것은 **무엇을 고르고 어떤 이름으로 쓰는가** 이고,
@@ -93,4 +93,82 @@ test('type and pattern narrow together, case-insensitively on type', () => {
   assert.equal(select(all, undefined, 'IMAGE').length, 2, 'type is matched case-insensitively');
   assert.equal(select(all, '*.jpg', 'image').length, 1);
   assert.equal(select(all, undefined, undefined).length, 3);
+});
+
+// ── 본문을 어디서 가져오나. 1차는 렌더러가 들고 있는 그 응답이고, 밀려났으면 브라우저에게
+// 다시 받아달라고 한다. 페이지 안의 fetch 로는 안 된다 — 자산은 대개 다른 오리진(CDN)이라
+// CORS 가 막는다(실측: en.wikipedia.org 문서에서 upload.wikimedia.org 이미지를 fetch 하면
+// "Failed to fetch"). 그 폴백이 실제로 도는지를 여기서 본다.
+
+const RESOURCE: PageResource = {
+  url: 'https://cdn.example/img.jpg',
+  type: 'Image',
+  mimeType: 'image/jpeg',
+  contentSize: 3,
+  frameId: 'F1',
+  frameUrl: 'https://example.com/',
+};
+
+type Send = (method: string, params?: unknown) => Promise<unknown>;
+const fakeCdp = (send: Send) => ({ send } as unknown as Parameters<typeof fetchBody>[0]);
+
+test('the renderer cache is the first source, and it is used verbatim', async () => {
+  const bytes = Buffer.from([0xff, 0xd8, 0xff]);
+  const body = await fetchBody(fakeCdp(async (method) => {
+    assert.equal(method, 'Page.getResourceContent');
+    return { content: bytes.toString('base64'), base64Encoded: true };
+  }), RESOURCE);
+  assert.equal(body.source, 'cache');
+  assert.deepEqual(body.bytes, bytes);
+});
+
+test('a text resource comes back decoded, not double-encoded', async () => {
+  const body = await fetchBody(fakeCdp(async () => ({ content: 'body { }', base64Encoded: false })), RESOURCE);
+  assert.equal(body.bytes.toString('utf-8'), 'body { }');
+});
+
+test('an evicted resource is re-fetched by the browser, in chunks, and the handle is closed', async () => {
+  const bytes = Buffer.from([1, 2, 3, 4, 5, 6]);
+  const calls: string[] = [];
+  let reads = 0;
+  const body = await fetchBody(fakeCdp(async (method, params) => {
+    calls.push(method);
+    if (method === 'Page.getResourceContent') throw new Error('not in cache');
+    if (method === 'Network.loadNetworkResource') {
+      // 쿠키를 들고 가야 한다 — 로그인이 필요한 리소스가 이 경로로 온다.
+      assert.deepEqual((params as { options: unknown }).options,
+        { disableCache: false, includeCredentials: true });
+      return { resource: { success: true, httpStatusCode: 200, stream: 'S1' } };
+    }
+    if (method === 'IO.read') {
+      reads++;
+      const slice = bytes.subarray((reads - 1) * 3, reads * 3);
+      return { data: slice.toString('base64'), base64Encoded: true, eof: reads >= 2 };
+    }
+    if (method === 'IO.close') return {};
+    throw new Error(`unexpected ${method}`);
+  }), RESOURCE);
+
+  assert.equal(body.source, 're-fetch');
+  assert.deepEqual(body.bytes, bytes, 'chunks must be joined in order');
+  assert.ok(calls.includes('IO.close'), 'the stream handle is a browser-side resource; leaking it piles up in the session');
+});
+
+test('a re-fetch that the network refused names the reason', async () => {
+  await assert.rejects(() => fetchBody(fakeCdp(async (method) => {
+    if (method === 'Page.getResourceContent') throw new Error('not in cache');
+    return { resource: { success: false, netErrorName: 'net::ERR_ACCESS_DENIED' } };
+  }), RESOURCE), /ERR_ACCESS_DENIED/);
+});
+
+// 스트림 중간에 실패해도 핸들은 놓아야 한다.
+test('a stream that dies mid-read still closes its handle', async () => {
+  let closed = false;
+  await assert.rejects(() => fetchBody(fakeCdp(async (method) => {
+    if (method === 'Page.getResourceContent') throw new Error('not in cache');
+    if (method === 'Network.loadNetworkResource') return { resource: { success: true, stream: 'S1' } };
+    if (method === 'IO.close') { closed = true; return {}; }
+    throw new Error('read failed halfway');
+  }), RESOURCE), /read failed halfway/);
+  assert.equal(closed, true);
 });
