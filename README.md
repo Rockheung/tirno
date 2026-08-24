@@ -120,7 +120,7 @@ tirno schema | jq '.commands[] | select(.destructive) | .name'
 | 하고 싶은 것 | 지금 | 근거 |
 |---|---|---|
 | 캐시에서 꺼낸 ref 로 **바로 조작** | `cache load` 는 출력만 하고 ref store 를 안 채운다. `click @7` 은 `Unknown ref` 로 실패하고, `snapshot` 을 다시 찍어야 한다 | 새 세션에서 실행 확인 |
-| 캐시에 **selector** 를 담기 | `snapshot` 이 담는 채널은 `a11y`(role·name·backendId)와 `visual`(bbox) 둘뿐이다. `backendId` 는 페이지가 다시 뜨면 무효라, 세션을 넘겨 쓸 수 있는 건 bbox 하나다 | 캐시 파일의 채널 분포 실측 |
+| 캐시에 **selector** 를 담기 | `snapshot` 이 담는 채널은 `a11y`(role·name·backendId)와 `visual`(bbox) 둘뿐이다. `backendId` 는 페이지가 다시 뜨면 무효라, 세션을 넘겨 쓸 수 있는 건 bbox 하나다. **무효인 것을 조용히 쓰지는 않는다** — `snapshot` 세대와 요소 identity 로 거부한다 | 캐시 파일의 채널 분포 실측 |
 | 캐시가 **낡았는지 판정** | `visualFp`(dHash)를 저장은 하지만 비교하는 코드가 없다 — 페이지가 바뀌어도 그대로 나온다. 유효성 판단은 부르는 쪽 몫이다 | `hammingDistance` 호출자 0건 |
 
 **다채널 fallback 은 `record`/`trail` 쪽에서는 실제로 돈다** — `replay` 가
