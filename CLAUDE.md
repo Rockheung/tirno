@@ -67,12 +67,16 @@ node bin/tirno.js kill test --clean
 
 - `src/core/` — 세션 저장, Chrome 실행/연결, 프로세스 관리, ref store, 키체인, 메트릭,
   그리고 앵커 브로커 (`anchor-store` · `inventory`(소유권 판정) · `devtools-port` · `gc` ·
-  `drift` · `path-guard`)
+  `drift` · `path-guard`). 브라우저 조달은 `chrome-finder`(어느 것을 쓰나) ·
+  `provision`(없으면 받아온다) · `unzip`(zip 리더를 직접 든다 — `unzip` 을 부르면
+  그것이 곧 새 전제조건이다)
 - `src/commands/` — CLI 명령. 파일명은 카테고리이지 명령 이름이 아니다 (`inspect.ts` 는
   screenshot/snapshot/console/network 를 등록한다 — `tirno inspect` 라는 명령은 없다)
-- `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash
+- `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash,
+  `resources`(렌더러가 들고 있는 응답), `network-capture`(한 창의 요청 — `network` 와
+  `net export` 가 공유), `ref-guard`(`@N` 이 아직 그때 그것인가)
 - `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
-- `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기
+- `src/output/` — 터미널 테이블, 스크린샷 파일 쓰기, HAR 직렬화
 - `core/schema.ts` — `tirno schema` 의 생성기. 구조는 commander 트리에서 자동 추출하고,
   의미(`effects`·`destructive`)만 `SEMANTICS` 표로 선언한다. 새 명령을 분류 없이 추가하면
   `test/schema.test.ts` 가 깨진다 — 그게 이 표가 안 낡는 이유다
@@ -108,4 +112,4 @@ node bin/tirno.js kill test --clean
 `~/.tirno/metrics.jsonl` 의 옛 `llm.*` · `explore.*` 줄은 그대로 읽힌다. 집계에서
 빠질 뿐 `aggregate()` 가 깨지지 않는다.
 
-결과: 런타임 의존 **6개**, 엔드포인트 **71개**. 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).
+결과: 런타임 의존 **6개**, 엔드포인트 **81개**(2026-08-24 기준). 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).
