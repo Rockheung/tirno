@@ -387,13 +387,42 @@ plugin  0.2.0    · latest 0.2.2 · behind
 | 명령 | 설명 |
 |---|---|
 | `sw status [--paths] [--json]` | 등록된 워커, 그 워커가 Cache Storage 에서 내고 있는 경로, 그리고 control 엔드포인트가 응답하면 레이어별 enabled·fetched(이번 SW 인스턴스 fetch 횟수, 캐시 히트는 0)·paths |
-| — | + **Served by**: 현재 문서가 오버레이(`tirno-sw/…`)에서 왔나 원본에서 왔나. CONTROLS=yes 여도 원본일 수 있다(navigateFallback 없이 하위 경로 착지) |
+| — | + **Served by**: 현재 문서가 오버레이(`tirno-sw/…`)에서 왔나 원본에서 왔나, 그리고 **무엇을 보고 그렇게 판정했나**(Evidence). CONTROLS=yes 여도 원본일 수 있다 |
 
 정본은 **등록 정보와 Cache Storage** 다. sw-proxy 자신의 `<scope>__tirno/status` 만 믿으면
 안 되는 이유는 실측으로 확인했다 — 워커는 자기 스크립트를 내주던 로컬 서버보다 오래 살고,
 프로필에는 이 CLI 가 굽지 않은 워커도 들어 있을 수 있다. 그런 세션에서는 스크립트가 origin
 에서 404 이고 control 요청에 사이트의 HTML 이 돌아오는데, 프록시되는 경로 22개는 Cache
 Storage 에 그대로 남아 계속 서빙되고 있었다. control 응답은 답하는 워커에 한해 얹는다.
+
+#### Served by — overlay · origin · unknown
+
+셋이다. 예전에는 둘이었고, 그래서 **navigateFallback 이 덮은 하위 경로 문서를 origin 으로
+오판했다.** 판정을 문서 URL 재fetch 의 `x-served-by` 로 했는데, 그 재fetch 는 non-navigate 라
+`request.mode === 'navigate'` 에만 응답하는 fallback 을 못 탄다. 로그인 리다이렉트가 하위
+경로로 착지하는 흐름에서 흔히 걸린다.
+
+근거를 센 것부터 쌓는다:
+
+| 근거 | 판정 |
+|---|---|
+| `Server-Timing: tirno-sw` (navigation timing) | **overlay** — 재fetch 가 아니라 이 문서가 실제로 받은 그 응답이다 |
+| 재fetch 의 `x-served-by` | **overlay** — 있으면 확정. **없는 것은 아무것도 확정하지 않는다** |
+| sw-proxy 가 아닌 워커 | origin — 오버레이라는 개념 자체가 없다 |
+| `stamps: true` 인 빌드인데 스탬프가 없다 | origin — 이 빌드는 자기가 낸 문서에 반드시 찍는다 |
+| 그 경로가 Cache Storage 에 정확히 있다 | origin — non-navigate 재fetch 로도 잡혔어야 한다 |
+| 밝혀진 `navigateFallback` 중 이 경로를 덮는 것이 없다 | origin |
+| 그 밖 (옛 sw-proxy 빌드 + 목록에 없는 경로) | **unknown** |
+
+`unknown` 은 실패가 아니라 정직이다 — 모르는 것을 origin 이라고 말하는 것이 오판의
+형태였다. 그 자리에서는 확인 방법과, 워커를 다시 생성하면 확정된다는 사실을 같이 낸다.
+
+레이어 표의 **NAVIGATE** 열이 그 fallback 접두사다(`/app/*` = 목록에 없는 `/app` 하위
+navigate 도 이 레이어의 문서가 낸다).
+
+실측(2026-08-24, chromium 1234): SW 가 navigate 응답에 붙인 `Server-Timing` 이 그 문서의
+navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS 로 못 읽지만 이것은 읽힌다 —
+그래서 재fetch 로 navigate 를 흉내낼 필요 자체가 없어진다.
 
 ### 성능
 | 명령 | 설명 |
