@@ -200,7 +200,9 @@ tirno new preview --headless -- \
   --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" \
   --ignore-certificate-errors
 tirno nav https://app.example.com/admin/__tirno-boot.html
-tirno eval "navigator.serviceWorker.register('/admin/__tirno-sw.js').then(r => r.scope)"
+# register 만으로는 부족하다 — activation 전에 restart 하면 SW 가 프로필에 안 남는다.
+# navigator.serviceWorker.ready 로 activation 을 기다린 뒤 restart 한다(타이밍 race).
+tirno eval "navigator.serviceWorker.register('/admin/__tirno-sw.js').then(() => navigator.serviceWorker.ready).then(r => r.active.scriptURL)"
 
 tirno restart preview --keep-cookies   # rule 없이 — 여기서부터 진짜 origin. 로그인은 넘어온다
 ```
@@ -233,7 +235,7 @@ sw-proxy 커널과 **공존**한다(다른 scope). 실측으로 확인했다.
 tirno eval "Promise.all([
   navigator.serviceWorker.register('/admin/__tirno-sw.js'),
   navigator.serviceWorker.register('/app-sw.js', { scope: '/app-scope/' })
-]).then(() => 'both')"
+]).then(() => navigator.serviceWorker.ready).then(() => 'both ready')"
 
 tirno restart preview --keep-cookies   # 진짜 origin — 둘 다 넘어온다
 ```
@@ -287,8 +289,11 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
   브라우저 종료와 함께 사라져 SW 는 남고 로그인은 안 남는다. `--keep-cookies` 는 재기동 전에
   쿠키를 받아 두었다가 다시 심는다(`httpOnly`·`secure`·`sameSite`·세션 여부까지 그대로).
   쿠키를 못 받아 오면 재기동하지 않는다 — 못 챙긴 채 진행하면 되돌릴 수 없다.
+- **register 는 activation 을 안 기다린다.** 등록만 걸고 바로 `restart`(또는 reload)하면
+  activation 전에 재기동돼 SW 가 프로필에 안 남는다 — 호스트·타이밍에 따라 조용히 갈린다.
+  `register().then(() => navigator.serviceWorker.ready)` 로 activation 을 기다린 뒤 재기동한다.
 - **첫 내비게이션은 SW 가 못 잡는다.** 템플릿이 `skipWaiting` + `clients.claim()` 을 넣지만,
-  등록 직후 한 번 `reload` 하는 편이 확실하다.
+  ready 를 기다렸으면 이미 activated 라 다음 내비게이션부터 잡는다.
 - **평문 HTTP 서버로는 안 된다.** URL 스킴이 `https` 로 고정이라 IP 만 바꿔도 크롬은 TLS
   핸드셰이크를 건다. 생성기가 자체 서명 인증서를 굽고 `--ignore-certificate-errors` 로 넘긴다.
 - **크로스 오리진은 대상이 아니다.** CDN 이 다른 호스트면 그 origin 에 따로 심는다 —
