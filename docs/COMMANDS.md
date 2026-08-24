@@ -230,7 +230,58 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `screenshot [--full] [--out path]` | 스크린샷 |
 | `snapshot [--verbose] [--no-cache]` | a11y 트리 + visual cache 적재. 기본은 **조작 가능한 것 위주**로 접는다(아래) |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
-| `network [--type <t>]` | reload 하고 networkidle2 에 이를 때까지의 요청 캡처 |
+| `network [--type <t>] [--no-reload]` | reload 하고 networkidle2 까지의 요청 캡처. **`--no-reload` 는 리로드하지 않는다** — 페이지 상태를 잃지 않는 대신, 그 창(`--ms`) 동안 페이지가 스스로 내는 요청만 잡는다 |
+| `net ls [--filter <p>] [--type <t>]` | **이미 받아둔** 리소스 목록. reload 안 한다 |
+| `net save [pattern] --out <dir>` | 그 응답 **본문을 그대로** 저장 |
+
+#### net — 본 것의 바이트
+
+`network` 는 **reload 해서 그 한 번의 왕복**을 본다. 그것이 기본값인 것이 실사용에서
+아팠다 — 캐러셀을 7번 넘겨둔 페이지에서 `network` 를 부르면 **1번으로 돌아간다.** 이미
+본 리소스를 회수하려는 바로 그 순간에, 그것을 보게 만든 상태가 사라진다. `--no-reload`
+가 그 자리이고, 그때는 그 창 동안 페이지가 스스로 내는 요청만 잡힌다.
+
+`net` 은 **이미 받아둔 것**을 본다 — reload 하지 않고, 요청 시점에 듣고 있지 않아도 되고,
+`click` 으로 13라운드 돌며 여러 명령에 걸쳐 쌓인 것도 그대로 남아 있다. 명령마다 CDP 를
+붙였다 끊는 구조에서 그게 가능한 이유는 **렌더러가 그 응답을 들고 있기** 때문이다
+(`Page.getResourceTree` / `Page.getResourceContent`).
+
+건별 본문은 예전부터 `network --show <id> --json` 이 `body`(+`bodyBase64`)로 준다.
+`net save` 가 더하는 것은 **일괄**이다 — N건을 파일로 떨구려고 `--show` 를 인덱스로 세며
+반복하면, 그 사이 캡처가 갱신될 때 인덱스가 어긋나고 확장자·파일명도 직접 정해야 한다.
+
+```bash
+tirno net ls --type image --filter 'scontent*.jpg'
+tirno net save 'scontent*.jpg' --out ./out
+```
+
+패턴은 URL **어디에나** 걸린다(`*`·`?` 만 와일드카드). 양끝이 열려 있어야 서명 URL 처럼
+토큰이 길게 붙는 주소에 `scontent*.jpg` 가 걸린다.
+
+예전에는 `eval` 로 `<img src>` 를 긁어 툴 바깥에서 `curl` 로 받아야 했고, 그 우회는 세 가지를
+깨뜨렸다:
+
+1. **브라우저가 이미 가진 상태를 버린다.** 쿠키·Referer·UA 를 curl 쪽에서 손으로 재구성해야
+   하고, Referer 를 안 붙이면 CDN 이 막는다. 로그인이 필요한 리소스면 세션까지 옮겨야 하는데,
+   그것은 세션 격리(로그인이 세션에 산다)를 정면으로 무너뜨린다
+2. **서명 URL 이 휘발한다.** 수집 시점과 다운로드 시점 사이에 만료 레이스가 있다
+3. `eval` 로 DOM 을 긁는 것은 페이지 구조에 의존한다 — 로그아웃 상태 IG 에는 `<article>` 이
+   없다. 네트워크 레이어에는 그런 게 없다
+
+FROM 열이 그 바이트의 출처다. `cache` 는 브라우저가 실제로 받은 그 응답이고(= 서명 만료와
+무관), `re-fetch` 는 렌더러 캐시에서 밀려나 지금 다시 받은 것이다. 다시 받는 것도 브라우저가
+한다(`Network.loadNetworkResource`) — 페이지 안의 `fetch` 로는 안 된다. 자산은 대개 다른
+오리진(CDN)에 있어 CORS 가 막는다(실측: en.wikipedia.org 문서에서 upload.wikimedia.org
+이미지를 fetch 하면 "Failed to fetch"). 브라우저가 받으면 CORS 를 지나지 않고 쿠키·Referer·UA
+가 전부 브라우저의 것이다.
+
+파일 이름은 URL 경로의 basename 이다 — 쿼리는 뗀다(만료 토큰이지 이름이 아니고, 파일
+시스템에 못 쓰는 문자가 들어 있다). 확장자가 없으면 mime 에서 채우고, 이름이 겹치면 번호를
+붙인다. **덮어쓰지 않는다** — 13장을 받으려던 명령이 1장을 남기는 것이 이 자리의 조용한
+실패 형태다.
+
+`--limit`(기본 200) 을 넘으면 **한 개도 쓰지 않고 멈춘다.** 패턴이 넓은 줄 모르고 부른 것과
+정말 그만큼 원한 것은 다르고, 그 차이는 디렉터리에 2000개가 쌓인 뒤에는 되돌리기 어렵다.
 
 #### snapshot 은 무엇을 접나
 

@@ -246,6 +246,8 @@ export function registerInspectCommands(program: Command): void {
     .option('--limit <n>', 'Max requests', intArg, 50)
     .option('--show <id>', 'Print full detail (headers + body) of the request at zero-based index <id>', intArg)
     .option('--json', 'Output as JSON array')
+    .option('--no-reload', 'Do not reload — listen for --ms and report only what the page requests in that window')
+    .option('--ms <n>', 'Listener window when --no-reload is given', intArg, 1000)
     .action(async (opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -311,8 +313,18 @@ export function registerInspectCommands(program: Command): void {
           }
         });
 
-        // reload to capture requests
-        await page.reload({ waitUntil: 'networkidle2' }).catch(() => {});
+        // reload 는 **현재 상태를 버리고 다시 받는다.** 캐러셀을 7번 넘겨둔 페이지에서
+        // 이걸 부르면 1번으로 돌아간다 — 이미 본 리소스를 회수하려는 바로 그 순간에
+        // 그것을 보게 만든 상태가 사라진다 (#136). 그래서 끌 수 있어야 한다.
+        //
+        // 끄면 이 창 동안 페이지가 스스로 내는 요청만 잡힌다. **이미 받아둔 것**은
+        // 여기 안 나온다 — 그쪽은 `net ls` 다(렌더러가 들고 있는 것을 읽으므로
+        // reload 도 리스너도 필요 없다).
+        if (opts.reload === false) {
+          await new Promise(r => setTimeout(r, opts.ms));
+        } else {
+          await page.reload({ waitUntil: 'networkidle2' }).catch(() => {});
+        }
 
         let filtered = completed;
         if (opts.type) {
@@ -360,12 +372,13 @@ export function registerInspectCommands(program: Command): void {
           r.url.slice(0, 80),
         ]);
         console.log(formatTable(['ID', 'METHOD', 'STATUS', 'TYPE', 'URL'], rows));
-        info(`${filtered.length} requests captured`);
+        info(`${filtered.length} requests captured${opts.reload === false ? ` in ${opts.ms}ms without reloading — already-received resources are in \`tirno net ls\`` : ''}`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
       }
     });
+
 }
 
 interface AXValue { value?: string | number | boolean }
