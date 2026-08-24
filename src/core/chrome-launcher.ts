@@ -39,6 +39,11 @@ export interface LaunchOptions {
   userDataDir?: string;
   /** URL appended as final chrome arg — chrome opens it directly, skipping about:blank. */
   bootUrl?: string;
+  /**
+   * Let extensions run. Off by default, because an extension can change what
+   * the page does and this tool exists to observe pages as they are.
+   */
+  extensions?: boolean;
 }
 
 /**
@@ -126,7 +131,18 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     // puppeteer's default args inject their own `--remote-debugging-port`,
     // which silently overrides ours. Drop both so only our
     // `--remote-debugging-port=${requestedPort}` reaches chrome.
-    ignoreDefaultArgs: ['--enable-automation', '--remote-debugging-port'],
+    //
+    // `--disable-extensions` is also puppeteer's, and it cannot be undone from
+    // the far side: passing `--load-extension` after it does not cancel it, and
+    // `Extensions.loadUnpacked` still answers with an extension id while
+    // activating nothing — no extension target, no content script. A CDP call
+    // that reports success and does nothing is worse than one that fails, so
+    // the flag has to be dropped at launch or not at all.
+    ignoreDefaultArgs: [
+      '--enable-automation',
+      '--remote-debugging-port',
+      ...(opts.extensions ? ['--disable-extensions'] : []),
+    ],
     pipe: false,
     defaultViewport: null,
     handleSIGINT: false,

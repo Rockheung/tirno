@@ -89,6 +89,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--executable-path <path>', 'Path to Chrome executable')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
+    .option('--extensions', 'Let extensions run (off by default). Load one with `cdp Extensions.loadUnpacked --browser`')
     .option('--group <name>', 'Tag this session with a group label')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat');
 
@@ -143,6 +144,7 @@ export function registerSessionCommands(program: Command): void {
         // the session half-respecified.
         executablePath: opts.executablePath,
         headless: opts.headless,
+        extensions: opts.extensions,
         userDataDir: userDataDirOverride,
         bootUrl,
       });
@@ -175,6 +177,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--headless', 'Run headless')
     .option('--executable-path <path>', 'Chrome path')
     .option('--ephemeral', 'Use a temporary user-data-dir')
+    .option('--extensions', 'Let extensions run (off by default). Load one with `cdp Extensions.loadUnpacked --browser`')
     .option('--group <name>', 'Group label')
     .option('--keep-cookies', 'Carry cookies across the restart, session cookies included — otherwise the login dies with the browser')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
@@ -225,6 +228,7 @@ export function registerSessionCommands(program: Command): void {
           chromeFlags,
           executablePath: opts.executablePath ?? existing?.executablePath,
           headless: opts.headless,
+          extensions: opts.extensions,
           userDataDir: userDataDirOverride,
           bootUrl,
         });

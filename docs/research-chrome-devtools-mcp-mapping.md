@@ -121,7 +121,7 @@
 
 ## EXTENSIONS (default off in mcp, off in tirno)
 
-`tirno cdp Extensions.loadUnpacked` / `Extensions.uninstall` / `Extensions.getStorageItems` 같은 raw CDP 호출로 대체 가능. 직접 명령은 미지원 — 사용 빈도가 낮아 우선순위 낮음.
+`tirno cdp --browser Extensions.loadUnpacked` / `Extensions.uninstall` / `Extensions.getStorageItems` 같은 raw CDP 호출로 대체 가능. 단 **세션을 `--extensions` 로 띄웠을 때만이다** — puppeteer 의 `--disable-extensions` 가 남아 있으면 `loadUnpacked` 는 확장 id 를 돌려주면서 아무것도 활성화하지 않는다(확장 타깃 없음, content script 안 돔). 재기동하면 로드가 사라지므로 다시 부른다. 직접 명령은 미지원 — 사용 빈도가 낮아 우선순위 낮음.
 
 ---
 
