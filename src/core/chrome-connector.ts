@@ -243,6 +243,17 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
     }
   }
 
+  // setExtraHTTPHeaders 도 연결 수명에 묶인다. permissions 와 같은 자리에서 재적용한다.
+  // 페이지별이라 열린 페이지 전부에 건다.
+  if (prepare && meta.extraHeaders && Object.keys(meta.extraHeaders).length > 0) {
+    try {
+      // puppeteer page API 로 건다 — 직접 만든 CDP 세션에 걸고 detach 하면
+      // 오버라이드가 그 세션과 함께 사라진다(실측). page.setExtraHTTPHeaders 는
+      // 페이지의 메인 세션에 걸어 이 연결 동안 유지된다.
+      for (const p of await browser.pages()) await p.setExtraHTTPHeaders(meta.extraHeaders);
+    } catch { /* best-effort, emulation 과 같다 */ }
+  }
+
   if (prepare && meta.emulation) {
     try {
       const page = await getActivePage(browser);
