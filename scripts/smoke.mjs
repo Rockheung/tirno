@@ -495,6 +495,19 @@ function main() {
   run('chrome rm', ['chrome', 'rm']);
   run('chrome rm (두 번째는 조용히)', ['chrome', 'rm'], { expectMatch: /Nothing was configured/ });
 
+  // setup — 진단은 항상 돌 수 있어야 한다. 실제 다운로드(~200MB)는 스모크가 안 한다:
+  // 네트워크와 시간을 그만큼 쓰는 것은 게이트가 할 일이 아니다. 대신 확인 없이는
+  // 받지 않는다는 것과, --json 계약이 유지되는지를 본다.
+  const setupCheck = run('setup --check', ['setup', '--check', '--json']);
+  let setupJson = null;
+  try { setupJson = JSON.parse(setupCheck.out); } catch { /* ignore */ }
+  check('setup --check 가 플랫폼과 후보를 기계가 읽게 낸다',
+    typeof setupJson?.platform === 'string' && Array.isArray(setupJson?.candidates)
+      && typeof setupJson?.supported === 'boolean',
+    setupCheck.out.slice(0, 90));
+  // stdin 이 TTY 가 아니면 물어볼 사람이 없다 — 그때 200MB 를 그냥 받으면 안 된다.
+  run('setup (비대화형 + --yes 없음 → exit≠0)', ['setup', '--force'], { expectFail: true });
+
   // ── cdp
   run('cdp', ['cdp', 'Runtime.evaluate', '{"expression":"1+1","returnByValue":true}', ...S]);
   run('cdp --browser', ['cdp', '--browser', 'Browser.getVersion', ...S]);

@@ -56,6 +56,42 @@ tirno new smoke https://example.com --headless      # 이제 -- --no-sandbox 없
 
 경로는 `tirno chrome` 이 출력하는 실제 바이너리여야 한다 — 심링크가 아니라 그 끝이다.
 
+#### 브라우저가 없으면 — `tirno setup`
+
+찾는 것과 **받아오는 것**은 다른 문제다. tirno 의 셀링 포인트는 "런타임이 바이너리에
+들어 있어 Node 를 안 깔아도 된다" 인데, 런타임 의존성을 없앤 자리를 브라우저 의존성이
+그대로 채우고 있었다. linux-arm64 에는 Google Chrome 이 **아예 없어서**, 사용자가
+Chromium 을 어디서 어떻게 가져올지부터 판단해야 한다.
+
+```bash
+tirno setup --check     # 진단만: 어디를 봤고, 뭘 찾았고, 왜 실패했나
+tirno setup             # 없으면 받아온다 (묻는다). --yes 로 안 묻기
+tirno setup --force     # 이미 있어도 새로 받는다
+```
+
+받은 것은 `~/.tirno/chrome/<label>/` 에 두고 설정에 적는다. **sudo 가 전혀 필요 없다** —
+자동 탐색이 실패했을 때 사용자가 시스템 경로에 손대는 쪽으로 몰리는 것이 문제였다.
+
+출처가 둘인 것은 구글 사정이다:
+
+| 플랫폼 | 출처 |
+|---|---|
+| `linux64` · `mac-arm64` · `mac-x64` | **Chrome for Testing** (구글이 직접 낸다) |
+| `linux-arm64` | **Playwright CDN** — 여기뿐이다 |
+
+구글은 리눅스용 Chrome 을 amd64 로만 배포하고, Chrome for Testing 의 플랫폼 목록에도
+arm64 리눅스가 없다(실측: linux64 · mac-arm64 · mac-x64 · win32 · win64). Playwright 는
+그 자리만 자기가 빌드한다.
+
+zip 을 푸는 코드는 이 저장소 안에 있다(`core/unzip.ts`). `unzip` 명령을 부르면 **그것이
+곧 새 전제조건**이 되고, 그것은 이 기능이 없애려는 바로 그 종류의 비용이다. 실행 비트와
+심링크를 보존하고(잃으면 받아온 chrome 이 안 돌거나 mac 앱 번들이 깨진다), 목적지 밖으로
+나가는 엔트리는 거부한다.
+
+`--check` 는 샌드박스도 같이 본다. 커널이 비특권 user namespace 를 막고 있으면
+**받아온 그 바이너리 경로로 채운** AppArmor 스니펫을 출력한다 — 그 경로를 아는 것은
+tirno 뿐이다.
+
 #### 어느 Chrome 을 쓰나
 
 | 명령 | 설명 |
