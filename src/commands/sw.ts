@@ -111,13 +111,16 @@ function render(report: SwReport, showPaths: boolean): void {
       info('  no layers reported');
       continue;
     }
-    console.log(formatTable(['LAYER', 'MOUNT', 'ENABLED', 'SERVED', 'PATHS'], layers.map(l => [
+    console.log(formatTable(['LAYER', 'MOUNT', 'ENABLED', 'FETCHED', 'PATHS'], layers.map(l => [
       l.name ?? '-',
       l.mount ?? '-',
       l.enabled === false ? 'no' : 'yes',
       String(l.served ?? '-'),
       String(l.paths ?? '-'),
     ])));
+    // FETCHED 는 이번 SW 인스턴스가 fetch 로 처리한 횟수라, 캐시 히트나 bfcache 로
+    // 로드되면 0 이다(재기동 직후 흔하다). "덮였나" 는 PATHS(Cache Storage 적재분)로 본다.
+    info('  FETCHED = 이번 SW 인스턴스의 fetch 처리 횟수 (캐시 히트는 0). 덮임 여부는 PATHS 로 본다.');
   }
 
   if (report.caches.length === 0) {

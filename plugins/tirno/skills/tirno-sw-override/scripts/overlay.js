@@ -308,7 +308,7 @@
       if (meta) {
         const bits = [];
         if (meta.enabled === false) bits.push('꺼짐');
-        if (typeof meta.served === 'number') bits.push(`served ${meta.served}`);
+        if (typeof meta.served === 'number') bits.push(`fetched ${meta.served}`);
         if (meta.from) bits.push(`← ${meta.from}`);
         if (bits.length) kids.append(el('div', 'meta', bits.join(' · ')));
       }
