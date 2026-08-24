@@ -5,6 +5,8 @@ import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { fetchBody, fileNameFor, listResources, matchesFilter, type PageResource } from '../cdp/resources.js';
+import { captureRequests } from '../cdp/network-capture.js';
+import { toHar, type HarBody } from '../output/har.js';
 import { formatTable, success, info, warn, error } from '../output/formatter.js';
 
 /**
@@ -138,6 +140,75 @@ export function registerNetCommands(program: Command): void {
           warn(`${failed.length} failed:`);
           for (const f of failed.slice(0, 10)) console.log(`  ${f.url.slice(0, 90)} — ${f.reason}`);
           process.exit(1);
+        }
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  net
+    .command('export')
+    .description('The session\'s network as one HAR file — drag it into DevTools, attach it to a CI run')
+    .option('-s, --session <name>', 'Session name')
+    .option('--out <path>', 'Output file', 'session.har')
+    .option('--filter <pattern>', 'Match anywhere in the URL. `*` and `?` are wildcards')
+    .option('--reload', 'Reload first to capture a full page load — this discards the current page state')
+    .option('--ms <n>', 'Listener window when not reloading', intArg, 1000)
+    .option('--no-bodies', 'Headers and timings only — smaller file, and nothing secret rides along')
+    .action(async (opts) => {
+      try {
+        const { browser } = await connect(opts.session);
+        const page = await getActivePage(browser);
+        const cdp = await page.createCDPSession();
+
+        // 기본이 no-reload 인 것은 `network` 와 반대다. export 는 "지금 이 세션을 통째로
+        // 넘긴다" 는 명령이고, 그 첫걸음이 페이지 상태를 버리는 리로드일 수는 없다 (#136).
+        const requests = await captureRequests(cdp, page, { reload: !!opts.reload, ms: opts.ms });
+        const hits = opts.filter ? requests.filter(r => matchesFilter(r.url, opts.filter)) : requests;
+
+        // 본문은 CDP 세션이 붙어 있는 동안에만 꺼낼 수 있다 — 이 캡처를 한 그 세션이다.
+        const bodies = new Map<string, HarBody>();
+        let bodyFailures = 0;
+        if (opts.bodies !== false) {
+          for (const r of hits) {
+            try {
+              const res = await cdp.send('Network.getResponseBody', { requestId: r.requestId }) as unknown as
+                { body: string; base64Encoded: boolean };
+              bodies.set(r.requestId, { text: res.body, base64: res.base64Encoded });
+            } catch {
+              // 본문이 없는 응답(204·리다이렉트)도 있고, 밀려난 것도 있다. 엔트리는 남긴다 —
+              // 헤더와 타이밍만으로도 HAR 의 값은 대부분 남는다.
+              bodyFailures++;
+            }
+          }
+        }
+
+        const pageUrl = page.url();
+        const pageTitle = await page.title().catch(() => '');
+
+        await cdp.detach();
+        browser.disconnect();
+
+        const har = toHar(hits, {
+          pageUrl,
+          pageTitle,
+          startedAt: Date.now(),
+          version: program.version() ?? '0.0.0',
+          bodies,
+        });
+
+        fs.mkdirSync(path.dirname(path.resolve(opts.out)), { recursive: true });
+        fs.writeFileSync(opts.out, JSON.stringify(har, null, 2));
+        const size = fs.statSync(opts.out).size;
+        success(`${opts.out} (${hits.length} entr${hits.length === 1 ? 'y' : 'ies'}, ${(size / 1024).toFixed(1)}KB)`);
+        if (opts.bodies !== false && bodyFailures) {
+          info(`${bodyFailures} entr${bodyFailures === 1 ? 'y has' : 'ies have'} no body — headers and timings are still there`);
+        }
+        if (hits.length === 0) {
+          info(opts.reload
+            ? 'Nothing was requested during the reload.'
+            : 'Nothing was requested in that window. --reload captures a full page load (it discards page state), and already-received resources are in `tirno net ls`.');
         }
       } catch (e) {
         error((e as Error).message);

@@ -130,6 +130,7 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'network':      { effects: 'idempotent', output_kind: 'data', cardinality: 'bounded' },
   'net ls':       { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'net save':     { effects: 'non_idempotent', output_kind: 'opaque', cardinality: 'unbounded' },
+  'net export':   { effects: 'non_idempotent', output_kind: 'opaque', cardinality: 'single' },
 
   // ---- input
   'click':        { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },

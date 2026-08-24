@@ -246,6 +246,16 @@ function main() {
   run('console --reload', ['console', '--reload', ...S], { expectMatch: /smoke page loaded/ });
   run('console --show 0', ['console', '--reload', '--show', '0', ...S]);
   run('network', ['network', ...S]);
+  // reload 는 현재 상태를 버린다 — 캐러셀을 넘겨둔 페이지에서 그것이 치명적이었다 (#136).
+  run('click (상태 만들기)', ['click', '#btn', ...S]);
+  run('network --no-reload', ['network', '--no-reload', '--ms', '300', ...S]);
+  check('network --no-reload 가 페이지 상태를 지킨다',
+    q("document.getElementById('status').textContent") === 'clicked',
+    `실측: ${q("document.getElementById('status').textContent")}`);
+  run('network (reload 는 상태를 버린다)', ['network', ...S]);
+  check('network 는 리로드하므로 상태가 초기화된다',
+    q("document.getElementById('status').textContent") === 'idle',
+    `실측: ${q("document.getElementById('status').textContent")}`);
   const net = run('network --json', ['network', '--json', ...S]);
   let netRows = null;
   try { netRows = JSON.parse(net.out); } catch { /* ignore */ }
@@ -275,6 +285,33 @@ function main() {
   check('매치가 없으면 디렉터리도 안 만든다', !fs.existsSync(`${OUT}/net-none`));
   run('net save (--limit 초과 → exit≠0)', ['net', 'save', '--out', `${OUT}/net-limit`, '--limit', '0', ...S],
     { expectFail: true });
+
+  // HAR 은 DevTools 가 읽는 계약이다 — 스펙을 어기면 에러가 아니라 빈 폭포가 된다.
+  const HAR = `${OUT}/session.har`;
+  run('net export --reload', ['net', 'export', '--out', HAR, '--reload', ...S]);
+  let harDoc = null;
+  try { harDoc = JSON.parse(fs.readFileSync(HAR, 'utf8')); } catch { /* ignore */ }
+  const harEntries = harDoc?.log?.entries ?? [];
+  check('HAR 이 1.2 봉투에 엔트리를 담는다',
+    harDoc?.log?.version === '1.2' && harDoc?.log?.creator?.name === 'tirno' && harEntries.length > 0,
+    `실측: ${harEntries.length} entries`);
+  // time 이 구간의 합이 아니면 그 항목은 DevTools 에서 그려지지 않는다.
+  const badTime = harEntries.find(e => {
+    const known = [e.timings?.send, e.timings?.wait, e.timings?.receive].filter(n => n >= 0);
+    const want = known.length ? Math.round(known.reduce((a, b) => a + b, 0) * 1000) / 1000 : -1;
+    return Math.abs((e.time ?? 0) - want) > 0.01;
+  });
+  check('HAR 의 time 이 timings 의 합이다', !badTime, badTime ? JSON.stringify(badTime.timings) : '');
+  // base64 본문의 size 는 디코드된 크기여야 한다 — 문자열 길이를 적으면 4/3 배로 틀린다.
+  const b64 = harEntries.find(e => e.response?.content?.encoding === 'base64');
+  check('HAR 의 base64 본문 size 가 디코드 크기다',
+    !b64 || b64.response.content.size === Buffer.from(b64.response.content.text, 'base64').length,
+    b64 ? `선언 ${b64.response.content.size}` : '(base64 본문 없음 — 픽스처는 png 하나뿐이다)');
+  run('net export --no-bodies', ['net', 'export', '--out', `${OUT}/nobody.har`, '--no-bodies', '--reload', ...S]);
+  let noBody = null;
+  try { noBody = JSON.parse(fs.readFileSync(`${OUT}/nobody.har`, 'utf8')); } catch { /* ignore */ }
+  check('--no-bodies 는 본문을 안 싣는다',
+    (noBody?.log?.entries ?? []).every(e => !('text' in (e.response?.content ?? {}))));
 
   // ── 입력
   run('eval', ['eval', 'document.title', ...S]);
