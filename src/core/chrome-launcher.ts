@@ -73,14 +73,16 @@ function seedProfilePrefs(userDataDir: string): void {
  * (`--no-sandbox` 를 써봐라)을 tirno 문법으로 옮기는 일은 사용자 몫이었다.
  * 그 번역만 얹어서 다시 던진다 — 원문은 건드리지 않는다.
  */
-async function launchOrExplain(
+export async function launchOrExplain<T>(
   options: Parameters<typeof puppeteer.launch>[0],
-): Promise<Awaited<ReturnType<typeof puppeteer.launch>>> {
+  launcher: (o: Parameters<typeof puppeteer.launch>[0]) => Promise<T> = puppeteer.launch as never,
+  argv: string[] = process.argv,
+): Promise<T> {
   try {
-    return await puppeteer.launch(options);
+    return await launcher(options);
   } catch (e) {
     const err = e as Error;
-    const hint = sandboxHint(err.message, process.argv);
+    const hint = sandboxHint(err.message, argv);
     if (hint) err.message = `${err.message}${hint}`;
     throw err;
   }
@@ -129,7 +131,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   // signal handlers by option, the exit listener by hand below.
   const exitListenersBefore = new Set(process.listeners('exit'));
 
-  const browser = await launchOrExplain({
+  const browser = await launchOrExplain<Awaited<ReturnType<typeof puppeteer.launch>>>({
     executablePath,
     headless: opts.headless ?? false,
     userDataDir,

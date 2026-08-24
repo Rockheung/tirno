@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { retryWithChromeFlags, sandboxHint } from '../src/core/launch-hint.js';
+import { launchOrExplain } from '../src/core/chrome-launcher.js';
 
 // chromium 이 stderr 로 "--no-sandbox 를 써봐라" 라고 하는데, 그것을 tirno 문법으로
 // 옮기는 일은 사용자 몫이었다 (#134). 여기서 증명하는 것은 그 번역이 **실행된 명령줄
@@ -57,4 +58,34 @@ test('a failure that is not about the sandbox gets no hint', () => {
 test('the hint names the AppArmor route, not just the workaround', () => {
   const hint = sandboxHint(SANDBOX_STDERR, argv('new', 'x'));
   assert.match(hint!, /AppArmor/);
+});
+
+// 힌트를 만드는 것과 그것이 **실제 기동 실패에 붙는 것**은 다른 문제다. 붙는 자리가
+// 빠지면 sandboxHint 의 테스트는 전부 통과하고 사용자만 예전 메시지를 본다.
+
+test('a real launch failure comes back with the retry line appended', async () => {
+  const err = await launchOrExplain(
+    {},
+    async () => { throw new Error(`Failed to launch the browser process\n${SANDBOX_STDERR}`); },
+    argv('new', 'smoke', '--headless'),
+  ).then(() => null, (e: Error) => e);
+
+  assert.ok(err);
+  assert.match(err.message, /Failed to launch the browser process/, 'chromium stderr must survive verbatim');
+  assert.match(err.message, /tirno new smoke --headless -- --no-sandbox/);
+});
+
+test('an unrelated launch failure is passed through untouched', async () => {
+  const original = 'spawn /nope/chrome ENOENT';
+  const err = await launchOrExplain(
+    {},
+    async () => { throw new Error(original); },
+    argv('new', 'x'),
+  ).then(() => null, (e: Error) => e);
+  assert.equal(err!.message, original);
+});
+
+test('a launch that works is not touched at all', async () => {
+  const browser = { marker: true };
+  assert.equal(await launchOrExplain({}, async () => browser, argv('new', 'x')), browser);
 });
