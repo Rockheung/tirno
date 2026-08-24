@@ -33,7 +33,39 @@ interface CacheEntry {
 interface ControlStatus {
   scope: string;
   buildId?: string;
-  layers?: Array<{ name?: string; mount?: string; enabled?: boolean; served?: number; paths?: number }>;
+  /**
+   * 이 빌드는 자기가 낸 응답에 `Server-Timing: tirno-sw` 를 반드시 찍는다.
+   * 그래서 **스탬프가 없다는 것이 원본이라는 증거**가 된다. 이 키가 없는 옛 빌드에서는
+   * 그 추론이 성립하지 않으므로 판정이 `unknown` 으로 떨어진다 (#132).
+   */
+  stamps?: boolean;
+  layers?: Array<{
+    name?: string; mount?: string; enabled?: boolean; served?: number; paths?: number;
+    /** 이 접두사 아래의 navigate 요청은 목록에 없어도 이 레이어의 문서가 낸다. */
+    navigateFallback?: string;
+  }>;
+}
+
+/**
+ * 이 문서를 오버레이가 냈나, 원본이 냈나 — 그리고 그것을 무엇으로 알았나.
+ *
+ * `overlay` 와 `origin` 사이에 `unknown` 이 있다. 예전에는 없었고, 그래서
+ * **navigateFallback 이 덮은 하위 경로 문서가 origin 으로 오판됐다** (#132).
+ * 판정을 재fetch 로 했는데 그 재fetch 는 non-navigate 라, `request.mode === 'navigate'`
+ * 에만 응답하는 fallback 을 못 타고 헤더가 안 붙었기 때문이다. 로그인 리다이렉트가
+ * 하위 경로로 착지하는 흐름에서 흔히 걸린다.
+ *
+ * 모르는 것을 origin 이라고 말하는 것이 오판의 형태였으므로, 모르면 모른다고 한다.
+ */
+type Verdict = 'overlay' | 'origin' | 'unknown';
+
+interface ServedBy {
+  verdict: Verdict;
+  /** 표시용 이름 — 오버레이면 `tirno-sw/<buildId>`. */
+  by: string | null;
+  layer: string | null;
+  /** 무엇을 보고 그렇게 판정했나. 출력에 그대로 싣는다. */
+  evidence: string;
 }
 
 interface SwReport {
@@ -41,19 +73,105 @@ interface SwReport {
   registrations: Registration[];
   caches: CacheEntry[];
   control: ControlStatus[];
-  servedBy: string | null;   // 현재 문서 응답의 x-served-by (오버레이면 tirno-sw/…, 원본이면 null)
-  servedLayer: string | null;
+  served: ServedBy;
+}
+
+/**
+ * 페이지에서 걷어오는 **사실**. 판정은 여기 없다 — `decideServedBy` 가 노드 쪽에서
+ * 한다. 판정을 페이지 안에 두면 브라우저를 띄우지 않고는 검증할 수 없고, 이 판정은
+ * 한 번 틀렸던 자리다 (#132).
+ */
+export interface ServedEvidence {
+  pathname: string;
+  /** navigation timing 에 실린 `Server-Timing: tirno-sw` 의 desc (= buildId). */
+  stamp: string | null;
+  /** 문서 URL 재fetch 의 `x-served-by` — non-navigate 라, 없다고 원본인 것은 아니다. */
+  refetchServedBy: string | null;
+  refetchLayer: string | null;
+  cachedPaths: string[];
+  control: ControlStatus[];
+  hasRegistration: boolean;
+}
+
+/** `/app` 은 `/app` 과 `/app/…` 을 덮고 `/application` 은 덮지 않는다 — sw-template 과 같은 규칙. */
+function underPrefix(pathname: string, prefix: string): boolean {
+  if (pathname === prefix) return true;
+  return pathname.startsWith(prefix.endsWith('/') ? prefix : prefix + '/');
+}
+
+/**
+ * 이 문서를 오버레이가 냈나.
+ *
+ * 예전에는 재fetch 의 `x-served-by` 하나로 판정했고, 그 재fetch 는 non-navigate 였다.
+ * navigateFallback 은 `request.mode === 'navigate'` 인 요청에만 응답하므로, **fallback 이
+ * 덮은 하위 경로 문서는 헤더가 없어 origin 으로 오판됐다** (#132). 로그인 리다이렉트가
+ * 하위 경로로 착지하는 흐름에서 흔히 걸린다.
+ *
+ * 근거를 센 것부터 쌓는다:
+ *
+ * 1. **Server-Timing** — 재fetch 가 아니라 이 문서가 실제로 받은 그 응답. 확정.
+ * 2. **재fetch 헤더** — 있으면 확정. 없는 것은 아무것도 확정하지 않는다.
+ * 3. 그 다음은 "오버레이가 냈을 수 있나" 를 **배제**할 수 있을 때만 origin 이라고 한다.
+ *    배제하지 못하면 `unknown` 이다 — 모르는 것을 origin 이라고 말하는 것이 오판의
+ *    형태였다.
+ */
+export function decideServedBy(e: ServedEvidence): ServedBy {
+  if (!e.hasRegistration) {
+    return { verdict: 'origin', by: null, layer: null, evidence: 'no service worker is registered for this origin' };
+  }
+  if (e.stamp) {
+    return {
+      verdict: 'overlay',
+      by: `tirno-sw/${e.stamp}`,
+      layer: e.refetchLayer,
+      evidence: 'Server-Timing on this document’s own response',
+    };
+  }
+  if (e.refetchServedBy) {
+    return {
+      verdict: 'overlay',
+      by: e.refetchServedBy,
+      layer: e.refetchLayer,
+      evidence: 're-fetch of the document URL',
+    };
+  }
+  if (e.control.length === 0) {
+    // tirno sw-proxy 가 아닌 워커다. 오버레이라는 개념 자체가 없다.
+    return { verdict: 'origin', by: null, layer: null, evidence: 'no tirno sw-proxy controls this document' };
+  }
+  if (e.control.every(c => c.stamps === true)) {
+    // 이 빌드는 자기가 낸 문서에 반드시 스탬프를 찍는다. 없다 = 이 빌드가 낸 것이 아니다.
+    return { verdict: 'origin', by: null, layer: null, evidence: 'this sw-proxy build stamps Server-Timing; this document carries none' };
+  }
+  if (e.cachedPaths.includes(e.pathname)) {
+    // 정확경로로 캐시에 있었다면 non-navigate 재fetch 로도 잡혔어야 한다.
+    return { verdict: 'origin', by: null, layer: null, evidence: 're-fetch, and this exact path is in Cache Storage' };
+  }
+  const declared = e.control.flatMap(c =>
+    (c.layers ?? []).filter(l => l.enabled !== false && l.navigateFallback).map(l => l.navigateFallback!));
+  if (declared.length > 0 && !declared.some(prefix => underPrefix(e.pathname, prefix))) {
+    // 이 워커가 자기 fallback 접두사를 밝혔고, 그중 어느 것도 이 경로를 안 덮는다.
+    return { verdict: 'origin', by: null, layer: null, evidence: 'no declared navigateFallback prefix covers this path' };
+  }
+  return {
+    verdict: 'unknown',
+    by: null,
+    layer: null,
+    evidence: 'older sw-proxy build: a non-navigate re-fetch cannot see a navigateFallback response',
+  };
 }
 
 async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise<SwReport> {
-  return await page.evaluate(async () => {
+  const raw = await page.evaluate(async () => {
     const out = {
       url: location.origin + location.pathname,
+      pathname: location.pathname,
       registrations: [] as Registration[],
       caches: [] as CacheEntry[],
       control: [] as ControlStatus[],
-      servedBy: null as string | null,
-      servedLayer: null as string | null,
+      stamp: null as string | null,
+      refetchServedBy: null as string | null,
+      refetchLayer: null as string | null,
     };
 
     if ('serviceWorker' in navigator) {
@@ -81,16 +199,6 @@ async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise
       }
     }
 
-    // 이 문서가 오버레이에서 왔나 원본에서 왔나. SW 는 자기가 낸 응답에만
-    // x-served-by/x-tirno-layer 를 붙이므로(sw-template fromLayer), 문서 URL 을
-    // 다시 받아 헤더를 본다. navigateFallback 없이 하위 경로로 착지하면 SW 가
-    // 컨트롤해도 문서는 원본이라 이 헤더가 없다 — CONTROLS=yes 만으로는 못 가른다.
-    try {
-      const res = await fetch(location.href, { cache: 'no-store' });
-      out.servedBy = res.headers.get('x-served-by');
-      out.servedLayer = res.headers.get('x-tirno-layer');
-    } catch { /* 못 받아도 판정만 빈다 */ }
-
     if ('caches' in self) {
       for (const name of await caches.keys()) {
         const c = await caches.open(name);
@@ -99,8 +207,39 @@ async function collect(page: Awaited<ReturnType<typeof getActivePage>>): Promise
       }
     }
 
+    // 이 문서가 실제로 받은 응답. 문서 응답의 헤더는 JS 로 못 읽지만 Server-Timing 은
+    // navigation timing 엔트리에 그대로 실린다(same-origin) — 재fetch 가 필요 없다.
+    const nav = performance.getEntriesByType('navigation')[0] as
+      (PerformanceEntry & { serverTiming?: ReadonlyArray<{ name: string; description: string }> }) | undefined;
+    out.stamp = nav?.serverTiming?.find(t => t.name === 'tirno-sw')?.description ?? null;
+
+    // 스탬프를 안 찍는 옛 워커를 위한 2차 근거. non-navigate 라 **없다고 원본인 것은 아니다.**
+    if (!out.stamp && out.registrations.length > 0) {
+      try {
+        const res = await fetch(location.href, { cache: 'no-store' });
+        out.refetchServedBy = res.headers.get('x-served-by');
+        out.refetchLayer = res.headers.get('x-tirno-layer');
+      } catch { /* 못 받아도 판정이 unknown 으로 떨어질 뿐이다 */ }
+    }
+
     return out;
-  }) as SwReport;
+  });
+
+  return {
+    url: raw.url,
+    registrations: raw.registrations,
+    caches: raw.caches,
+    control: raw.control,
+    served: decideServedBy({
+      pathname: raw.pathname,
+      stamp: raw.stamp,
+      refetchServedBy: raw.refetchServedBy,
+      refetchLayer: raw.refetchLayer,
+      cachedPaths: raw.caches.flatMap(c => c.paths),
+      control: raw.control,
+      hasRegistration: raw.registrations.length > 0,
+    }),
+  };
 }
 
 function render(report: SwReport, showPaths: boolean): void {
@@ -118,12 +257,22 @@ function render(report: SwReport, showPaths: boolean): void {
     ])));
 
     // 이 문서가 실제로 오버레이 빌드냐 원본이냐 — CONTROLS=yes 여도 원본일 수 있다.
-    const served = report.servedBy
-      ? `${report.servedBy}${report.servedLayer ? `  (layer ${report.servedLayer})` : ''}  ← 오버레이`
-      : 'origin (원본 — 오버레이가 이 문서를 내지 않았다)';
+    const { verdict, by, layer, evidence } = report.served;
+    const served =
+      verdict === 'overlay' ? `${by}${layer ? `  (layer ${layer})` : ''}  ← 오버레이`
+      : verdict === 'origin' ? 'origin (원본 — 오버레이가 이 문서를 내지 않았다)'
+      : 'unknown (판정 불가 — 아래)';
     console.log(`
 Current document: ${report.url}`);
     console.log(`Served by       : ${served}`);
+    console.log(`Evidence        : ${evidence}`);
+    if (verdict === 'unknown') {
+      // 모르는 것을 origin 이라고 말하던 자리다 (#132). 무엇을 더 보면 알 수 있는지까지 적는다.
+      info('  이 문서는 navigate 로 로드됐는데 그 경로가 Cache Storage 에 없다 — navigateFallback 이');
+      info('  덮었을 수 있고, non-navigate 재fetch 로는 그것이 안 보인다. 로드된 엔트리로 확인해라:');
+      info(`    tirno eval '[...document.scripts].map(s => s.src)'`);
+      info('  워커를 다시 생성하면(sw-override generate) Server-Timing 이 붙어 이 자리가 확정된다.');
+    }
   }
 
   for (const c of report.control) {
@@ -133,9 +282,12 @@ Current document: ${report.url}`);
       info('  no layers reported');
       continue;
     }
-    console.log(formatTable(['LAYER', 'MOUNT', 'ENABLED', 'FETCHED', 'PATHS'], layers.map(l => [
+    // NAVIGATE 는 "목록에 없는 하위 경로도 이 레이어가 낸다" 는 뜻이다. 이것이 안 보이면
+    // Served by 가 왜 unknown 인지 읽을 수 없다 (#132).
+    console.log(formatTable(['LAYER', 'MOUNT', 'NAVIGATE', 'ENABLED', 'FETCHED', 'PATHS'], layers.map(l => [
       l.name ?? '-',
       l.mount ?? '-',
+      l.navigateFallback ? `${l.navigateFallback}/*` : '-',
       l.enabled === false ? 'no' : 'yes',
       String(l.served ?? '-'),
       String(l.paths ?? '-'),

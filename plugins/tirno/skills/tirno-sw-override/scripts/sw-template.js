@@ -94,9 +94,15 @@ async function control(url) {
     return json({
       buildId: CONFIG.buildId, origin: self.location.origin, scope: CONFIG.scope,
       generatedAt: CONFIG.generatedAt,
+      // 이 빌드는 자기가 낸 응답에 Server-Timing 을 반드시 찍는다. 그것을 밝혀두면
+      // `sw status` 가 **스탬프의 부재를 원본의 증거로** 쓸 수 있다 (#132).
+      stamps: true,
       layers: state.layers.map(l => ({
         id: l.id, name: l.name, mount: l.mount, from: l.from,
         paths: l.paths.length, enabled: l.enabled, served: l.served,
+        // 목록에 없는 하위 경로를 이 레이어가 낸다는 사실은 status 에도 있어야 한다 —
+        // 없으면 `sw status` 가 왜 그 문서를 판정 못 하는지 읽을 수가 없다 (#132).
+        ...(l.navigateFallback ? { navigateFallback: l.navigateFallback } : {}),
       })),
     });
   }
@@ -136,6 +142,13 @@ async function fromLayer(layer, pathname, request) {
   const h = new Headers(hit.headers);
   h.set('x-served-by', 'tirno-sw/' + CONFIG.buildId);
   h.set('x-tirno-layer', layer.name);
+  // 문서 응답의 헤더는 JS 에서 못 읽는다 — 그래서 `sw status` 는 문서 URL 을 다시
+  // 받아 x-served-by 를 봤고, 그 재fetch 는 non-navigate 라 navigateFallback 이 덮은
+  // 문서를 원본으로 오판했다 (#132).
+  //
+  // Server-Timing 은 다르다. Navigation Timing 엔트리에 그대로 실리므로(same-origin),
+  // **재fetch 없이 이 문서가 받은 바로 그 응답**을 읽을 수 있다. 실측으로 확인했다.
+  h.set('Server-Timing', 'tirno-sw;desc="' + CONFIG.buildId + '"');
   return new Response(hit.body, { status: 200, headers: h });
 }
 
