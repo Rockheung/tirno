@@ -228,7 +228,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | 명령 | 설명 |
 |---|---|
 | `screenshot [--full] [--out path]` | 스크린샷 |
-| `snapshot [--verbose] [--no-cache]` | a11y 트리 + visual cache 적재. 기본은 **조작 가능한 것 위주**로 접는다(아래) |
+| `snapshot [--verbose] [--no-cache]` | a11y 트리 + visual cache 적재. 기본은 **조작 가능한 것 위주**로 접는다(아래). 끝줄에 **세대**를 밝힌다 |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>] [--no-reload]` | reload 하고 networkidle2 까지의 요청 캡처. **`--no-reload` 는 리로드하지 않는다** — 페이지 상태를 잃지 않는 대신, 그 창(`--ms`) 동안 페이지가 스스로 내는 요청만 잡는다 |
 | `net ls [--filter <p>] [--type <t>]` | **이미 받아둔** 리소스 목록. reload 안 한다 |
@@ -283,6 +283,43 @@ FROM 열이 그 바이트의 출처다. `cache` 는 브라우저가 실제로 �
 
 `--limit`(기본 200) 을 넘으면 **한 개도 쓰지 않고 멈춘다.** 패턴이 넓은 줄 모르고 부른 것과
 정말 그만큼 원한 것은 다르고, 그 차이는 디렉터리에 2000개가 쌓인 뒤에는 되돌리기 어렵다.
+
+#### @ref 는 한 스냅샷 안에서만 안전하다 — 세대
+
+`snapshot` 은 매번 **세대(generation)** 를 올리고 끝줄에 그것을 밝힌다. 번호가 어느
+스냅샷의 것인지가 사용자에게 안 보이는 것이 문제의 절반이었다.
+
+```
+@7      link "Learn more"
+→ generation 3 — these refs describe this snapshot only. "tirno click @v3:N" pins it.
+```
+
+`click`·`fill`·`hover` 는 `@N` 을 쓰기 전에 두 가지를 본다:
+
+| 검사 | 무엇을 잡나 |
+|---|---|
+| `loaderId` 비교 | `nav`·`reload` — 문서가 다시 로드되면 바뀐다 |
+| 요소의 a11y 역할·이름 비교 | 같은 문서 안에서 DOM 이 갈아치워진 경우(SPA 라우팅) |
+
+**둘 다 필요하다.** SPA 라우팅은 loaderId 를 안 바꾸고, 반대로 `DOM.describeNode` 는
+**분리된 노드에도 성공한다** — 그래서 예전에는 클릭이 "성공" 하고 아무 일도 안 일어났다.
+a11y 쪽은 같은 상황에서 role 이 `none` 으로 무너지므로, 그것이 신호가 된다.
+
+```
+$ tirno click @7
+✗ Refusing @7: @7 was button "click me", and that node is now (nothing) — the page
+  changed under the snapshot. Run "tirno snapshot" and use the refs it prints.
+```
+
+`@v3:7` 로 세대를 못 박으면 CDP 를 붙이기도 전에 거부한다. `@7` 도 위 두 검사는 똑같이
+받는다 — 세대 표기는 검사를 **더** 하는 수단이지, 검사가 걸리는 유일한 조건이 아니다.
+문서와 스킬에 적힌 `@7` 이 갑자기 틀린 문법이 되지 않는 이유이기도 하다.
+
+라벨이 정상적으로 바뀌는 자리(카운터 버튼 등)에서는 `--stale-ok` 로 진행할 수 있다.
+거부 메시지가 "무엇이 무엇으로 바뀌었는지" 를 둘 다 적는 것은 그 판단을 바로 하라는 뜻이다.
+
+이 규율은 새로 만든 것이 아니다 — `drift` 는 선언한 chrome flag 와 실제가 다르면 exit 1
+이고, 소유권 판정은 셋이 안 맞으면 붙지도 죽이지도 않는다. 그 규율이 ref 에만 빠져 있었다.
 
 #### net export — HAR
 
@@ -339,7 +376,7 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 ### 입력
 | 명령 | 설명 |
 |---|---|
-| `click <selector\|@N>` | 클릭 |
+| `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. **낡은 ref 는 거부한다**(아래) |
 | `fill <selector\|@N> <value>` | input clear + type |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N>` | 키보드/마우스 |
