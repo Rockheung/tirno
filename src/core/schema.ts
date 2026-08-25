@@ -111,6 +111,16 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'headers rm':         { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'headers ls':         { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
 
+  // ---- 요청 가로채기 (상주 워커)
+  'intercept block':  { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
+  'intercept mock':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
+  'intercept ls':     { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  // `headers rm` 과 같은 성격이다 — 규칙은 다시 걸면 그만이고, 잃어서 아픈 산출물이 아니다.
+  'intercept rm':     { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'intercept start':  { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'intercept stop':   { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'intercept status': { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
+
   // ---- service workers
   'sw status':          { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
 

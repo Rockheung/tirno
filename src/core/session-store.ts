@@ -26,6 +26,9 @@ export function defaultEmulation(): EmulationState {
   return { viewport: { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false } };
 }
 
+/** 실제 정의는 core/intercept-store.ts — 여기서는 메타의 모양만 안다. */
+import type { InterceptRule } from './intercept-store.js';
+
 export interface SessionMetadata {
   name: string;
   pid: number;
@@ -68,6 +71,12 @@ export interface SessionMetadata {
    * begin" once the flow navigates. The CLI keeps that here instead.
    */
   recording?: { startUrl: string; startedAt: string };
+  /**
+   * 요청 가로채기 규칙 (차단·모킹·호스트별 헤더). `extraHeaders` 와 달리 connect 마다
+   * 재적용하는 것으로는 안 된다 — 요청마다 응답을 보내야 하므로 상주 워커가 필요하고,
+   * 규칙이 여기 사는 이유는 그 워커가 죽어도 규칙은 남아야 하기 때문이다 (#122).
+   */
+  intercept?: InterceptRule[];
 }
 
 function sessionsRoot(): string {
@@ -85,6 +94,18 @@ function ensureDirs(): void {
 
 function sessionPath(name: string): string {
   return path.join(sessionsRoot(), `${name}.json`);
+}
+
+/**
+ * 세션 메타 파일의 경로.
+ *
+ * intercept 워커는 이 파일을 **직접 읽는다** — 규칙이 여기 살고, 워커는 mtime 이 바뀌면
+ * 다시 읽어서 규칙 추가에 재기동이 필요 없게 한다 (#122). 그러려면 경로가 밖으로
+ * 나가야 하는데, 저장소 밖에서 `~/.tirno/sessions/<name>.json` 을 다시 조립하면
+ * `TIRNO_DIR` 격리가 그 자리에서 깨진다.
+ */
+export function sessionFile(name: string): string {
+  return sessionPath(name);
 }
 
 export function profileDir(name: string): string {
