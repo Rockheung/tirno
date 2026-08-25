@@ -1,6 +1,6 @@
 # tirno
 
-> raw CDP 위의 다중 세션 브라우저 자동화 CLI 를 **쓰기 위한** 스킬 넷.
+> raw CDP 위의 다중 세션 브라우저 자동화 CLI 를 **쓰기 위한** 스킬 다섯.
 > 도구 자체는 [github.com/Rockheung/tirno](https://github.com/Rockheung/tirno) 에서 받는다.
 
 ```bash
@@ -16,6 +16,7 @@ claude plugin install tirno@tirno
 | `tirno-runbook` | 작업 절차. **조작했다고 됐다고 하지 않는다** — 페이지에서 다시 읽어 확인한 뒤에 됐다고 한다 |
 | `tirno-mcp` | chrome-devtools-mcp 의 tool 을 tirno 명령으로 옮기는 대응표 |
 | `tirno-sw-override` | 배포 전 빌드를 진짜 origin 위에 얹는 서비스워커 CDN 프록시. 생성기가 `skills/tirno-sw-override/scripts/` 에 들어 있다 |
+| `tirno-origin-relay` | 서비스워커 없이 host-resolver 상주로 로컬 빌드를 얹고 목록 밖은 origin 으로 릴레이하는 fallback 프록시. 지연 등록 SW·로그인 뒤 화면용. 생성기는 `tirno-sw-override` 것을 공유 |
 
 ## 먼저 필요한 것
 

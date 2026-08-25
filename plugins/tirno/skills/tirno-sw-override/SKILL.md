@@ -1,6 +1,6 @@
 ---
 name: tirno-sw-override
-description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든다 — 서비스워커를 그 origin 에 한 번 심는 CDN 프록시. 배포 전 빌드를 실제 사이트에서 확인, 스테이징 없이 검증, 로컬 dist 를 실제 도메인으로. 목록에 없는 경로는 손대지 않아 API·인증·쿠키는 진짜 서버로 간다. "배포 안 하고 실제 사이트에서 확인" · "이 파일만 내 빌드로" · "CDN 올리기 전에" 류. **새로고침 후에도 유지돼야 할 때만 쓴다** — 한 번만 보면 되면 tirno eval 로 fetch 를 패치하는 게 훨씬 싸다.
+description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든다 — 서비스워커를 그 origin 에 한 번 심는 CDN 프록시. 배포 전 빌드를 실제 사이트에서 확인, 스테이징 없이 검증, 로컬 dist 를 실제 도메인으로. 목록에 없는 경로는 손대지 않아 API·인증·쿠키는 진짜 서버로 간다. "배포 안 하고 실제 사이트에서 확인" · "이 파일만 내 빌드로" · "CDN 올리기 전에" 류. **새로고침 후에도 유지돼야 할 때만 쓴다** — 한 번만 보면 되면 tirno eval 로 fetch 를 패치하는 게 훨씬 싸다. 앱이 자기 서비스워커를 지연 등록하거나(미리보기·에디터 진입 시) 로그인 뒤 화면이 대상이면 이 스킬로는 안 된다 — host-resolver 를 상주시키는 tirno-origin-relay 를 쓴다.
 ---
 
 # origin 의 응답을 서비스워커가 내게 하기
@@ -89,8 +89,9 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 }
 ```
 
-`"passthrough": true` 를 더하면 목록 밖 요청을 진짜 origin 으로 릴레이한다 — host-resolver 를
-세션 내내 켜 둬야 하는 지연 등록 워커용이다(아래 "지연 등록 워커" 절). 기본값은 꺼짐.
+`mounts.json` 의 `"passthrough": true` 는 이 스킬이 아니라 [[tirno-origin-relay]] 가 쓰는
+플래그다 — 목록 밖을 진짜 origin 으로 릴레이해 host-resolver 를 세션 내내 상주시킨다. 지연 등록
+워커·로그인 뒤 화면이 대상이면 그쪽이다. 이 스킬(SW 오버레이)은 켜지 않는다.
 
 ### 레이어 — 위에 있는 것이 이긴다
 
@@ -258,71 +259,11 @@ getRegistrations → [{scope:/, __tirno-sw.js, activated}, {scope:/app-scope/, a
 개발 버전이 원본으로 갈린다** — "오래 두면" 이 아니라 "쓰는 순간" 이다(실측). 미리보기 iframe 처럼
 그 scope 를 계속 드나드는 화면이 정확히 이 경우다.
 
-**그래서 지연 등록 워커는 선등록으로 못 지킨다.** 앱이 나중에(에디터·미리보기 진입 시) 스스로
+**그래서 지연 등록 워커는 이 방식으로 못 지킨다.** 앱이 나중에(에디터·미리보기 진입 시) 스스로
 register 하는 워커는, 부트에서 미리 심어 둬도 진짜 origin 복귀 후 첫 navigation 에서 갈린다.
-이 부류는 아래 패스스루가 답이다.
-
-### 지연 등록 워커 — host-resolver 상주 + 패스스루
-
-navigation 마다 갈리는 걸 막는 유일한 길은 **host-resolver 를 세션 내내 켜 두는 것**이다.
-그러면 update 체크의 스크립트 재요청도 계속 로컬을 받아 개발 버전이 유지된다. 문제는
-host-resolver 를 켜 두면 목록 밖 요청(로그인·API)이 전부 404 로 죽는 것이었다.
-
-`mounts.json` 에 `"passthrough": true` 를 켜면 목록 밖 요청을 **진짜 origin 으로 릴레이**한다.
-host-resolver 는 크롬 전용이라 이 node 서버는 OS DNS 로 진짜 origin 에 닿는다 — 자기 순환이 없다.
-
-```json
-{ "origin": "https://app.example.com", "scope": "/", "passthrough": true, "mounts": [ … ] }
-```
-
-그러면 부트 뒤 `restart` 로 host-resolver 를 떼지 **않고** 세션 내내 켜 둔다. 앱이 지연 register
-하는 워커도 계속 로컬을 받고, 로그인·API 는 릴레이로 산다.
-
-**이 모드는 sw-proxy 커널(서비스워커)을 쓰지 않는다.** 커널 SW 의 존재 이유가 host-resolver 를
-뗀 진짜 origin 에서도 로컬을 유지하는 것인데, host-resolver 를 안 떼면 모든 요청이 이미 로컬
-서버로 오므로 SW 가 낼 것이 없다 — 서버가 직접 낸다. 그래서 이 모드에선 **커널 굽기·register·
-restart 를 생략**한다. 성격이 SW 오버레이가 아니라 "선택적 로컬 오버라이드가 붙은 필터 릴레이
-프록시" 다. (앱 자신의 워커는 여전히 앱이 register 하고, host-resolver 덕에 그게 로컬 버전인
-것뿐이다 — 그건 앱의 SW 지 이 도구의 것이 아니다.)
-
-절차는 짧다:
-
-```bash
-node .sw-proxy/serve.mjs &     # passthrough:true 로 구운 것
-tirno new preview --headless -- \
-  --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" --ignore-certificate-errors
-tirno nav https://app.example.com/…       # 로그인·API 는 릴레이로 살아 있다
-# restart 없음 — host-resolver 를 그대로 둔다
-```
-
-실측(로컬/릴레이 공존):
-```
-목록 안  /app                   → 로컬        (200)
-하위경로 /app/library/my (navigate) → 로컬 fallback   (navigateFallback 접두사 매칭)
-하위경로 /app/chunk.js  (자산)      → 진짜 origin 릴레이 (navigate 아님 — 위장 안 함)
-목록 밖  /  (Host: origin)      → 진짜 origin  (릴레이, serve.log "→ GET / (relay)")
-```
-
-**SPA 하위 경로는 `navigateFallback` 이 서버에서 잡는다.** 패스스루는 목록 밖을 릴레이하므로,
-그냥 두면 `/app/library/my` 같은 하위 경로(로그인 리다이렉트가 착지하는 자리)가 배포본 문서로
-샌다. mounts 에 `"navigateFallback": "/app"` 을 주면 그 접두사 아래 **navigate 요청**은 릴레이
-대신 로컬 문서를 낸다. 자산 요청은 이 규칙을 안 타므로(없는 청크가 `200 text/html` 로 위장되는
-것을 막는다) 여전히 릴레이·404 로 간다.
-
-**이 모드엔 확인 창도 `tirno sw status` 도 없다.** SW 가 없으니 당연하다 — 등록 목록이 비어도
-고장이 아니다. "지금 무엇이 로컬로 나가고 무엇이 릴레이되나" 는 **`serve.log` 가 유일한 창**이다
-(`200 <경로>` = 로컬, `→ <경로> (relay)` = origin).
-
-**대가 — 옵트인인 이유.**
-- "목록 밖은 손대지 않는다" 규율이 깨진다. 전 트래픽이 로컬 노드 서버를 경유한다.
-- `--ignore-certificate-errors` 를 세션 내내 켜 둬야 해서, 그 세션에서 진짜 origin 의 인증서
-  검증이 무력화된다.
-- 쿠키·리다이렉트·스트리밍 릴레이가 하나라도 어긋나면 "내 빌드 문제인지 프록시 문제인지"
-  구분이 안 되는 오진 지점이 생긴다.
-- **WebSocket upgrade 는 릴레이하지 않는다.** WS 를 쓰는 앱이면 그 연결이 조용히 끊긴다.
-
-그래서 기본값이 아니다. 부트 때 등록되는 워커라면 위의 선등록으로 충분하고, 패스스루는
-지연 등록 워커처럼 host-resolver 상주가 꼭 필요한 경우에만 켠다.
+이 부류는 서비스워커로는 원리적으로 못 잡으므로 **host-resolver 를 세션 내내 상주**시켜야 하고,
+그건 이 스킬이 아니라 [[tirno-origin-relay]] 다 — host-resolver 로 크롬을 로컬 서버로 돌리고,
+그 서버가 목록 밖을 진짜 origin 으로 릴레이하는 fallback 프록시다(서비스워커를 안 쓴다).
 
 ### 4. 확인 · 해제
 
