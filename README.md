@@ -70,8 +70,8 @@ claude plugin marketplace add Rockheung/tirno
 claude plugin install tirno@tirno
 ```
 
-넷이 들어온다 — `tirno`(명령 레퍼런스) · `tirno-runbook`(작업 절차) ·
-`tirno-mcp`(chrome-devtools-mcp 대응) · `tirno-sw-override`(배포 전 빌드를 진짜 origin 에 얹기).
+다섯이 들어온다 — `tirno`(명령 레퍼런스) · `tirno-runbook`(작업 절차) ·
+`tirno-mcp`(chrome-devtools-mcp 대응) · `tirno-sw-override`(배포 전 빌드를 진짜 origin 에 얹기) · `tirno-origin-relay`(서비스워커 없이 host-resolver 상주 + origin fallback 릴레이 — 지연 등록 SW·로그인 뒤 화면용).
 
 갱신은 `tirno update`, 또는 `claude plugin marketplace update tirno && claude plugin update tirno`.
 마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.

@@ -8,7 +8,7 @@
     {
       "name": "tirno",
       "source": "./plugins/tirno",
-      "description": "raw CDP 위의 다중 세션 브라우저 자동화 CLI 를 쓰기 위한 스킬 넷. 명령 레퍼런스(tirno), 작업 절차(tirno-runbook — 기동→대상 파악→조작→결과 검증→정리와 막혔을 때의 진단), chrome-devtools-mcp 대응표(tirno-mcp), 그리고 진짜 origin 위에 로컬 빌드를 얹는 서비스워커 CDN 프록시(tirno-sw-override). 도구 자체는 github.com/Rockheung/tirno 에서 받는다."
+      "description": "raw CDP 위의 다중 세션 브라우저 자동화 CLI 를 쓰기 위한 스킬 다섯. 명령 레퍼런스(tirno), 작업 절차(tirno-runbook — 기동→대상 파악→조작→결과 검증→정리와 막혔을 때의 진단), chrome-devtools-mcp 대응표(tirno-mcp), 진짜 origin 위에 로컬 빌드를 얹는 서비스워커 CDN 프록시(tirno-sw-override), 그리고 서비스워커 없이 host-resolver 상주로 로컬을 얹고 목록 밖은 origin 으로 릴레이하는 fallback 프록시(tirno-origin-relay). 도구 자체는 github.com/Rockheung/tirno 에서 받는다."
     }
   ]
 }
