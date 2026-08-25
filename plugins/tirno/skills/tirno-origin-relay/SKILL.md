@@ -71,18 +71,25 @@ node scripts/generate.mjs mounts.json --out .relay
 ## 심기 — restart 가 없다
 
 ```bash
-node .sw-proxy/serve.mjs &
-tirno new preview --headless -- \
+node .relay/serve.mjs &     # --out .relay 로 구운 것
+tirno new preview https://app.example.com/<진입경로> -- \
   --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" --ignore-certificate-errors
-tirno nav https://app.example.com/…       # 로그인·API 는 릴레이로 살아 있다
-# restart 없음 — host-resolver 를 그대로 둔다
+# restart 없음 — host-resolver 를 그대로 둔다. 로그인·API 는 릴레이로 살아 있다.
 ```
 
 SW 오버레이의 "크롬 두 번 뜨고 restart 로 진짜 origin 복귀" 단계가 통째로 없다. host-resolver 를
 그대로 두는 것이 이 모드의 핵심이다.
 
-**`--ephemeral` 을 쓰지 마라** — 커널 register 는 없지만 앱이 심은 워커·로그인 쿠키가 프로필에
-남아야 한다.
+**`--headless` 를 쓰지 마라.** SW 오버레이에서 headless 가 성립한 건 그게 부트스트랩 전용이고
+뒤따르는 `restart` 가 창을 띄웠기 때문이다. 이 모드엔 그 restart 가 없어 창이 끝까지 떠 있어야
+한다 — 대상이 "로그인 뒤 화면" 인데, 사용자가 그 창에서 직접 로그인할 자리가 필요하다.
+그래서 `new` 에 진입 URL 을 바로 주고 headed 로 띄운다.
+
+**`--ephemeral` 도 쓰지 마라** — 앱이 심은 워커·로그인 쿠키가 프로필에 남아야 한다.
+
+**로그인이 자동화(자격증명 주입)라면 clipboard 권한이 걸릴 수 있다.** 새 프로필엔 그 권한이
+없어 `navigator.clipboard.readText()` 가 프롬프트를 기다리며 매달린다(실측: 30초 타임아웃).
+`tirno permissions grant https://<host> clipboard-read clipboard-write` 로 먼저 준다.
 
 ## 무엇이 로컬이고 무엇이 릴레이인가
 
