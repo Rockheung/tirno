@@ -57,6 +57,9 @@ test('스킬이 부르는 스크립트가 플러그인에 실려 있다', () => 
   const gen = path.join(PLUGIN, 'tirno-sw-override', 'scripts', 'generate.mjs');
   assert.ok(fs.existsSync(gen), 'sw-proxy 생성기가 스킬 안에 없다');
   assert.ok(fs.existsSync(path.join(path.dirname(gen), 'sw-template.js')), 'sw-template 이 없다');
+  // tirno-origin-relay 는 자기 생성기를 갖는다 — sw-override 와 완전 독립이라야 한다.
+  assert.ok(fs.existsSync(path.join(PLUGIN, 'tirno-origin-relay', 'scripts', 'generate.mjs')),
+    'origin-relay 생성기가 스킬 안에 없다');
 });
 
 // 마켓플레이스가 가리키는 곳에 플러그인이 실제로 있어야 한다.
