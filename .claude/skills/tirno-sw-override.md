@@ -297,16 +297,29 @@ tirno nav https://app.example.com/…       # 로그인·API 는 릴레이로 �
 
 실측(로컬/릴레이 공존):
 ```
-목록 안  /local-doc            → 로컬        (200, x-served-by: tirno-sw)
-목록 밖  /  (Host: origin)     → 진짜 origin  (릴레이, serve.log "→ GET / (relay)")
+목록 안  /app                   → 로컬        (200)
+하위경로 /app/library/my (navigate) → 로컬 fallback   (navigateFallback 접두사 매칭)
+하위경로 /app/chunk.js  (자산)      → 진짜 origin 릴레이 (navigate 아님 — 위장 안 함)
+목록 밖  /  (Host: origin)      → 진짜 origin  (릴레이, serve.log "→ GET / (relay)")
 ```
+
+**SPA 하위 경로는 `navigateFallback` 이 서버에서 잡는다.** 패스스루는 목록 밖을 릴레이하므로,
+그냥 두면 `/app/library/my` 같은 하위 경로(로그인 리다이렉트가 착지하는 자리)가 배포본 문서로
+샌다. mounts 에 `"navigateFallback": "/app"` 을 주면 그 접두사 아래 **navigate 요청**은 릴레이
+대신 로컬 문서를 낸다. 자산 요청은 이 규칙을 안 타므로(없는 청크가 `200 text/html` 로 위장되는
+것을 막는다) 여전히 릴레이·404 로 간다.
+
+**이 모드엔 확인 창도 `tirno sw status` 도 없다.** SW 가 없으니 당연하다 — 등록 목록이 비어도
+고장이 아니다. "지금 무엇이 로컬로 나가고 무엇이 릴레이되나" 는 **`serve.log` 가 유일한 창**이다
+(`200 <경로>` = 로컬, `→ <경로> (relay)` = origin).
 
 **대가 — 옵트인인 이유.**
 - "목록 밖은 손대지 않는다" 규율이 깨진다. 전 트래픽이 로컬 노드 서버를 경유한다.
 - `--ignore-certificate-errors` 를 세션 내내 켜 둬야 해서, 그 세션에서 진짜 origin 의 인증서
   검증이 무력화된다.
-- 쿠키·리다이렉트·스트리밍·WebSocket 릴레이가 하나라도 어긋나면 "내 빌드 문제인지 프록시
-  문제인지" 구분이 안 되는 오진 지점이 생긴다.
+- 쿠키·리다이렉트·스트리밍 릴레이가 하나라도 어긋나면 "내 빌드 문제인지 프록시 문제인지"
+  구분이 안 되는 오진 지점이 생긴다.
+- **WebSocket upgrade 는 릴레이하지 않는다.** WS 를 쓰는 앱이면 그 연결이 조용히 끊긴다.
 
 그래서 기본값이 아니다. 부트 때 등록되는 워커라면 위의 선등록으로 충분하고, 패스스루는
 지연 등록 워커처럼 host-resolver 상주가 꼭 필요한 경우에만 켠다.
