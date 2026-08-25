@@ -89,6 +89,9 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 }
 ```
 
+`"passthrough": true` 를 더하면 목록 밖 요청을 진짜 origin 으로 릴레이한다 — host-resolver 를
+세션 내내 켜 둬야 하는 지연 등록 워커용이다(아래 "지연 등록 워커" 절). 기본값은 꺼짐.
+
 ### 레이어 — 위에 있는 것이 이긴다
 
 마운트는 **레이어**다. 경로가 겹치면 오류가 아니라 우선순위다 — 먼저 선언된 쪽이 낸다.
@@ -250,10 +253,63 @@ getRegistrations → [{scope:/, __tirno-sw.js, activated}, {scope:/app-scope/, a
 **scope 는 앱이 쓰는 그대로 맞춘다.** 앱 코드가 특정 scope 로 등록한다면 같은 scope 로 먼저
 등록해 선점하거나, 앱 문서를 로드해 앱이 스스로 등록하게 두되 그 스크립트 요청만 로컬이 받게 한다.
 
-**한계 — update 체크.** 브라우저는 24h·navigation 마다 SW 스크립트를 다시 받아 비교한다. 그때는
-진짜 origin 의 `/app-sw.js`(원본)와 대조되므로, 오래 두면 개발 버전이 원본으로 갈릴 수 있다
-(sw-proxy 커널도 같은 리스크). 짧은 QA 세션엔 문제없고, 길게는 그 URL 을 계속 로컬로 두거나
-update 를 막는다.
+**한계 — update 체크.** 브라우저는 navigation·24h 마다 SW 스크립트를 다시 받아 비교한다. 그때는
+진짜 origin 의 원본과 대조되므로, **그 워커의 scope 안 문서로 navigation 이 한 번만 일어나도
+개발 버전이 원본으로 갈린다** — "오래 두면" 이 아니라 "쓰는 순간" 이다(실측). 미리보기 iframe 처럼
+그 scope 를 계속 드나드는 화면이 정확히 이 경우다.
+
+**그래서 지연 등록 워커는 선등록으로 못 지킨다.** 앱이 나중에(에디터·미리보기 진입 시) 스스로
+register 하는 워커는, 부트에서 미리 심어 둬도 진짜 origin 복귀 후 첫 navigation 에서 갈린다.
+이 부류는 아래 패스스루가 답이다.
+
+### 지연 등록 워커 — host-resolver 상주 + 패스스루
+
+navigation 마다 갈리는 걸 막는 유일한 길은 **host-resolver 를 세션 내내 켜 두는 것**이다.
+그러면 update 체크의 스크립트 재요청도 계속 로컬을 받아 개발 버전이 유지된다. 문제는
+host-resolver 를 켜 두면 목록 밖 요청(로그인·API)이 전부 404 로 죽는 것이었다.
+
+`mounts.json` 에 `"passthrough": true` 를 켜면 목록 밖 요청을 **진짜 origin 으로 릴레이**한다.
+host-resolver 는 크롬 전용이라 이 node 서버는 OS DNS 로 진짜 origin 에 닿는다 — 자기 순환이 없다.
+
+```json
+{ "origin": "https://app.example.com", "scope": "/", "passthrough": true, "mounts": [ … ] }
+```
+
+그러면 부트 뒤 `restart` 로 host-resolver 를 떼지 **않고** 세션 내내 켜 둔다. 앱이 지연 register
+하는 워커도 계속 로컬을 받고, 로그인·API 는 릴레이로 산다.
+
+**이 모드는 sw-proxy 커널(서비스워커)을 쓰지 않는다.** 커널 SW 의 존재 이유가 host-resolver 를
+뗀 진짜 origin 에서도 로컬을 유지하는 것인데, host-resolver 를 안 떼면 모든 요청이 이미 로컬
+서버로 오므로 SW 가 낼 것이 없다 — 서버가 직접 낸다. 그래서 이 모드에선 **커널 굽기·register·
+restart 를 생략**한다. 성격이 SW 오버레이가 아니라 "선택적 로컬 오버라이드가 붙은 필터 릴레이
+프록시" 다. (앱 자신의 워커는 여전히 앱이 register 하고, host-resolver 덕에 그게 로컬 버전인
+것뿐이다 — 그건 앱의 SW 지 이 도구의 것이 아니다.)
+
+절차는 짧다:
+
+```bash
+node .sw-proxy/serve.mjs &     # passthrough:true 로 구운 것
+tirno new preview --headless -- \
+  --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" --ignore-certificate-errors
+tirno nav https://app.example.com/…       # 로그인·API 는 릴레이로 살아 있다
+# restart 없음 — host-resolver 를 그대로 둔다
+```
+
+실측(로컬/릴레이 공존):
+```
+목록 안  /local-doc            → 로컬        (200, x-served-by: tirno-sw)
+목록 밖  /  (Host: origin)     → 진짜 origin  (릴레이, serve.log "→ GET / (relay)")
+```
+
+**대가 — 옵트인인 이유.**
+- "목록 밖은 손대지 않는다" 규율이 깨진다. 전 트래픽이 로컬 노드 서버를 경유한다.
+- `--ignore-certificate-errors` 를 세션 내내 켜 둬야 해서, 그 세션에서 진짜 origin 의 인증서
+  검증이 무력화된다.
+- 쿠키·리다이렉트·스트리밍·WebSocket 릴레이가 하나라도 어긋나면 "내 빌드 문제인지 프록시
+  문제인지" 구분이 안 되는 오진 지점이 생긴다.
+
+그래서 기본값이 아니다. 부트 때 등록되는 워커라면 위의 선등록으로 충분하고, 패스스루는
+지연 등록 워커처럼 host-resolver 상주가 꼭 필요한 경우에만 켠다.
 
 ### 4. 확인 · 해제
 
