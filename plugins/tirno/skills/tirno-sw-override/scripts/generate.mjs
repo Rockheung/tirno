@@ -157,6 +157,15 @@ const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
 const LAYERS = ${JSON.stringify(Object.fromEntries(layers.map(l => [l.id,
   Object.fromEntries(l.paths.map(p => [p, layerFile.get(l.id + '\u0000' + p)]))])), null, 2)};
 
+// navigateFallback: SW 템플릿에만 있던 규칙을 서버에도 둔다. 패스스루 모드는 커널
+// SW 를 안 쓰므로, SPA 하위 경로 navigate 요청은 서버가 이 문서로 받아야 한다 —
+// 아니면 릴레이로 새서 배포본 문서를 받는다(로그인 리다이렉트가 하위 경로 착지).
+const FALLBACKS = ${JSON.stringify(layers
+  .filter(l => l.navigateFallback)
+  .map(l => ({ prefix: l.navigateFallback, file: layerFile.get(l.id + ' ' + l.paths[0]) })), null, 2)};
+const underPrefix = (pathname, prefix) =>
+  pathname === prefix || pathname.startsWith(prefix.endsWith('/') ? prefix : prefix + '/');
+
 // 워커가 자기 control 경로로 내는 스크립트다. 워커가 없으면 404 라서 창이 안 뜬다.
 const OVERLAY_TAG = ${JSON.stringify(overlayOn
   ? `<script src="${scope}__tirno/overlay.js" defer></script>`
@@ -193,9 +202,15 @@ https.createServer({
   const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
   const layer = new URL(req.url, 'https://x').searchParams.get('__tirno_layer');
   const boot = path.join(DIR, path.basename(p));          // 부트스트랩 산출물
-  const file = (layer && LAYERS[layer] && LAYERS[layer][p])
+  let file = (layer && LAYERS[layer] && LAYERS[layer][p])
     ?? MAP[p]
     ?? (fs.existsSync(boot) && fs.statSync(boot).isFile() ? boot : null);
+  // navigate 요청이 목록에 없고 navigateFallback 접두사 아래면 그 문서를 낸다.
+  // 자산은 이 규칙을 안 탄다 — 없는 청크가 200 text/html 로 위장되면 더 나쁘다.
+  if (!file && req.headers['sec-fetch-mode'] === 'navigate') {
+    const fb = FALLBACKS.find(f => underPrefix(p, f.prefix));
+    if (fb) file = fb.file;
+  }
   if (!file) {
     if (PASSTHROUGH) {
       const u = new URL(PASSTHROUGH);
