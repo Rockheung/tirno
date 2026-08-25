@@ -69,7 +69,7 @@ node bin/tirno.js kill test --clean
   그리고 앵커 브로커 (`anchor-store` · `inventory`(소유권 판정) · `devtools-port` · `gc` ·
   `drift` · `path-guard`). 브라우저 조달은 `chrome-finder`(어느 것을 쓰나) ·
   `provision`(없으면 받아온다) · `unzip`(zip 리더를 직접 든다 — `unzip` 을 부르면
-  그것이 곧 새 전제조건이다)
+  그것이 곧 새 전제조건이다) · `intercept-store`(가로채기 규칙과 그 판정)
 - `src/commands/` — CLI 명령. 파일명은 카테고리이지 명령 이름이 아니다 (`inspect.ts` 는
   screenshot/snapshot/console/network 를 등록한다 — `tirno inspect` 라는 명령은 없다)
 - `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash,
@@ -112,4 +112,4 @@ node bin/tirno.js kill test --clean
 `~/.tirno/metrics.jsonl` 의 옛 `llm.*` · `explore.*` 줄은 그대로 읽힌다. 집계에서
 빠질 뿐 `aggregate()` 가 깨지지 않는다.
 
-결과: 런타임 의존 **6개**, 엔드포인트 **81개**(2026-08-24 기준). 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).
+결과: 런타임 의존 **6개**, 엔드포인트 **88개**(2026-08-25 기준). 남은 최대는 lighthouse(21MB + @opentelemetry 49MB).

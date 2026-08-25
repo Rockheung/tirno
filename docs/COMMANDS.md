@@ -481,11 +481,59 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 | `permissions grant <origin> <permission...>` | origin 에 권한을 주고 세션에 기록. origin 은 `new URL(x).origin` 으로 정규화되므로 경로·쿼리를 붙여도 된다 |
 | `permissions revoke [origin]` | 한 origin, 또는 인자 없으면 전부 해제 |
 | `permissions ls [--json]` | 이 세션에 기록된 grant 목록 |
-| `headers set <name> <value>` | 모든 요청에 붙일 고정 헤더. 세션에 기록되고 connect 마다 재적용된다 |
+| `headers set <name> <value> [--host <glob>] [--url <glob>]` | 고정 헤더. 조건이 없으면 **모든 요청**(세션에 기록, connect 마다 재적용). 조건이 붙으면 **intercept 규칙**이 되고 데몬이 적용한다(아래) |
 | `headers rm [name]` | 헤더 하나, 인자 없으면 전부 |
 | `headers ls [--json]` | 이 세션의 고정 헤더 |
 
 `perm` 으로 줄여 쓸 수 있다.
+
+### 요청 가로채기 (intercept)
+
+| 명령 | 설명 |
+|---|---|
+| `intercept block [pattern] [--host <glob>]` | 걸리는 요청을 실패시킨다 |
+| `intercept mock [pattern] [--host <glob>] [--status <n>] [--body <s>\|--body-file <f>] [--content-type <t>]` | tirno 가 대신 답한다 |
+| `headers set <n> <v> --host <glob>` | 그 호스트에만 헤더를 붙인다 (여기서 만들고, 아래에서 보고 지운다) |
+| `intercept ls [--json]` | 규칙 + 히트 수. 데몬이 안 떠 있으면 경고한다 |
+| `intercept rm <id> \| --all` | 규칙 제거. 마지막 규칙이 사라지면 데몬도 멈춘다 |
+| `intercept start` · `stop` · `status` | 데몬 수명. `stop` 은 규칙을 지우지 않는다 |
+
+**왜 데몬인가.** `headers set` 은 `Network.setExtraHTTPHeaders` 라 **호스트 조건을 받지
+않는다.** 조건부로 붙이려면 요청마다 URL 을 보고 이어보내야 하고, 그것은 요청마다 응답을
+보내는 **상주 연결**을 요구한다 — tirno 는 명령마다 CDP 를 붙였다 끊으므로 CLI 한 방으로는
+안 된다. `screencast`·`trace` 와 같은 모양의 detached 워커를 둔다.
+
+규칙은 **세션 메타에 산다.** 데몬은 죽을 수 있고 재기동될 수 있는데, 규칙이 데몬 안에만
+있으면 그때마다 사라지고 `ls` 도 데몬이 떠 있을 때만 대답하게 된다. 워커는 세션 파일의
+mtime 을 보고 **바뀌면 다시 읽으므로**, 규칙을 더한다고 데몬을 재기동할 필요가 없다.
+
+규칙을 하나라도 더하면 데몬이 **자동으로 뜬다**. "규칙은 저장됐는데 아무 일도 안 일어난다"
+가 이 자리의 조용한 실패 형태이기 때문이다. `intercept ls` 는 데몬이 없으면 그 사실을
+경고로 낸다.
+
+#### header 는 block·mock 과 같은 층이 아니다
+
+헤더를 붙이는 것은 요청을 **끝내지 않는다.** 그래서 먼저 걸린 헤더 규칙이 뒤의 차단·모킹을
+가리면 안 된다 — 실측으로 밟았다: `headers set X --host localhost` 하나가 그 호스트의 모든
+요청을 먹어서, 나중에 건 mock 이 영영 안 걸렸다. 규칙은 늘었는데 아무 일도 안 일어나고
+이유는 안 보인다.
+
+지금은 **헤더를 전부 모으고**, 요청의 운명은 **처음 걸린 block/mock 하나**가 정한다.
+같은 헤더를 두 규칙이 쓰면 뒤가 이긴다.
+
+```bash
+tirno intercept block '/ads/'
+tirno intercept mock '/api/user' --status 503 --body '{"error":"down"}'
+tirno headers set X-Debug 1 --host 'api.example.com'
+tirno intercept ls        # ID · RULE · HITS
+```
+
+`status` 는 **본 요청 수와 걸린 수를 따로** 낸다. "규칙이 안 먹는다" 와 "그 요청이 안 왔다"
+는 다른 문제이고, 그 둘을 가르는 것은 이 두 숫자뿐이다.
+
+호스트 glob 은 **전체가 맞아야 한다** — `example.com` 이 `evil-example.com.attacker.net`
+에 걸리면 그것은 필터가 아니라 사고다. `*.example.com` 은 하위 도메인만이고 apex 는 안
+걸린다. URL glob 은 `net --filter` 와 같이 양끝이 열려 있다.
 
 `headers` 는 `Network.setExtraHTTPHeaders` 라 **전역**이다 — 특정 호스트만 필터하려면 Fetch
 인터셉트(상주 연결)가 필요해 지금은 지원하지 않는다. 헤더도 CDP 연결 수명에 묶여, permissions

@@ -17,6 +17,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 
 const TIRNO = path.join(import.meta.dirname, '..', 'bin', 'tirno.js');
@@ -41,6 +42,20 @@ const env = {
 };
 
 const HOME_TIRNO = path.join(os.homedir(), '.tirno');
+
+/** main() 은 동기라 이벤트 루프가 막힌다 — 기다림도 동기여야 한다. */
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** 픽스처 서버가 받은 요청. 파일은 append-only 라 truncate 로 구간을 나눈다. */
+function readSeen(file) {
+  let lines = [];
+  try {
+    lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  } catch { /* 아직 아무것도 안 왔다 */ }
+  return { paths: lines.map(l => l.path), headers: lines.map(l => l.xTirno) };
+}
 const results = [];
 
 function run(label, args, { timeout = 60_000, expectFail = false, expectMatch, known } = {}) {
@@ -702,6 +717,83 @@ function main() {
     run('eval (고정 포트 세션)', ['eval', '1+1', '-s', 'smokefixed']);
     run('kill (고정 포트 세션)', ['kill', 'smokefixed', '--clean']);
     results.push({ label: '메타 보존 검사', cmd: '-', exit: '-', ms: 0, ok: true, note: 'chrome 경로 미해결 — 건너뜀' });
+  }
+
+  // ── intercept — 차단·모킹·호스트별 헤더. **서버가 무엇을 못 받았는가**로 증명한다:
+  // 페이지 쪽만 보면 "차단됐다" 와 "원본이 원래 그렇게 답했다" 를 못 가른다.
+  const icDir = fs.mkdtempSync(path.join(OUT, 'intercept-'));
+  const icLog = path.join(icDir, 'requests.jsonl');
+  const icServer = spawn(process.execPath,
+    [path.join(import.meta.dirname, 'fixtures', 'intercept-server.mjs'), icDir],
+    { stdio: ['ignore', 'ignore', 'ignore'] });
+  try {
+    let port = null;
+    for (let i = 0; i < 100 && port === null; i++) {
+      try { port = Number(fs.readFileSync(path.join(icDir, 'port'), 'utf8')); } catch { sleepMs(50); }
+    }
+    check('intercept 픽스처 서버가 떴다', Number.isFinite(port) && port > 0, `port=${port}`);
+
+    if (port) {
+      const origin = `http://127.0.0.1:${port}`;
+      const IC = ['-s', 'icept'];
+      run('new (intercept 세션)', ['new', 'icept', `${origin}/`, '--ephemeral', ...LAUNCH]);
+      sleepMs(800);
+
+      // 기준선 — 규칙이 없으면 전부 원본으로 간다.
+      fs.writeFileSync(icLog, '');
+      run('reload (기준선)', ['reload', ...IC]);
+      sleepMs(800);
+      const before = readSeen(icLog);
+      check('규칙 없을 때는 전부 오리진에 닿는다',
+        before.paths.includes('/ads/banner.png') && before.paths.includes('/api/user'),
+        JSON.stringify(before.paths));
+
+      run('intercept block', ['intercept', 'block', '/ads/', ...IC], { expectMatch: /block url/ });
+      run('intercept mock', ['intercept', 'mock', '/api/user', '--status', '503', '--body', '{"from":"mock"}', ...IC]);
+      run('headers set --host (intercept 규칙이 된다)',
+        ['headers', 'set', 'X-Tirno', 'probe', '--host', '127.0.0.1', ...IC],
+        { expectMatch: /header host/ });
+      run('intercept status', ['intercept', 'status', ...IC], { expectMatch: /running/ });
+
+      fs.writeFileSync(icLog, '');
+      run('reload (규칙 적용)', ['reload', ...IC]);
+      sleepMs(1200);
+      const on = readSeen(icLog);
+      check('block 이 요청을 오리진에 못 가게 한다', !on.paths.includes('/ads/banner.png'), JSON.stringify(on.paths));
+      check('mock 이 요청을 오리진에 못 가게 한다', !on.paths.includes('/api/user'), JSON.stringify(on.paths));
+      check('페이지는 mock 본문을 받는다',
+        q('document.getElementById("api").textContent', 'icept') === '{"from":"mock"}',
+        `실측: ${q('document.getElementById("api").textContent', 'icept')}`);
+      check('차단된 이미지는 로드되지 않는다',
+        q('document.getElementById("ad").naturalWidth', 'icept') === '0',
+        `naturalWidth=${q('document.getElementById("ad").naturalWidth', 'icept')}`);
+      // 헤더 규칙은 넓게 걸리지만 뒤의 block/mock 을 가리면 안 된다 — 실측으로 밟은 자리다.
+      check('호스트별 헤더가 실제로 붙는다', on.headers.includes('probe'), JSON.stringify(on.headers));
+
+      const icLs = run('intercept ls --json', ['intercept', 'ls', '--json', ...IC]);
+      let icRules = null;
+      try { icRules = JSON.parse(icLs.out); } catch { /* ignore */ }
+      check('ls 가 규칙 3개와 히트 수를 낸다',
+        (icRules?.rules ?? []).length === 3 && Object.keys(icRules?.daemon?.hits ?? {}).length >= 3,
+        JSON.stringify(icRules?.daemon?.hits ?? null));
+
+      // 데몬을 멈추면 규칙은 남되 적용은 멈춘다. "잠깐 끄기" 와 "그만두기" 는 다르다.
+      run('intercept stop', ['intercept', 'stop', ...IC], { expectMatch: /Stopped/ });
+      fs.writeFileSync(icLog, '');
+      run('reload (데몬 정지 후)', ['reload', ...IC]);
+      sleepMs(800);
+      const off = readSeen(icLog);
+      check('데몬을 멈추면 규칙이 적용되지 않는다',
+        off.paths.includes('/ads/banner.png') && off.paths.includes('/api/user'), JSON.stringify(off.paths));
+      check('멈춰도 규칙은 남는다',
+        (JSON.parse(run('intercept ls --json (정지 후)', ['intercept', 'ls', '--json', ...IC]).out).rules ?? []).length === 3);
+      run('intercept status (정지 → exit≠0)', ['intercept', 'status', ...IC], { expectFail: true });
+
+      run('intercept rm --all', ['intercept', 'rm', '--all', ...IC], { expectMatch: /Removed 3/ });
+      run('kill (intercept 세션)', ['kill', 'icept', '--clean']);
+    }
+  } finally {
+    try { icServer.kill('SIGTERM'); } catch { /* 이미 죽었다 */ }
   }
 
   // ── 격리 — 스모크는 실제 ~/.tirno 에 아무것도 남기면 안 된다.
