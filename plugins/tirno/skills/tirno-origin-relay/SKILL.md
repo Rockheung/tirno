@@ -1,6 +1,6 @@
 ---
 name: tirno-origin-relay
-description: 진짜 사이트 위에 로컬 빌드를 얹되 서비스워커를 안 쓰는 모드 — host-resolver 를 세션 내내 켜 두고, mounts 에 없는 요청은 진짜 origin 으로 릴레이한다. tirno-sw-override 로는 못 잡는 경우에 쓴다: 앱이 에디터·미리보기 진입 때 스스로 register 하는 "지연 등록 서비스워커"(navigation 마다 update 체크로 배포본으로 갈리는 것), 그리고 로그인 뒤에야 나오는 화면. "지연 등록 SW 가 배포본으로 갈린다", "로그인 뒤 화면을 로컬 빌드로", "sw-override 로 안 되는데 로컬 빌드를 실제 사이트에" 류. 로컬 서버(serve.mjs)·인증서는 tirno-sw-override 의 generate.mjs 로 함께 굽는다(passthrough 플래그).
+description: 진짜 사이트 위에 로컬 빌드를 얹되 서비스워커를 안 쓰는 모드 — host-resolver 를 세션 내내 켜 두고, mounts 에 없는 요청은 진짜 origin 으로 릴레이한다. tirno-sw-override 로는 못 잡는 경우에 쓴다: 앱이 에디터·미리보기 진입 때 스스로 register 하는 "지연 등록 서비스워커"(navigation 마다 update 체크로 배포본으로 갈리는 것), 그리고 로그인 뒤에야 나오는 화면. "지연 등록 SW 가 배포본으로 갈린다", "로그인 뒤 화면을 로컬 빌드로", "sw-override 로 안 되는데 로컬 빌드를 실제 사이트에" 류. 자기 생성기(scripts/generate.mjs)가 serve.mjs·인증서를 낸다 — SW·부트 페이지는 굽지 않는다.
 ---
 
 # host-resolver + origin-fallback 프록시
@@ -10,7 +10,7 @@ description: 진짜 사이트 위에 로컬 빌드를 얹되 서비스워커를 
 서비스워커는 우리가 심는 게 아니라 **앱이 스스로 등록하는 것**이고, host-resolver 를 상주시키는
 이유가 바로 그 앱의 워커에게 계속 로컬 스크립트를 먹이기 위해서다.
 
-[[tirno-sw-override]] 와 산출물(`generate.mjs`·`serve.mjs`·인증서)만 공유할 뿐 성격은 반대다.
+[[tirno-sw-override]] 와는 완전히 독립이다 — 자기 생성기·serve 템플릿·인증서를 스스로 갖는다. 성격도 반대다.
 
 | | tirno-sw-override (SW 오버레이) | 이 스킬 (릴레이) |
 |---|---|---|
@@ -50,15 +50,13 @@ host-resolver 는 **크롬 전용**이다. `--host-resolver-rules="MAP app.examp
 
 ## 굽기
 
-`generate.mjs` 는 [[tirno-sw-override]] 와 공유한다. `mounts.json` 에 `"passthrough": true` 를
-켜고, SPA 라면 문서 마운트에 `navigateFallback` 을 준다.
+`generate.mjs` 는 이 스킬 안에 있다(SW 를 안 쓰므로 sw-template·overlay·부트 페이지를 굽지 않는다 — serve.mjs 와 인증서만 낸다). SPA 라면 문서 마운트에 `navigateFallback` 을 준다.
 
 ```json
 {
   "origin": "https://app.example.com",
   "port": 8443,
   "scope": "/",
-  "passthrough": true,
   "mounts": [
     { "name": "app-doc", "path": "/app", "file": "./dist/index.html", "navigateFallback": "/app" },
     { "name": "app-assets", "path": "/_/app/", "root": "./dist" }
@@ -67,11 +65,8 @@ host-resolver 는 **크롬 전용**이다. `--host-resolver-rules="MAP app.examp
 ```
 
 ```bash
-node ../tirno-sw-override/scripts/generate.mjs mounts.json --out .sw-proxy
+node scripts/generate.mjs mounts.json --out .relay
 ```
-
-`passthrough` 를 켜면 커널 SW·부트 페이지·확인 창은 굽혀도 **쓰지 않는다** — 이 모드는 그것들을
-건너뛴다.
 
 ## 심기 — restart 가 없다
 

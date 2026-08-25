@@ -157,24 +157,10 @@ const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
 const LAYERS = ${JSON.stringify(Object.fromEntries(layers.map(l => [l.id,
   Object.fromEntries(l.paths.map(p => [p, layerFile.get(l.id + '\u0000' + p)]))])), null, 2)};
 
-// navigateFallback: SW 템플릿에만 있던 규칙을 서버에도 둔다. 패스스루 모드는 커널
-// SW 를 안 쓰므로, SPA 하위 경로 navigate 요청은 서버가 이 문서로 받아야 한다 —
-// 아니면 릴레이로 새서 배포본 문서를 받는다(로그인 리다이렉트가 하위 경로 착지).
-const FALLBACKS = ${JSON.stringify(layers
-  .filter(l => l.navigateFallback)
-  .map(l => ({ prefix: l.navigateFallback, file: layerFile.get(l.id + ' ' + l.paths[0]) })), null, 2)};
-const underPrefix = (pathname, prefix) =>
-  pathname === prefix || pathname.startsWith(prefix.endsWith('/') ? prefix : prefix + '/');
-
 // 워커가 자기 control 경로로 내는 스크립트다. 워커가 없으면 404 라서 창이 안 뜬다.
 const OVERLAY_TAG = ${JSON.stringify(overlayOn
   ? `<script src="${scope}__tirno/overlay.js" defer></script>`
   : '')};
-
-// 옵트인: mounts 목록 밖 요청을 진짜 origin 으로 릴레이한다. host-resolver 는
-// 크롬 전용이라 이 node 서버는 OS DNS 로 진짜 origin 에 닿는다 — 자기 순환이 없다.
-// 켜면 "목록 밖은 손대지 않는다" 규율이 깨지고 전 트래픽이 로컬을 경유한다.
-const PASSTHROUGH = ${cfg.passthrough ? JSON.stringify(cfg.origin) : 'null'};
 
 // SW 는 캐시된 응답의 헤더를 그대로 넘긴다 — 여기서 붙인 타입이 그대로 굳는다.
 // 틀리면 브라우저가 거부한다: JS/CSS 는 nosniff 로 막히고, wasm 은
@@ -202,31 +188,13 @@ https.createServer({
   const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
   const layer = new URL(req.url, 'https://x').searchParams.get('__tirno_layer');
   const boot = path.join(DIR, path.basename(p));          // 부트스트랩 산출물
-  let file = (layer && LAYERS[layer] && LAYERS[layer][p])
+  const file = (layer && LAYERS[layer] && LAYERS[layer][p])
     ?? MAP[p]
     ?? (fs.existsSync(boot) && fs.statSync(boot).isFile() ? boot : null);
-  // navigate 요청이 목록에 없고 navigateFallback 접두사 아래면 그 문서를 낸다.
-  // 자산은 이 규칙을 안 탄다 — 없는 청크가 200 text/html 로 위장되면 더 나쁘다.
-  if (!file && req.headers['sec-fetch-mode'] === 'navigate') {
-    const fb = FALLBACKS.find(f => underPrefix(p, f.prefix));
-    if (fb) file = fb.file;
-  }
-  if (!file) {
-    if (PASSTHROUGH) {
-      const u = new URL(PASSTHROUGH);
-      const up = https.request({
-        host: u.hostname, port: u.port || 443, path: req.url, method: req.method,
-        headers: { ...req.headers, host: u.host },   // Host 는 진짜 origin 으로 교정
-        servername: u.hostname,
-      }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
-      up.on('error', e => { res.statusCode = 502; res.end('relay error: ' + e.message); });
-      console.log('→', req.method, p, '(relay)');
-      return req.pipe(up);
-    }
-    console.log(res.statusCode = 404, p);
-    return res.end('not found');
-  }
-  console.log(res.statusCode = 200, p);
+  // 목록 밖은 손대지 않는다 — 그것이 이 모드(SW 오버레이)의 규율이다. SW 가 진짜
+  // origin 에서 로컬을 유지하므로, 부트 서버는 목록에 없는 것을 404 로 끝낸다.
+  console.log(res.statusCode = file ? 200 : 404, p);
+  if (!file) return res.end('not found');
   const ext = path.extname(file).toLowerCase();
   if (!TYPES[ext]) console.warn('  ! 모르는 확장자', ext, '— octet-stream 으로 나간다. 브라우저가 거부할 수 있다');
   res.setHeader('content-type', TYPES[ext] ?? 'application/octet-stream');
