@@ -162,6 +162,11 @@ const OVERLAY_TAG = ${JSON.stringify(overlayOn
   ? `<script src="${scope}__tirno/overlay.js" defer></script>`
   : '')};
 
+// 옵트인: mounts 목록 밖 요청을 진짜 origin 으로 릴레이한다. host-resolver 는
+// 크롬 전용이라 이 node 서버는 OS DNS 로 진짜 origin 에 닿는다 — 자기 순환이 없다.
+// 켜면 "목록 밖은 손대지 않는다" 규율이 깨지고 전 트래픽이 로컬을 경유한다.
+const PASSTHROUGH = ${cfg.passthrough ? JSON.stringify(cfg.origin) : 'null'};
+
 // SW 는 캐시된 응답의 헤더를 그대로 넘긴다 — 여기서 붙인 타입이 그대로 굳는다.
 // 틀리면 브라우저가 거부한다: JS/CSS 는 nosniff 로 막히고, wasm 은
 // instantiateStreaming 이 application/wasm 을 요구한다.
@@ -191,8 +196,22 @@ https.createServer({
   const file = (layer && LAYERS[layer] && LAYERS[layer][p])
     ?? MAP[p]
     ?? (fs.existsSync(boot) && fs.statSync(boot).isFile() ? boot : null);
-  console.log(res.statusCode = file ? 200 : 404, p);
-  if (!file) return res.end('not found');
+  if (!file) {
+    if (PASSTHROUGH) {
+      const u = new URL(PASSTHROUGH);
+      const up = https.request({
+        host: u.hostname, port: u.port || 443, path: req.url, method: req.method,
+        headers: { ...req.headers, host: u.host },   // Host 는 진짜 origin 으로 교정
+        servername: u.hostname,
+      }, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+      up.on('error', e => { res.statusCode = 502; res.end('relay error: ' + e.message); });
+      console.log('→', req.method, p, '(relay)');
+      return req.pipe(up);
+    }
+    console.log(res.statusCode = 404, p);
+    return res.end('not found');
+  }
+  console.log(res.statusCode = 200, p);
   const ext = path.extname(file).toLowerCase();
   if (!TYPES[ext]) console.warn('  ! 모르는 확장자', ext, '— octet-stream 으로 나간다. 브라우저가 거부할 수 있다');
   res.setHeader('content-type', TYPES[ext] ?? 'application/octet-stream');
