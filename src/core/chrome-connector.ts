@@ -6,6 +6,30 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
 import { applyPermissions } from '../cdp/permissions.js';
 
+// 블록과 가드는 둘 다 필요하다. 이 스크립트는 realm 마다 들어가는데, 한 realm 에
+// 두 번 들어가는 일이 실제로 있다 — iframe realm 을 위젯 수만큼 만드는 페이지가
+// 그렇다(#155). top-level `const` 였을 때는 두 번째 주입이
+// `Identifier '_add' has already been declared` 로 터졌고, 블록 안으로 들어가면
+// 그 SyntaxError 는 사라지지만 이번에는 이미 래퍼인 `addEventListener` 를 다시
+// 감싸게 된다. 가드가 그것을 막는다. RECORD_INSTALL 이 `__tirno_rec` 로 같은 일을 한다.
+export const NEUTRALIZE_UNLOAD = `
+  if (!window.__tirno_unload_neutralized) {
+    window.__tirno_unload_neutralized = true;
+    try {
+      Object.defineProperty(window, 'onbeforeunload', {
+        get: () => null,
+        set: () => true,
+        configurable: false,
+      });
+    } catch (_) { window.onbeforeunload = null; }
+    const _add = window.addEventListener;
+    window.addEventListener = function (type, listener, opts) {
+      if (type === 'beforeunload') return;
+      return _add.call(this, type, listener, opts);
+    };
+  }
+`;
+
 /**
  * Attach to a session's browser and prepare its pages (dialog auto-dismiss,
  * unload neutralisation, the recorder, stored emulation).
@@ -59,20 +83,6 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // 1. dialog event listener — accepts any dialog that does open
   // 2. evaluateOnNewDocument — neutralizes onbeforeunload before page JS runs
   //    AND filters addEventListener('beforeunload') so listener never fires.
-  const NEUTRALIZE_UNLOAD = `
-    try {
-      Object.defineProperty(window, 'onbeforeunload', {
-        get: () => null,
-        set: () => true,
-        configurable: false,
-      });
-    } catch (_) { window.onbeforeunload = null; }
-    const _add = window.addEventListener;
-    window.addEventListener = function (type, listener, opts) {
-      if (type === 'beforeunload') return;
-      return _add.call(this, type, listener, opts);
-    };
-  `;
 
   // Recording listener — captures user input events into window.__tirno_rec
   // and persists to localStorage so page reload / SPA route changes survive.
