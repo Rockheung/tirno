@@ -47,6 +47,22 @@ for (const [i, m] of cfg.mounts.entries()) {
   const label = m.path ?? `mounts[${i}]`;
   if (!m.path) { errors.push(`${label}: "path" 가 없다`); continue; }
 
+  // 배포 서버가 그 자산에 붙이던 헤더는 릴레이 경로에서만 살아남는다(origin 응답을
+  // 그대로 넘기므로). 마운트한 것은 여기서 다시 선언해야 한다 — 안 그러면 마운트한
+  // 것만 CORS 를 잃어 브라우저가 거부한다(#159).
+  let headers;
+  if (m.headers !== undefined) {
+    const h = m.headers;
+    if (typeof h !== 'object' || h === null || Array.isArray(h)) {
+      errors.push(`${label}: headers 는 객체여야 한다`); continue;
+    }
+    const bad = Object.entries(h).filter(([, v]) => typeof v !== 'string');
+    if (bad.length) {
+      errors.push(`${label}: headers 값은 문자열이어야 한다 — ${bad.map(([k]) => k).join(', ')}`); continue;
+    }
+    if (Object.keys(h).length) headers = h;
+  }
+
   // navigateFallback 은 낼 문서가 하나로 정해질 때만 뜻이 있다.
   let navigateFallback;
   if (m.navigateFallback !== undefined) {
@@ -66,14 +82,14 @@ for (const [i, m] of cfg.mounts.entries()) {
     for (const f of walk(root)) {
       const rel = path.relative(root, f).split(path.sep).join('/');
       const urlPath = m.path + rel;
-      if (!map.has(urlPath)) map.set(urlPath, f);   // 먼저 선언한 마운트가 이긴다
+      if (!map.has(urlPath)) map.set(urlPath, { file: f, ...(headers ? { headers } : {}) });   // 먼저 선언한 마운트가 이긴다
     }
   } else {
     if (!m.file) { errors.push(`${label}: 파일 마운트에는 "file" 이 필요하다`); continue; }
     const file = path.resolve(cfgDir, m.file);
     if (!fs.existsSync(file)) { errors.push(`${label}: file 이 없다 — ${file}`); continue; }
-    if (!map.has(m.path)) map.set(m.path, file);
-    if (navigateFallback) fallbacks.push({ prefix: navigateFallback, file });
+    if (!map.has(m.path)) map.set(m.path, { file, ...(headers ? { headers } : {}) });
+    if (navigateFallback) fallbacks.push({ prefix: navigateFallback, file, ...(headers ? { headers } : {}) });
   }
 }
 if (errors.length) { console.error(errors.map(e => '✗ ' + e).join('\n')); process.exit(1); }
@@ -122,13 +138,13 @@ https.createServer({
   key: fs.readFileSync(path.join(DIR, 'key.pem')),
 }, (req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
-  let file = MAP[p] ?? null;
+  let hit = MAP[p] ?? null;
   // navigate 요청이 목록에 없고 navigateFallback 접두사 아래면 그 문서를 낸다.
-  if (!file && req.headers['sec-fetch-mode'] === 'navigate') {
+  if (!hit && req.headers['sec-fetch-mode'] === 'navigate') {
     const fb = FALLBACKS.find(f => underPrefix(p, f.prefix));
-    if (fb) file = fb.file;
+    if (fb) hit = fb;
   }
-  if (!file) {
+  if (!hit) {
     // 목록 밖 → 진짜 origin 으로 릴레이.
     const u = new URL(ORIGIN);
     const up = https.request({
@@ -141,10 +157,12 @@ https.createServer({
     return req.pipe(up);
   }
   console.log(res.statusCode = 200, p);
-  const ext = path.extname(file).toLowerCase();
+  const ext = path.extname(hit.file).toLowerCase();
   if (!TYPES[ext]) console.warn('  ! 모르는 확장자', ext, '— octet-stream 으로 나간다');
   res.setHeader('content-type', TYPES[ext] ?? 'application/octet-stream');
-  fs.createReadStream(file).pipe(res);
+  // 마운트가 선언한 헤더는 뒤에 얹는다 — 확장자 추측을 덮을 수 있어야 한다.
+  for (const [k, v] of Object.entries(hit.headers ?? {})) res.setHeader(k, v);
+  fs.createReadStream(hit.file).pipe(res);
 }).listen(${port}, '127.0.0.1', () => console.log('listening on https://127.0.0.1:${port}'));
 `);
 

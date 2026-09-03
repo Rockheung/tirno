@@ -59,7 +59,8 @@ host-resolver 는 **크롬 전용**이다. `--host-resolver-rules="MAP app.examp
   "scope": "/",
   "mounts": [
     { "name": "app-doc", "path": "/app", "file": "./dist/index.html", "navigateFallback": "/app" },
-    { "name": "app-assets", "path": "/_/app/", "root": "./dist" }
+    { "name": "app-assets", "path": "/_/app/", "root": "./dist",
+      "headers": { "access-control-allow-origin": "*", "cross-origin-resource-policy": "cross-origin" } }
   ]
 }
 ```
@@ -105,6 +106,16 @@ SW 오버레이의 "크롬 두 번 뜨고 restart 로 진짜 origin 복귀" 단�
 `navigateFallback: "/app"` 을 주면 그 접두사 아래 **navigate 요청**(`sec-fetch-mode: navigate`)은
 릴레이 대신 로컬 문서를 낸다. 자산 요청은 이 규칙을 안 탄다 — 없는 청크가 `200 text/html` 로
 위장되면 더 나쁜 실패가 된다.
+
+**마운트한 응답의 헤더는 `headers` 로 다시 선언한다.** 릴레이 경로는 origin 응답 헤더를 그대로
+넘기지만, 마운트한 경로는 응답을 이 서버가 만들기 때문에 배포 서버가 붙이던 것이 전부 사라진다 —
+`content-type` 만 남는다. 그래서 **마운트한 것만** 거동이 달라지고, 로컬 빌드가 잘못된 것처럼 보인다.
+
+문서 호스트와 자산 호스트가 다르면 이게 바로 드러난다. `Access-Control-Allow-Origin` 이 빠진
+자산을 브라우저가 거부한다. 마운트별 `headers` 는 그대로 응답에 얹히므로 배포 쪽 정책을 옮겨
+적으면 된다 — CORS 말고 `cross-origin-resource-policy`·`cache-control` 도 같은 자리다.
+확장자로 정한 `content-type` 보다 나중에 얹히니 그것도 덮어쓸 수 있다. 값은 전부 문자열이어야
+하고, 아니면 생성 단계에서 거절한다.
 
 ## 관측은 serve.log 뿐
 
