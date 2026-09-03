@@ -57,10 +57,24 @@ export interface SessionMetadata {
    */
   permissions?: Record<string, string[]>;
   /**
-   * 모든 요청에 붙일 고정 헤더(name → value). connect 마다 재적용한다 —
+   * `headers set --once` 로 건 헤더(name → value). connect 마다 재적용한다 —
    * Network.setExtraHTTPHeaders 는 CDP 연결 수명에 묶여, 명령이 끝나면 사라진다.
+   * 그래서 tirno 명령이 도는 동안에만 붙는다. 연결 밖에서도 유지돼야 하면
+   * `headerRules` 쪽이다.
    */
   extraHeaders?: Record<string, string>;
+  /**
+   * `headers set` 의 기본 경로. 프로필 안에 구운 declarativeNetRequest 확장으로
+   * 나가며, 브라우저 네트워크 스택에 걸려 CDP 연결과 무관하게 유지된다 —
+   * core/header-ext 참조. 확장이므로 세션이 `extensions` 로 떠 있어야 한다.
+   */
+  headerRules?: import('./header-ext.js').HeaderRule[];
+  /**
+   * 이 세션이 `--extensions` 로 떴는가. puppeteer 의 `--disable-extensions` 는
+   * 기동 이후에 취소할 수 없어서(chrome-launcher 참조), 확장이 필요한 명령은
+   * 붙어 보기 전에 이 값으로 판정하고 재기동을 안내해야 한다.
+   */
+  extensions?: boolean;
   group?: string;
   /**
    * Set by `record start`. The recorder itself lives in the page and its buffer

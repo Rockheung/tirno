@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
+import { loadHeaderExt } from '../core/header-ext.js';
 import { connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import type { Cookie } from 'puppeteer-core';
@@ -106,7 +107,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--executable-path <path>', 'Path to Chrome executable')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
-    .option('--extensions', 'Let extensions run (off by default). Load one with `cdp Extensions.loadUnpacked --browser`')
+    .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
     .option('--group <name>', 'Tag this session with a group label')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat');
 
@@ -196,7 +197,7 @@ export function registerSessionCommands(program: Command): void {
     .option('--headless', 'Run headless')
     .option('--executable-path <path>', 'Chrome path')
     .option('--ephemeral', 'Use a temporary user-data-dir')
-    .option('--extensions', 'Let extensions run (off by default). Load one with `cdp Extensions.loadUnpacked --browser`')
+    .option('--extensions', 'Let extensions run (off by default). Turned on anyway when the session has stored header rules, since those are an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
     .option('--group <name>', 'Group label')
     .option('--keep-cookies', 'Carry cookies across the restart, session cookies included — otherwise the login dies with the browser')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
@@ -242,16 +243,34 @@ export function registerSessionCommands(program: Command): void {
         if (opts.ephemeral) {
           userDataDirOverride = fs.mkdtempSync(path.join(os.tmpdir(), `tirno-${name}-`));
         }
+
+        // 저장된 헤더 규칙은 재기동을 넘긴다. 규칙이 있으면 `--extensions` 는 사용자가
+        // 다시 적지 않아도 켠다 — 저장된 규칙이 조용히 무효가 되는 것보다 확장이 켜져
+        // 있는 편이 덜 놀랍다.
+        const headerRules = existing?.headerRules ?? [];
+
         const meta = await launch({
           name,
           port: opts.port,
           chromeFlags,
           executablePath: opts.executablePath ?? existing?.executablePath,
           headless: opts.headless,
-          extensions: opts.extensions,
+          extensions: opts.extensions || headerRules.length > 0,
           userDataDir: userDataDirOverride,
           bootUrl,
         });
+
+        // 확장은 브라우저가 뜬 뒤에야 붙는다(`--load-extension` 은 죽은 경로 —
+        // core/header-ext 참조). 그래서 bootUrl 로 연 페이지는 헤더 없이 받아온 것이고,
+        // 규칙을 심은 뒤 다시 읽혀야 화면과 규칙이 어긋나지 않는다.
+        if (headerRules.length) {
+          store.update(name, { headerRules });
+          try {
+            await loadHeaderExt(name, { reload: Boolean(bootUrl) });
+          } catch (e) {
+            info(`Header rules stored but not applied: ${(e as Error).message}`);
+          }
+        }
         // The group tag survives a restart. `kill --group` and `broadcast --group`
         // select on it, so dropping it silently takes the session out of every
         // group operation the caller set it up for.

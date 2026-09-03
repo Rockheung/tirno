@@ -481,15 +481,31 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 | `permissions grant <origin> <permission...>` | origin 에 권한을 주고 세션에 기록. origin 은 `new URL(x).origin` 으로 정규화되므로 경로·쿼리를 붙여도 된다 |
 | `permissions revoke [origin]` | 한 origin, 또는 인자 없으면 전부 해제 |
 | `permissions ls [--json]` | 이 세션에 기록된 grant 목록 |
-| `headers set <name> <value>` | 모든 요청에 붙일 고정 헤더. 세션에 기록되고 connect 마다 재적용된다 |
-| `headers rm [name]` | 헤더 하나, 인자 없으면 전부 |
-| `headers ls [--json]` | 이 세션의 고정 헤더 |
+| `headers set <name> <value> [--host <domain>...]` | 요청에 붙일 고정 헤더. 세션 프로필에 굽는 확장으로 나가며 연결이 끊긴 뒤에도 유지된다 |
+| `headers set <name> <value> --once` | 대신 `Network.setExtraHTTPHeaders` 를 쓴다 — tirno 명령이 도는 동안만 유효 |
+| `headers rm [name] [--once]` | 헤더 하나, 인자 없으면 전부 |
+| `headers ls [--json]` | 이 세션의 고정 헤더, 호스트 조건과 유지 범위까지 |
 
 `perm` 으로 줄여 쓸 수 있다.
 
-`headers` 는 `Network.setExtraHTTPHeaders` 라 **전역**이다 — 특정 호스트만 필터하려면 Fetch
-인터셉트(상주 연결)가 필요해 지금은 지원하지 않는다. 헤더도 CDP 연결 수명에 묶여, permissions
-와 같은 자리에서 connect 마다 재적용된다.
+`headers` 에는 경로가 둘 있고 `--once` 로 갈린다.
+
+기본은 세션 프로필 안(`<user-data-dir>/tirno-headers`)에 굽는 declarativeNetRequest 확장이다.
+규칙이 브라우저 네트워크 스택에 걸리므로 CDP 연결이 끊긴 뒤에도 유지되고, 서비스워커와
+OOPIF 가 스스로 보내는 요청에도 붙으며, `--host` 로 호스트를 고를 수 있다(등록 가능 도메인
+기준이라 서브도메인이 함께 걸린다 — 실측). 세션은 `--extensions` 로 떠 있어야 한다.
+
+확장은 `Extensions.loadUnpacked` 로만 들어간다. `--load-extension` 은 chrome 152 에서 죽은
+경로다 — 플래그가 커맨드라인에 실려도 확장이 붙지 않고, 프로필 밖 경로·`--disable-extensions-except`
+동반·headed·`--disable-features=DisableLoadExtensionCommandLineSwitch` 를 각각 시도해도
+마찬가지다(실측). 그리고 그렇게 심은 확장은 프로필에 남지 않으므로 `restart` 가 다시
+읽힌다. 규칙이 저장돼 있으면 `--extensions` 를 다시 적지 않아도 켜지고, 확장은 브라우저가
+뜬 뒤에야 붙기 때문에 부트 URL 은 규칙이 들어간 뒤 한 번 다시 읽는다.
+
+`--once` 는 `Network.setExtraHTTPHeaders` 다. permissions 와 같은 자리에서 connect 마다
+재적용되지만 CDP 연결 수명에 묶여, tirno 명령이 도는 동안 나가는 요청에만 붙는다 —
+명령이 끝난 뒤 페이지가 스스로 보내는 요청에는 붙지 않는다(실측). 호스트 조건도 받지
+못한다. `--extensions` 없이 뜬 세션에서 쓸 수 있는 것은 이쪽뿐이다.
 
 CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.** tirno 는 명령마다 붙었다
 끊으므로, `cdp Browser.grantPermissions` 로 직접 준 권한은 그 명령이 끝나는 순간 `prompt`
