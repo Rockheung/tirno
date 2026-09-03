@@ -176,6 +176,33 @@ user-data-dir 을 유지해도 그렇다. `permissions grant` 는 `SessionMetada
 `NotAllowedError: Document is not focused` 로 거절되므로, 백그라운드 탭이면
 `tirno cdp Page.bringToFront '{}'` 를 먼저 보낸다.
 
+### 고정 헤더
+
+```bash
+tirno headers set X-Debug 1                       # 모든 요청, 유지된다
+tirno headers set X-Key abc --host api.acme.com   # 그 호스트만 (반복 가능)
+tirno headers set X-Key abc --once                # tirno 명령이 도는 동안만
+tirno headers rm X-Key                            # 하나, 인자 없으면 전부
+tirno headers ls                                  # 두 벌 다, 범위와 함께
+```
+
+경로가 둘이고 `--once` 로 갈린다.
+
+기본은 세션 프로필 안(`<user-data-dir>/tirno-headers`)에 굽는 declarativeNetRequest 확장이다.
+규칙이 브라우저 네트워크 스택에 걸리므로 **CDP 연결이 끊긴 뒤에도 유지되고**, 서비스워커와
+OOPIF 가 스스로 보내는 요청에도 붙는다. `--host` 는 등록 가능 도메인 기준이라 서브도메인이
+함께 걸린다. 세션이 `--extensions` 로 떠 있어야 하고, 아니면 명령이 재기동을 안내하며 거절한다.
+
+`--once` 는 `Network.setExtraHTTPHeaders` 다. connect 마다 재적용하지만 연결 수명에 묶여
+**tirno 명령이 도는 동안 나가는 요청에만** 붙는다 — 명령이 끝난 뒤 페이지가 스스로 보내는
+요청에는 붙지 않는다. 호스트 조건도 받지 못한다. `--extensions` 없이 뜬 세션에서 쓸 수 있는
+것은 이쪽뿐이다.
+
+확장은 `Extensions.loadUnpacked` 로만 들어간다 — `--load-extension` 은 chrome 152 에서 죽은
+경로다(플래그가 커맨드라인에 실려도 붙지 않는다). 그렇게 심은 확장은 프로필에도 남지 않아
+`restart` 가 기동 뒤 다시 읽힌다. 저장된 규칙이 있으면 `--extensions` 를 다시 적지 않아도
+켜지고, 확장은 브라우저보다 늦게 붙으므로 부트 URL 은 규칙이 들어간 뒤 한 번 재로드한다.
+
 ### 서비스워커 — 무엇이 프록시되고 있나
 
 ```bash
@@ -273,6 +300,10 @@ tirno update [--check]           # 최신 릴리즈로 — 바이너리 + 스킬
 `~/.tirno/sessions/<name>.json`에 저장:
 - PID, port, wsEndpoint, userDataDir, chromeFlags, createdAt, lastAccessedAt
 - emulation: { device, viewport, network, cpu }
+- permissions: origin → 허용 목록. connect 마다 재적용한다
+- headerRules: 확장으로 나가는 고정 헤더. 재기동이 다시 읽힌다
+- extraHeaders: `headers set --once` 로 건 헤더. connect 마다 재적용한다
+- extensions: `--extensions` 로 떴는가. `headers set` 이 이 값으로 판정한다
 
 **장부는 기동 시점의 주장이지 사실이 아니다.** `port` 와 `wsEndpoint` 는 캐시 힌트로,
 Chrome 이 재기동하면 (새 포트·새 browser UUID 로) 낡는다. 살아있는 값은
