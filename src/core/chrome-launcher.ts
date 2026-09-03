@@ -200,6 +200,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     userDataDir,
     chromeFlags: args,
     ...(opts.executablePath ? { executablePath: opts.executablePath } : {}),
+    ...(opts.extensions ? { extensions: true } : {}),
     createdAt: now,
     lastAccessedAt: now,
     // Pin JS-side viewport to 1920x1080 via setDeviceMetricsOverride. Chrome
