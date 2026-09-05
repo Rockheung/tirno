@@ -415,7 +415,7 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 | `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래) |
 | `fill <selector\|@N> <value>` | input clear + type |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
-| `type <text>` / `press <key>` / `hover <selector\|@N>` | 키보드/마우스 |
+| `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
 | `press <modifier>+<key>` | `Meta+v` · `Ctrl+a` · `Shift+Tab`. 수식키는 Alt·Ctrl·Meta·Shift(별칭 cmd/command/option 도 받는다) |
 | `scroll up\|down\|<pixels>` | 스크롤 |
 | `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
@@ -430,6 +430,14 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 지금까지 눌리던 요소가 조용히 바뀐다(실측). light DOM 을 먼저 보기 때문에 기존 동작은 그대로고,
 못 찾을 때만 범위가 넓어진다. 닫힌(`closed`) shadow root 는 대상이 아니다 — 페이지가 밖에서
 못 보게 만든 것이라 브라우저도 길을 열어 주지 않는다.
+
+**좌표(`"x,y"`)는 `click`·`hover`·`drag` 가 받는다.** 정수·소수·음수를 다 받고 쉼표 뒤 공백도
+허용한다 — `getBoundingClientRect` 가 내는 값을 그대로 넘길 수 있어야 하기 때문이다. 닫힌
+shadow root 안이나 셀렉터가 없는 캔버스 위 요소에는 좌표가 유일한 길이라, 그 길은 포인터 계열
+명령에 고르게 있어야 한다.
+
+좌표를 받지 않는 명령(`fill`·`upload` 등)에 좌표꼴을 넣으면 그렇다고 알려 준다. 예전에는
+브라우저의 `querySelector` SyntaxError 가 그대로 올라와 원인을 한 번 더 짚어야 했다.
 
 붙여넣기·복사·잘라내기·전체선택·실행취소는 **키 이벤트만으로 일어나지 않는다.** 브라우저가
 그 동작을 실제로 하려면 CDP 에 `commands` 를 함께 실어야 하고(실측: `commands` 없이 Meta+V 를
