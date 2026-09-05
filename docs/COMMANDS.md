@@ -409,6 +409,32 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 
 실측(2026-08-24): instagram.com 269→124 줄, github.com 2277→1134 줄.
 
+### document-start 훅
+| 명령 | 설명 |
+|---|---|
+| `inject add [source] [--file <path>]` | 페이지의 자기 스크립트보다 먼저, 매 navigation 마다 도는 스크립트를 등록. 인자·`--file`·stdin 을 다 받는다(`eval` 과 같은 입력 규칙) |
+| `inject rm [id]` | 하나, 인자 없으면 전부 |
+| `inject ls [--json]` | 등록된 것. `--json` 은 소스 전문까지 |
+
+`eval` 은 페이지가 로드된 **뒤**에 돈다. 부팅 중에 이미 나간 요청을 잡거나, 페이지가
+리스너를 걸기 전에 가드를 심으려면 그 전에 돌아야 하는데 `eval` 을 리로드 직후에 밀어
+넣는 식으로는 경합을 못 이긴다. `inject` 가 그 자리다.
+
+`Page.addScriptToEvaluateOnNewDocument` 는 CDP 연결 수명에 묶여, `cdp` 로 직접 등록하면
+그 명령이 끝나는 순간 사라진다(등록은 성공하고 identifier 까지 돌려주므로 조용히 어긋난다).
+`inject` 는 소스를 세션 메타에 저장하고 connect 마다 다시 건다 — permissions·headers 와
+같은 자리이고, 재기동도 넘는다.
+
+경로가 아니라 소스를 담는다. 경로만 두면 그 파일이 바뀌거나 사라진 뒤에도 세션은 등록돼
+있다고 말하게 되고, 무엇이 심겼는지 되짚을 방법이 없다. 같은 소스를 두 번 넣으면 id 가
+같아 한 벌로 남는다.
+
+등록은 **현재 문서를 건드리지 않는다.** 부팅이 끝난 뒤에 도는 document-start 훅은 같은
+훅이 아니다 — 지금 보려면 `tirno reload`.
+
+tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다. 사용자 스크립트가 거는
+리스너도 페이지 것과 같은 규칙으로 걸러진다.
+
 ### 입력
 | 명령 | 설명 |
 |---|---|

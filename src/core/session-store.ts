@@ -75,6 +75,15 @@ export interface SessionMetadata {
    * 붙어 보기 전에 이 값으로 판정하고 재기동을 안내해야 한다.
    */
   extensions?: boolean;
+  /**
+   * `inject add` 로 등록한 document-start 스크립트. `Page.addScriptToEvaluateOnNewDocument`
+   * 는 CDP 연결 수명에 묶여 명령이 끝나면 사라지므로, 여기 저장하고 connect 마다
+   * 다시 건다 — permissions·extraHeaders 와 같은 자리다.
+   *
+   * 경로가 아니라 소스를 담는다. 경로만 두면 그 파일이 바뀌거나 사라진 뒤에도 세션은
+   * 등록돼 있다고 말하게 되고, 무엇이 심겼는지 되짚을 방법이 없다.
+   */
+  injects?: Array<{ id: string; source: string; addedAt: string }>;
   group?: string;
   /**
    * Set by `record start`. The recorder itself lives in the page and its buffer
