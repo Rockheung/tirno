@@ -3,7 +3,7 @@ import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { loadHeaderExt } from '../core/header-ext.js';
-import { connectWithoutPageSetup } from '../core/chrome-connector.js';
+import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import type { Cookie } from 'puppeteer-core';
 import { isAlive, killAndWait } from '../core/process-guard.js';
@@ -248,6 +248,7 @@ export function registerSessionCommands(program: Command): void {
         // 다시 적지 않아도 켠다 — 저장된 규칙이 조용히 무효가 되는 것보다 확장이 켜져
         // 있는 편이 덜 놀랍다.
         const headerRules = existing?.headerRules ?? [];
+        const injects = existing?.injects ?? [];
 
         const meta = await launch({
           name,
@@ -260,15 +261,26 @@ export function registerSessionCommands(program: Command): void {
           bootUrl,
         });
 
-        // 확장은 브라우저가 뜬 뒤에야 붙는다(`--load-extension` 은 죽은 경로 —
-        // core/header-ext 참조). 그래서 bootUrl 로 연 페이지는 헤더 없이 받아온 것이고,
-        // 규칙을 심은 뒤 다시 읽혀야 화면과 규칙이 어긋나지 않는다.
-        if (headerRules.length) {
-          store.update(name, { headerRules });
+        // 확장도 document-start 훅도 브라우저가 뜬 뒤에야 붙는다(`--load-extension` 은
+        // 죽은 경로 — core/header-ext 참조). 그래서 bootUrl 로 연 페이지는 둘 다 없이
+        // 받아온 것이고, 심은 뒤 다시 읽혀야 화면과 저장된 것이 어긋나지 않는다.
+        if (headerRules.length) store.update(name, { headerRules });
+        if (injects.length) store.update(name, { injects });
+        if (headerRules.length || injects.length) {
           try {
-            await loadHeaderExt(name, { reload: Boolean(bootUrl) });
+            if (headerRules.length) {
+              // 이 안의 connect 가 저장된 훅까지 함께 건다.
+              await loadHeaderExt(name, { reload: Boolean(bootUrl) });
+            } else {
+              const { browser } = await connect(name);
+              try {
+                if (bootUrl) await (await getActivePage(browser)).reload();
+              } finally {
+                browser.disconnect();
+              }
+            }
           } catch (e) {
-            info(`Header rules stored but not applied: ${(e as Error).message}`);
+            info(`Stored session state was not re-applied: ${(e as Error).message}`);
           }
         }
         // The group tag survives a restart. `kill --group` and `broadcast --group`
