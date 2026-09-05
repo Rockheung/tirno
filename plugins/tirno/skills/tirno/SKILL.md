@@ -114,6 +114,7 @@ tirno network --show <id>          # 그 요청의 헤더·본문
 
 ```bash
 tirno click <selector|@N> [--dbl]      # selector 또는 @N ref (snapshot에서 부여된 번호)
+                                        # selector 는 열린 shadow root 를 관통한다
 tirno fill <selector|@N> <value>
 tirno fill <selector|@N> --value-stdin  # 값을 stdin 에서. 인자로 준 값은 ps 에 남는다
 tirno type <text> [--delay ms]
@@ -144,6 +145,11 @@ tirno eval '() => { …; return x }'      # 인자 없는 함수는 호출하고
 
 settle 하지 않는 promise 를 페이지가 돌려주면 기본 30초에서 끊고 그렇게 말한다 —
 `navigator.clipboard.readText()` 가 권한 없이 그렇게 된다. 페이지 쪽 실행을 멈추지는 않는다.
+
+**셀렉터는 열린 shadow root 를 관통한다.** `click`·`fill`·`hover`·`wait-for` 는 light DOM 에서
+먼저 찾고, 없으면 열린 shadow root 를 순회한다. light 를 먼저 보는 것이 규약이다 — 같은 셀렉터가
+양쪽에 있을 때 관통 쪽은 shadow 를 먼저 고르므로, 그것만 쓰면 지금까지 눌리던 요소가 바뀐다(실측).
+닫힌 shadow root 는 대상이 아니다.
 
 ### 에뮬레이션
 

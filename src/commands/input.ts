@@ -3,7 +3,7 @@ import { intArg, stripTrailingNewline } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
-import { clickByRef, fillByRef, hoverByRef } from '../cdp/dom-actions.js';
+import { clickByRef, fillByRef, hoverByRef, requireElement } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
 import { checkRef } from '../cdp/ref-guard.js';
@@ -38,7 +38,7 @@ async function elemCenter(page: Page, selector: string): Promise<[number, number
 export function registerInputCommands(program: Command): void {
   program
     .command('click')
-    .description('Click by CSS selector, @ref, or "x,y" coordinates')
+    .description('Click by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots')
     .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
     .option('-s, --session <name>', 'Session name')
     .option('--dbl', 'Double click')
@@ -73,10 +73,8 @@ export function registerInputCommands(program: Command): void {
         if (refStore.isRef(target)) {
           const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
           await clickByRef(page, backendId, opts.dbl);
-        } else if (opts.dbl) {
-          await page.click(target, { count: 2 });
         } else {
-          await page.click(target);
+          await (await requireElement(page, target)).click(opts.dbl ? { count: 2 } : {});
         }
 
         browser.disconnect();
@@ -89,7 +87,7 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('fill')
-    .description('Clear and type into an input element by selector or @ref')
+    .description('Clear and type into an input element by selector or @ref. A selector that misses in the light DOM is retried through open shadow roots')
     .argument('[target]', 'CSS selector or @N ref from snapshot (omit when --batch)')
     .argument('[value]', 'Value to fill (omit when --batch)')
     .option('-s, --session <name>', 'Session name')
@@ -128,8 +126,9 @@ export function registerInputCommands(program: Command): void {
               const backendId = await refToBackendId(page, meta.name, entry.target, !!opts.staleOk);
               await fillByRef(page, backendId, entry.value);
             } else {
-              await page.click(entry.target, { count: 3 });
-              await page.type(entry.target, entry.value);
+              const el = await requireElement(page, entry.target);
+              await el.click({ count: 3 });
+              await el.type(entry.value);
             }
           }
           browser.disconnect();
@@ -146,9 +145,10 @@ export function registerInputCommands(program: Command): void {
           await fillByRef(page, backendId, value);
         } else {
           // triple-click to select all, then type to replace
-          await page.click(target, { count: 3 });
+          const el = await requireElement(page, target);
+          await el.click({ count: 3 });
           if (value === '') await page.keyboard.press('Backspace');
-          else await page.type(target, value);
+          else await el.type(value);
         }
 
         browser.disconnect();
@@ -240,7 +240,7 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('hover')
-    .description('Hover over an element (CSS selector or @ref)')
+    .description('Hover over an element (CSS selector or @ref). A selector that misses in the light DOM is retried through open shadow roots')
     .argument('<target>', 'CSS selector or @ref from snapshot')
     .option('-s, --session <name>', 'Session name')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
@@ -252,7 +252,7 @@ export function registerInputCommands(program: Command): void {
         if (refStore.isRef(target)) {
           await hoverByRef(page, await refToBackendId(page, meta.name, target, !!opts.staleOk));
         } else {
-          await page.hover(target);
+          await (await requireElement(page, target)).hover();
         }
 
         browser.disconnect();
@@ -380,7 +380,7 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('wait-for')
-    .description('Wait for a selector, text, or network idle')
+    .description('Wait for a selector, text, or network idle. A selector matches inside open shadow roots too')
     .argument('[selector]', 'CSS selector to wait for')
     .option('-s, --session <name>', 'Session name')
     .option('--text <text>', 'Wait until any of the given texts appears in document.body.innerText (comma-separated for any-of)')
@@ -419,7 +419,14 @@ export function registerInputCommands(program: Command): void {
           return;
         }
         if (!selector) throw new Error('Provide a selector, --text, or --network-idle');
-        await page.waitForSelector(selector, { timeout: opts.timeout });
+        // `pierce/` 는 document 도 순회하므로 light DOM 이 빠지지 않는다(실측).
+        // 여기서는 어느 것을 고르느냐가 아니라 나타났느냐만 보므로 한 번에 기다린다.
+        try {
+          await page.waitForSelector(`pierce/${selector}`, { timeout: opts.timeout });
+        } catch (e) {
+          // 접두사가 붙은 채로 올라오면 사용자가 치지 않은 셀렉터가 에러에 나온다.
+          throw new Error((e as Error).message.replace(`pierce/${selector}`, selector), { cause: e });
+        }
         browser.disconnect();
         success(`Selector visible: ${selector}`);
       } catch (e) {

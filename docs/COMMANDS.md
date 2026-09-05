@@ -412,7 +412,7 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 ### 입력
 | 명령 | 설명 |
 |---|---|
-| `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. **낡은 ref 는 거부한다**(아래) |
+| `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래) |
 | `fill <selector\|@N> <value>` | input clear + type |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N>` | 키보드/마우스 |
@@ -421,6 +421,15 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 | `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
+
+**셀렉터는 열린 shadow root 를 관통한다.** `click`·`fill`·`hover`·`wait-for` 는 light DOM 에서
+먼저 찾고, 없으면 열린 shadow root 를 순회해 다시 찾는다(puppeteer 의 `pierce/`). 웹 컴포넌트로
+마운트되는 UI 를 좌표로 우회하지 않아도 된다.
+
+순서는 규약이다. `pierce/` 만 쓰면 같은 셀렉터가 양쪽에 있을 때 **shadow 쪽을 먼저 고르므로**
+지금까지 눌리던 요소가 조용히 바뀐다(실측). light DOM 을 먼저 보기 때문에 기존 동작은 그대로고,
+못 찾을 때만 범위가 넓어진다. 닫힌(`closed`) shadow root 는 대상이 아니다 — 페이지가 밖에서
+못 보게 만든 것이라 브라우저도 길을 열어 주지 않는다.
 
 붙여넣기·복사·잘라내기·전체선택·실행취소는 **키 이벤트만으로 일어나지 않는다.** 브라우저가
 그 동작을 실제로 하려면 CDP 에 `commands` 를 함께 실어야 하고(실측: `commands` 없이 Meta+V 를
