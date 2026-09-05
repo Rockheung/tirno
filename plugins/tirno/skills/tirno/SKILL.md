@@ -121,7 +121,7 @@ tirno type <text> [--delay ms]
 tirno press <key>                       # Enter, Tab, Escape, ArrowDown...
 tirno press 'Meta+v'                    # 조합키. 편집 명령은 CDP commands 로 실제 실행된다
 tirno press 'Shift+Tab'                 # 그 밖의 조합은 평범한 키 입력
-tirno hover <selector|@N>
+tirno hover <selector|@N|"x,y">      # click 과 같이 좌표도 받는다
 tirno drag <from> <to>                  # 좌표 "x,y" 또는 selector (자동 판별)
 tirno upload <selector> <files...>
 tirno scroll <up|down|<pixels>> [--step <px>]
