@@ -1,4 +1,4 @@
-import type { Page, CDPSession } from 'puppeteer-core';
+import type { Page, CDPSession, ElementHandle } from 'puppeteer-core';
 
 export interface ResolvedRef {
   objectId: string;
@@ -68,4 +68,29 @@ export async function hoverByRef(page: Page, backendNodeId: number): Promise<voi
   } finally {
     await cdp.detach();
   }
+}
+
+// puppeteer 의 다른 쿼리 핸들러들. 이미 붙어 있으면 `pierce/` 를 덧대지 않는다 —
+// `pierce/xpath/…` 는 없는 핸들러라 진짜 실패 이유를 가린다.
+const HAS_HANDLER = /^(?:pierce|xpath|text|aria)\//;
+
+/**
+ * 셀렉터로 요소 하나를 찾는다. light DOM 을 먼저 보고, 없을 때만 열린 shadow root 를
+ * 관통한다(puppeteer 의 `pierce/`).
+ *
+ * 순서가 중요하다. `pierce/` 는 document 도 순회하지만 같은 셀렉터가 양쪽에 있으면
+ * **shadow 쪽을 먼저 고른다**(실측). 그래서 `pierce/` 만 쓰면 지금까지 눌리던 요소가
+ * 조용히 바뀐다. light DOM 을 먼저 보면 기존 동작은 그대로고, 못 찾을 때만 범위가 넓어진다.
+ */
+export async function findElement(page: Page, selector: string): Promise<ElementHandle<Element> | null> {
+  const direct = await page.$(selector);
+  if (direct || HAS_HANDLER.test(selector)) return direct;
+  return page.$(`pierce/${selector}`);
+}
+
+/** findElement 와 같되, 못 찾으면 puppeteer 와 같은 문구로 던진다. */
+export async function requireElement(page: Page, selector: string): Promise<ElementHandle<Element>> {
+  const el = await findElement(page, selector);
+  if (!el) throw new Error(`No element found for selector: ${selector}`);
+  return el;
 }
