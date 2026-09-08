@@ -151,6 +151,22 @@ settle 하지 않는 promise 를 페이지가 돌려주면 기본 30초에서 �
 양쪽에 있을 때 관통 쪽은 shadow 를 먼저 고르므로, 그것만 쓰면 지금까지 눌리던 요소가 바뀐다(실측).
 닫힌 shadow root 는 대상이 아니다.
 
+### document-start 훅
+
+```bash
+tirno inject add 'window.__t0 = Date.now()'   # 인자
+tirno inject add --file ./hook-xhr.js         # 파일
+cat ./hook-xhr.js | tirno inject add          # stdin
+tirno inject ls [--json]
+tirno inject rm <id>                          # 인자 없으면 전부
+```
+
+`eval` 은 페이지가 로드된 **뒤**에 돈다. 부팅 중에 이미 나간 요청을 잡거나 페이지가
+리스너를 걸기 전에 가드를 심으려면 그보다 먼저 돌아야 한다 — 그 자리가 `inject` 다.
+`cdp Page.addScriptToEvaluateOnNewDocument` 로 직접 등록하면 identifier 까지 돌려받고도
+그 명령이 끝나는 순간 사라진다. `inject` 는 소스를 세션 메타에 저장하고 connect 마다
+다시 걸어 재기동까지 넘긴다. 등록은 현재 문서를 건드리지 않으니 지금 보려면 `reload`.
+
 ### 에뮬레이션
 
 ```bash

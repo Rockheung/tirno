@@ -110,6 +110,9 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'headers set':        { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'headers rm':         { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'headers ls':         { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'inject add':         { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'inject rm':          { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'inject ls':          { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
 
   // ---- service workers
   'sw status':          { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
