@@ -439,7 +439,7 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 ### 입력
 | 명령 | 설명 |
 |---|---|
-| `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래) |
+| `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래). **진짜 클릭처럼 포커스를 옮긴다**(아래) |
 | `fill <selector\|@N> <value>` | input clear + type |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
@@ -448,6 +448,25 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
+
+### 클릭은 포커스를 옮긴다
+
+`@ref` 클릭은 `HTMLElement.click()` 으로 합성 클릭을 보낸다. 그 클릭은 **포커스를 건드리지
+않으므로**, 진짜 클릭이 하는 두 가지를 손으로 맞춰 준다 — 순서는 **블러 → 포커스 → 클릭**이다.
+진짜 클릭은 mousedown 에서 포커스를 옮기므로 click 핸들러가 돌기 **전**이어야 한다.
+
+- **이전에 포커스돼 있던 요소를 블러한다.** `change` 는 블러에서만 나온다. 그래서 `fill` 로
+  채운 값을 `change` 에서 커밋하는 폼(ExtJS·일부 제어 컴포넌트)은, 이것이 없으면 DOM 에 값이
+  보이는데도 **빈 값을 제출한다**. `fill` 도 `click` 도 성공을 보고한 뒤라 조용히 어긋난다
+- **누른 요소가 포커스를 받는다.** 그래서 `click` 뒤의 `type` 이 그 요소로 들어간다. 이것이
+  없으면 글자가 아무 데도 안 들어가고, 셀렉터로 누르면(진짜 마우스라) 들어가므로 **같은
+  명령이 대상 표기에 따라 갈렸다**
+
+포커스를 못 받는 요소(평범한 div)에서는 블러만 일어난다 — 진짜 클릭도 그때는 포커스를
+비우기만 한다.
+
+셀렉터 경로와 `"x,y"` 좌표 경로는 진짜 마우스 이벤트라 브라우저가 알아서 옮긴다. 맞춰 준
+것은 `@ref` 경로뿐이고, 목적은 세 경로가 같은 결과를 내게 하는 것이다.
 
 **셀렉터는 열린 shadow root 를 관통한다.** `click`·`fill`·`hover`·`wait-for` 는 light DOM 에서
 먼저 찾고, 없으면 열린 shadow root 를 순회해 다시 찾는다(puppeteer 의 `pierce/`). 웹 컴포넌트로
@@ -525,10 +544,10 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 | `permissions grant <origin> <permission...>` | origin 에 권한을 주고 세션에 기록. origin 은 `new URL(x).origin` 으로 정규화되므로 경로·쿼리를 붙여도 된다 |
 | `permissions revoke [origin]` | 한 origin, 또는 인자 없으면 전부 해제 |
 | `permissions ls [--json]` | 이 세션에 기록된 grant 목록 |
-| `headers set <name> <value> [--host <domain>...]` | 요청에 붙일 고정 헤더. 세션 프로필에 굽는 확장으로 나가며 연결이 끊긴 뒤에도 유지된다 |
+| `headers set <name> <value> [--host <domain>...]` | 요청에 붙일 고정 헤더. 세션 프로필에 굽는 확장으로 나가며 연결이 끊긴 뒤에도 유지된다. 확장 뱃지에 개수가, 팝업에 목록이 뜬다 |
 | `headers set <name> <value> --once` | 대신 `Network.setExtraHTTPHeaders` 를 쓴다 — tirno 명령이 도는 동안만 유효 |
 | `headers rm [name] [--once]` | 헤더 하나, 인자 없으면 전부 |
-| `headers ls [--json]` | 이 세션의 고정 헤더, 호스트 조건과 유지 범위까지 |
+| `headers ls [--json]` | 이 세션의 고정 헤더, 호스트 조건과 유지 범위까지. persistent 는 창 안에서도 보인다(확장 뱃지·팝업), `--once` 는 여기가 유일한 자리 |
 
 `perm` 으로 줄여 쓸 수 있다.
 
@@ -538,6 +557,16 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 규칙이 브라우저 네트워크 스택에 걸리므로 CDP 연결이 끊긴 뒤에도 유지되고, 서비스워커와
 OOPIF 가 스스로 보내는 요청에도 붙으며, `--host` 로 호스트를 고를 수 있다(등록 가능 도메인
 기준이라 서브도메인이 함께 걸린다 — 실측). 세션은 `--extensions` 로 떠 있어야 한다.
+
+확장이라는 성질에는 부수 효과가 하나 더 있다 — **창 안에서 보인다.** 툴바 뱃지가 지금 걸린
+규칙 개수를 이고, 팝업이 헤더 이름 · 값 · 스코프된 호스트를 나열한다. 값은 기본 마스킹하고
+클릭해야 펼친다. 페이지를 건드리지 않으므로 그 DOM 을 재는 검증과 충돌하지 않는다.
+
+헤더가 결과를 가르는 환경에서 헤더 유무가 화면에 안 드러나면 **엉뚱한 대상을 재고도 모른다** —
+헤더 없이도 페이지는 정상으로 뜨기 때문에 눈으로는 안 갈린다. 뱃지가 그 자리를 메운다.
+
+`--once` 는 확장이 없으므로 뱃지도 팝업도 없다. `headers ls` 가 그 헤더를 볼 수 있는
+유일한 자리이고, `ls` 출력이 그 사실을 직접 말한다.
 
 확장은 `Extensions.loadUnpacked` 로만 들어간다. `--load-extension` 은 chrome 152 에서 죽은
 경로다 — 플래그가 커맨드라인에 실려도 확장이 붙지 않고, 프로필 밖 경로·`--disable-extensions-except`

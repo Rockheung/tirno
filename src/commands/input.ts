@@ -33,7 +33,7 @@ async function elemCenter(page: Page, selector: string): Promise<[number, number
 export function registerInputCommands(program: Command): void {
   program
     .command('click')
-    .description('Click by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots')
+    .description('Click by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots. Moves focus the way a real click does — the previously focused element is blurred (so a `fill` before this commits its `change`) and the clicked element takes focus (so a `type` after this lands in it)')
     .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
     .option('-s, --session <name>', 'Session name')
     .option('--dbl', 'Double click')
