@@ -74,12 +74,40 @@ node scripts/generate.mjs mounts.json --out .relay
 ```bash
 node .relay/serve.mjs &     # --out .relay 로 구운 것
 tirno new preview https://app.example.com/<진입경로> -- \
-  --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" --ignore-certificate-errors
+  --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" --ignore-certificate-errors \
+  --disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessChecks
 # restart 없음 — host-resolver 를 그대로 둔다. 로그인·API 는 릴레이로 살아 있다.
 ```
 
 SW 오버레이의 "크롬 두 번 뜨고 restart 로 진짜 origin 복귀" 단계가 통째로 없다. host-resolver 를
 그대로 두는 것이 이 모드의 핵심이다.
+
+## `--disable-features` 를 빼면 요청이 아예 안 나간다
+
+**origin 을 통째로 MAP 하지 않고 자산 호스트만 MAP 하는 구성이면 크롬이 막는다.** 문서는 진짜
+origin(public)에서 오는데 자산만 loopback 으로 가므로 주소 공간을 넘는 요청이 되고, 크롬 152 의
+Local Network Access 검사가 요청을 **내보내기 전에** 거부한다.
+
+```
+Access to script at 'https://assets.example.com/…' from origin 'https://app.example.com'
+has been blocked by CORS policy:
+Permission was denied for this request to access the `loopback` address space.
+```
+
+**요청이 실패하는 것이 아니라 발생 자체를 안 한다.** `serve.log` 도 DevTools 네트워크도
+`performance` 의 resource 목록도 전부 0건이라 "서버가 안 떴나" 로 오진하기 쉽다. 같은 파일을
+`curl https://127.0.0.1:<포트>/<경로>` 로 받아 보면 200 이고 그 요청은 `serve.log` 에 찍힌다 —
+서버는 멀쩡하다.
+
+**크롬은 도메인이 아니라 해석된 IP 로 판정한다.** host-resolver 는 DNS 해석 단계를 바꿀 뿐이고,
+주소 공간 판정은 그 뒤 실제 연결 대상으로 일어난다. 그래서 MAP 한 호스트로 나가는 요청만
+사라지고, 같은 도메인의 매핑하지 않은 서브도메인은 정상으로 온다(실측으로 갈랐다).
+
+origin 을 통째로 MAP 하면 문서도 loopback 에서 오므로 주소 공간이 같아 이 검사에 안 걸린다 —
+[[tirno-sw-override]] 의 부트스트랩이 그 경우다.
+
+이 플래그는 **브라우저 보안 검사를 끄는 것**이라 `--ignore-certificate-errors` 와 같은 성격의
+대가다. 그 세션 안에만 머문다.
 
 **`--headless` 를 쓰지 마라.** SW 오버레이에서 headless 가 성립한 건 그게 부트스트랩 전용이고
 뒤따르는 `restart` 가 창을 띄웠기 때문이다. 이 모드엔 그 restart 가 없어 창이 끝까지 떠 있어야
