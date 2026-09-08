@@ -12,30 +12,42 @@ export async function resolveBackendNode(page: Page, backendNodeId: number): Pro
 }
 
 /**
- * 진짜 클릭이 포커스를 옮기는 것을 흉내 낸다.
+ * 진짜 클릭이 포커스를 옮기는 것을 흉내 낸다 — **두 방향 모두.**
  *
- * `this.click()` 은 합성 클릭이라 **포커스를 건드리지 않는다.** 그래서 바로 앞에서 채운
- * 필드가 블러되지 않고, 블러에서만 나오는 `change` 가 끝내 안 나온다. 값을 `change` 에서
- * 커밋하는 폼(ExtJS 계열이 그렇다)은 DOM 에 값이 보이는데도 빈 값을 제출한다 — `fill` 도
- * `click` 도 성공을 보고한 뒤라서 조용히 어긋난다 (#166).
+ * `this.click()` 은 합성 클릭이라 포커스를 건드리지 않는다. 그래서 두 가지가 어긋난다.
+ *
+ * 1. 앞에서 채운 필드가 블러되지 않아, 블러에서만 나오는 `change` 가 끝내 안 나온다.
+ *    값을 `change` 에서 커밋하는 폼(ExtJS 계열)은 DOM 에 값이 보이는데도 빈 값을
+ *    제출한다 (#166).
+ * 2. **누른 요소가 포커스를 받지 못한다.** 그래서 `click @ref` 로 입력칸을 누른 뒤
+ *    `type` 을 치면 글자가 아무 데도 안 들어간다 — 셀렉터로 누르면(진짜 마우스라)
+ *    들어가므로, 같은 명령이 대상 표기에 따라 갈린다.
+ *
+ * 진짜 클릭은 mousedown 에서 포커스를 옮긴다 — **click 핸들러가 돌기 전이다.** 그래서
+ * 순서가 블러 → 포커스 → 클릭이어야 한다. 핸들러가 `document.activeElement` 를 읽으면
+ * 이미 누른 요소여야 한다.
+ *
+ * 포커스를 못 받는 요소(평범한 div)에서 `focus()` 는 아무 일도 안 한다. 진짜 클릭도
+ * 그때는 포커스를 비우기만 하므로, 블러만 남는 것이 맞는 결과다.
  *
  * shadow root 안에 포커스가 있으면 `activeElement` 는 호스트를 준다. 커밋해야 할 것은
  * 안쪽 요소이므로 끝까지 내려가서 그것을 블러한다.
  */
-const BLUR_PREVIOUS = `
+const MOVE_FOCUS = `
   let prev = this.ownerDocument.activeElement;
   while (prev && prev.shadowRoot && prev.shadowRoot.activeElement) prev = prev.shadowRoot.activeElement;
   if (prev && prev !== this && typeof prev.blur === "function") prev.blur();
+  if (typeof this.focus === "function") this.focus();
 `;
 
 export async function clickByRef(page: Page, backendNodeId: number, dbl = false): Promise<void> {
   const { objectId, cdp } = await resolveBackendNode(page, backendNodeId);
   try {
     // scroll into view first to make the click reliable, and move focus the way
-    // a real click would — see BLUR_PREVIOUS.
+    // a real click would — see MOVE_FOCUS.
     await cdp.send('Runtime.callFunctionOn', {
       objectId,
-      functionDeclaration: `function(){ this.scrollIntoView({block:"center", inline:"center"});${BLUR_PREVIOUS}}`,
+      functionDeclaration: `function(){ this.scrollIntoView({block:"center", inline:"center"});${MOVE_FOCUS}}`,
       awaitPromise: false,
     });
     const fn = dbl
