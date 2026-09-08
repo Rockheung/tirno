@@ -131,6 +131,16 @@ export function registerHeaderCommands(program: Command): void {
         ];
         if (!rows.length) { info(`No fixed headers for '${name}'.`); return; }
         console.log(formatTable(['HEADER', 'VALUE', 'HOSTS', 'SCOPE'], rows));
+
+        // 두 스코프는 "지금 붙어 있나" 의 답이 서로 다르다. persistent 는 확장이라
+        // 창 안에서 확인할 수 있고, once 는 CDP 연결 수명에 묶여 있어 확인할 자리가
+        // 아예 없다 — 그 비대칭을 여기서 말하지 않으면 어디에서도 안 나온다 (#167).
+        if (rules.length) {
+          info('persistent: also visible in the browser — the tirno-headers extension badge shows the count, its popup lists them.');
+        }
+        if (Object.keys(once).length) {
+          info('once: no in-browser view — these live in the CDP connection, so they are only on requests made while a tirno command runs. This list is the only place they show.');
+        }
       } catch (e) { error((e as Error).message); process.exit(1); }
     });
 }
