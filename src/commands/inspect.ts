@@ -1,11 +1,12 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
-import { getActivePage } from '../cdp/page-resolver.js';
+import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, error } from '../output/formatter.js';
 import { captureRequests, type CapturedRequest } from '../cdp/network-capture.js';
 import * as refStore from '../core/ref-store.js';
+import { bootUrlOf } from '../core/session-store.js';
 import type { RefStore } from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
@@ -60,6 +61,10 @@ export function registerInspectCommands(program: Command): void {
       try {
         const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
+        // 앵커가 아직 안 열렸으면 그렇다고 말한다 — 빈 트리는 페이지가 비었다는
+        // 뜻처럼 보이지, 너무 일찍 읽었다는 뜻으로는 안 보인다 (#173).
+        const blank = blankAnchorHint(page.url(), bootUrlOf(meta));
+        if (blank) warn(blank);
         const cdp = await page.createCDPSession();
 
         // Chrome builds the accessibility tree off a rendered frame. Ask for it
