@@ -27,6 +27,9 @@ const RESOURCE_TYPES = [
   'websocket', 'webtransport', 'webbundle', 'other',
 ];
 
+// `action` 과 `background` 는 규칙을 거는 것과 무관하다 — 창을 보는 사람이 지금 어떤
+// 헤더가 붙는지 알 수 있게 하는 UI 다(#167). 권한은 늘지 않는다: MV3 의 chrome.action
+// 은 권한을 요구하지 않고, 팝업은 자기 확장 안의 view.json 만 읽는다.
 const MANIFEST = {
   manifest_version: 3,
   name: 'tirno-headers',
@@ -36,6 +39,8 @@ const MANIFEST = {
   declarative_net_request: {
     rule_resources: [{ id: 'tirno', enabled: true, path: 'rules.json' }],
   },
+  action: { default_popup: 'popup.html', default_title: 'Fixed request headers (tirno)' },
+  background: { service_worker: 'bg.js' },
 };
 
 export function buildRules(rules: HeaderRule[]): unknown[] {
@@ -61,12 +66,143 @@ export function headerExtDir(userDataDir: string): string {
   return path.join(userDataDir, 'tirno-headers');
 }
 
+/**
+ * 팝업이 읽는 표. `rules.json` 은 declarativeNetRequest 의 형식이라 사람이 읽을
+ * 것이 아니고, 앞으로 그 형식이 바뀌어도 팝업이 따라 깨지면 안 된다.
+ */
+export function buildView(rules: HeaderRule[]): unknown[] {
+  return rules.map(r => ({
+    name: r.name,
+    value: r.value,
+    hosts: r.hosts?.length ? r.hosts : null,   // null = 모든 호스트
+  }));
+}
+
+// 뱃지는 규칙 개수다. 0 이면 비운다 — "0" 을 띄우면 헤더가 붙는 세션과 안 붙는
+// 세션이 둘 다 뱃지를 달게 되고, 그러면 뱃지가 가르는 것이 없어진다.
+const BG_JS = `// 생성된 파일 — tirno headers.
+async function paint() {
+  let n = 0;
+  try {
+    const view = await (await fetch(chrome.runtime.getURL('view.json'))).json();
+    n = view.length;
+  } catch { n = 0; }
+  await chrome.action.setBadgeText({ text: n ? String(n) : '' });
+  await chrome.action.setBadgeBackgroundColor({ color: '#b91c1c' });
+  await chrome.action.setTitle({
+    title: n ? \`tirno — \${n} fixed header\${n === 1 ? '' : 's'} on this session\`
+             : 'tirno — no fixed headers on this session',
+  });
+}
+paint();
+chrome.runtime.onInstalled.addListener(paint);
+chrome.runtime.onStartup.addListener(paint);
+`;
+
+// 팝업은 페이지를 건드리지 않는다 — 관측이 대상을 오염시키지 않는 것이 이 방식을
+// 고른 이유다(#167 의 제안 1번).
+const POPUP_HTML = `<!doctype html>
+<meta charset="utf-8">
+<title>tirno headers</title>
+<link rel="stylesheet" href="popup.css">
+<h1>Fixed request headers</h1>
+<div id="list"></div>
+<p class="note">
+  Values are masked — click one to reveal. These are declarativeNetRequest rules
+  baked into this session profile, so they hold after tirno disconnects.
+</p>
+<p class="note">
+  <code>--once</code> headers cannot appear here: they live in the CDP connection,
+  not in this extension. Run <code>tirno headers ls</code> to see those.
+</p>
+<script src="popup.js"></script>
+`;
+
+const POPUP_CSS = `body { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin: 0; padding: 12px; min-width: 340px; background: #fff; color: #111; }
+h1 { font-size: 13px; margin: 0 0 10px; letter-spacing: .02em; }
+table { border-collapse: collapse; width: 100%; }
+th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .04em; color: #6b7280; border-bottom: 1px solid #e5e7eb; padding: 4px 6px 4px 0; }
+td { padding: 5px 6px 5px 0; border-bottom: 1px solid #f3f4f6; vertical-align: top;
+  word-break: break-all; }
+.value { cursor: pointer; color: #b91c1c; }
+.value.revealed { color: #111; }
+.hosts { color: #6b7280; }
+.empty { color: #6b7280; padding: 6px 0; }
+.note { color: #6b7280; font-size: 11px; line-height: 1.5; margin: 10px 0 0; }
+code { background: #f3f4f6; padding: 0 3px; border-radius: 2px; }
+@media (prefers-color-scheme: dark) {
+  body { background: #18181b; color: #e4e4e7; }
+  th { color: #a1a1aa; border-bottom-color: #3f3f46; }
+  td { border-bottom-color: #27272a; }
+  .value { color: #f87171; } .value.revealed { color: #e4e4e7; }
+  .hosts, .empty, .note { color: #a1a1aa; }
+  code { background: #27272a; }
+}
+`;
+
+// 값은 기본 마스킹한다. 헤더 값은 토큰인 경우가 흔하고, 팝업은 사람이 어깨너머로
+// 보는 화면 위에 뜬다. 길이는 남긴다 — 무엇이 들었는지는 가리되 비었는지 아닌지는
+// 보여야 "붙어 있나" 라는 질문에 답이 된다.
+const POPUP_JS = `// 생성된 파일 — tirno headers.
+const mask = v => '\u2022'.repeat(Math.min(v.length, 24)) + (v.length > 24 ? '\u2026' : '');
+
+function render(view) {
+  const list = document.getElementById('list');
+  if (!view.length) {
+    list.innerHTML = '<p class="empty">No fixed headers on this session.</p>';
+    return;
+  }
+  const table = document.createElement('table');
+  table.innerHTML = '<tr><th>Header</th><th>Value</th><th>Hosts</th></tr>';
+  for (const r of view) {
+    const tr = document.createElement('tr');
+
+    const name = document.createElement('td');
+    name.textContent = r.name;
+
+    const value = document.createElement('td');
+    value.className = 'value';
+    value.textContent = mask(r.value);
+    value.title = 'click to reveal';
+    value.addEventListener('click', () => {
+      const shown = value.classList.toggle('revealed');
+      value.textContent = shown ? r.value : mask(r.value);
+      value.title = shown ? 'click to hide' : 'click to reveal';
+    });
+
+    const hosts = document.createElement('td');
+    hosts.className = 'hosts';
+    hosts.textContent = r.hosts ? r.hosts.join(', ') : 'every host';
+
+    tr.append(name, value, hosts);
+    table.append(tr);
+  }
+  list.replaceChildren(table);
+}
+
+fetch(chrome.runtime.getURL('view.json'))
+  .then(r => r.json())
+  .then(render)
+  .catch(e => {
+    document.getElementById('list').textContent = 'could not read rules: ' + e.message;
+  });
+`;
+
 /** 규칙을 디스크에 굽고, chrome 에 넘길 확장 경로를 돌려준다. */
 export function writeHeaderExt(userDataDir: string, rules: HeaderRule[]): string {
   const dir = headerExtDir(userDataDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(MANIFEST, null, 2));
   fs.writeFileSync(path.join(dir, 'rules.json'), JSON.stringify(buildRules(rules), null, 2));
+  // 창 안에서 보이게 하는 쪽. 규칙과 같은 호출에서 함께 써야 뱃지가 규칙보다
+  // 낡지 않는다.
+  fs.writeFileSync(path.join(dir, 'view.json'), JSON.stringify(buildView(rules), null, 2));
+  fs.writeFileSync(path.join(dir, 'bg.js'), BG_JS);
+  fs.writeFileSync(path.join(dir, 'popup.html'), POPUP_HTML);
+  fs.writeFileSync(path.join(dir, 'popup.css'), POPUP_CSS);
+  fs.writeFileSync(path.join(dir, 'popup.js'), POPUP_JS);
   return dir;
 }
 
