@@ -487,7 +487,7 @@ shadow root 안이나 셀렉터가 없는 캔버스 위 요소에는 좌표가 �
 | 명령 | 설명 |
 |---|---|
 | `eval [expression\|-] [--file <path>] [--timeout <ms>]` | 페이지에서 JS 실행. **입력은 인자·`--file`·stdin 셋 중 하나**(아래). **함수 리터럴은 호출한다**(아래). **함수 리터럴은 호출한다**(아래). 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
-| `cdp <method> [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
+| `cdp [method] [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. `--script [file]` 이면 `{method, params}` 배열을 **한 연결 위에서** 순서대로 보내고 뒤 단계가 앞 결과를 `$0.result.objectId` 로 참조한다(아래). tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
 | `emulate [--device <name>] [--dpr <n>] [--network <p>] [--cpu <n>] [--reset]` | 영속 emulation |
 
 `eval` 은 평가 결과가 **인자 없는 함수면 호출하고 그 반환을 낸다.** 안 부르면 함수 객체가
@@ -549,6 +549,49 @@ OOPIF 가 스스로 보내는 요청에도 붙으며, `--host` 로 호스트를 
 재적용되지만 CDP 연결 수명에 묶여, tirno 명령이 도는 동안 나가는 요청에만 붙는다 —
 명령이 끝난 뒤 페이지가 스스로 보내는 요청에는 붙지 않는다(실측). 호스트 조건도 받지
 못한다. `--extensions` 없이 뜬 세션에서 쓸 수 있는 것은 이쪽뿐이다.
+
+### `cdp --script` — 한 연결 위의 여러 명령
+
+`cdp` 는 한 호출이 한 연결이다. 그래서 **연결에 얹혀 사는 CDP 상태는 다음 호출에서 전부
+무효**가 된다. `objectId` 가 대표다:
+
+```
+$ tirno cdp Runtime.evaluate '{"expression":"window","objectGroup":"t"}'
+  objectId: -1842980691376821852.15.1
+$ tirno cdp DOMDebugger.getEventListeners '{"objectId":"-1842980691376821852.15.1"}'
+✗ Protocol error (DOMDebugger.getEventListeners): Could not find object with given id
+```
+
+`objectId` 를 인자로 받는 도메인이 통째로 막힌다 — `DOMDebugger.getEventListeners`,
+`Runtime.callFunctionOn`, `Runtime.getProperties`, `DOM.requestNode`. `objectGroup` 도 함께
+사라진다.
+
+`--script` 는 `{method, params}` 의 배열을 **하나의 CDP 세션 위에서** 순서대로 보낸다.
+
+```bash
+tirno cdp --script steps.json        # 파일
+cat steps.json | tirno cdp --script  # stdin (경로 생략, 또는 "-")
+```
+
+```json
+[
+  { "method": "Runtime.evaluate",
+    "params": { "expression": "document.querySelector('button')" } },
+  { "method": "DOMDebugger.getEventListeners",
+    "params": { "objectId": "$0.result.objectId", "depth": 1 } }
+]
+```
+
+- `$0` 은 0번 단계의 결과 전체, `$0.result.objectId` 는 그 안으로 걸어 들어간다
+- **문자열 전체가 참조일 때만** 바꾼다. 끼워 넣기까지 받으면 `$` 가 들어간 평범한 값이
+  조용히 뜻이 달라진다
+- 참조된 값은 **타입을 지킨다**. 문자열로 굳히면 `nodeId` 자리에서 CDP 가 조용히 거절한다
+- 형태가 틀린 스크립트는 **보내기 전에** 거절한다 — 절반쯤 보내다 멈추면 그때까지의
+  부작용은 남고 되돌릴 방법이 없다
+- 중간에 실패해도 **그때까지의 결과를 전부 낸다.** objectId 를 얻은 뒤 그것을 쓰는 단계에서
+  실패하는 것이 흔한 모양이라, 여기서 버리면 처음부터 다시 해야 한다. 종료 코드는 1
+
+document-start 훅은 한 스크립트 안에서는 살지만 세션을 넘지 않는다 — 그쪽은 `inject` 다.
 
 CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.** tirno 는 명령마다 붙었다
 끊으므로, `cdp Browser.grantPermissions` 로 직접 준 권한은 그 명령이 끝나는 순간 `prompt`

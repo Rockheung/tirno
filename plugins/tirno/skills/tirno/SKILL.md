@@ -279,6 +279,7 @@ tirno broadcast [--group <g>] <cmd>   # 여러 세션에 같은 명령
 ```bash
 tirno cache list|load|prune           # 1번. URL·viewport 키 스냅샷 저장소
 tirno cdp <method> [params]           # 3번. 모든 CDP 명령 raw passthrough
+tirno cdp --script <file>             #     여러 명령을 한 연결 위에서. objectId 가 산다
 tirno trail capture|ls|show           # 5번. 마지막 보루 — 사용자 시연을 받는다
 tirno record start|stop               # 사용자 입력 캡처
 tirno replay <name>                   # 신뢰 이벤트로 재생. 채널 순서대로 폴백
