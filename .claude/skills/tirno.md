@@ -195,8 +195,11 @@ user-data-dir 을 유지해도 그렇다. `permissions grant` 는 `SessionMetada
 저장하고 emulation 과 같은 자리에서 connect 마다 재적용한다.
 
 클립보드는 권한만으로 부족하다. 문서에 포커스가 없으면 `readText()` 가
-`NotAllowedError: Document is not focused` 로 거절되므로, 백그라운드 탭이면
-`tirno cdp Page.bringToFront '{}'` 를 먼저 보낸다.
+`NotAllowedError: Document is not focused` 로 거절된다 — **권한 이야기가 아니라 창이
+앞에 있어야 한다는 뜻**이고, 문구가 `hasFocus()` 와 어긋나 보여 진단이 권한 쪽으로 샌다.
+`tirno focus` 를 먼저 친다: 크롬 안에서 탭을 올리고, 그것으로 부족할 때만 OS 창까지
+올린다(macOS). `eval` 은 일부러 창을 안 올리므로 — 읽는 것이 보던 화면을 빼앗으면 안
+되므로 — 이 명령이 따로 있다.
 
 ### 고정 헤더
 

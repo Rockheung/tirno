@@ -124,6 +124,7 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'forward':      { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
   'pages':        { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'select':       { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'focus':        { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'new-tab':      { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
   'close-tab':    { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
 
