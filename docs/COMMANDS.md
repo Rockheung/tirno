@@ -259,6 +259,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `nav <url>` | URL로 이동 |
 | `reload [--hard]` / `back` / `forward` | 페이지 이력 제어. `--hard` 는 캐시를 우회해 다시 받는다 |
 | `pages` / `select <id>` / `new-tab [url]` / `close-tab <id>` | 탭 제어. ID 는 CDP targetId 앞 8자리로, 탭이 열리고 닫혀도 안 바뀐다(위치 인덱스가 아니다). 4자 이상이면 접두사로도 된다 |
+| `focus` | 세션 창을 앞으로. 클립보드 등 포커스가 필요한 API 가 통과하게 한다. 크롬 안에서 탭을 올리고(대개 이걸로 충분하다), **그것으로 부족할 때만** OS 창까지 올린다(macOS). `eval` 은 일부러 창을 안 올리므로 이 명령이 따로 있다 |
 
 ### 검사
 | 명령 | 설명 |
@@ -599,8 +600,24 @@ CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.*
 에 저장되고 emulation 과 같은 자리에서 connect 마다 재적용된다.
 
 권한이 있어도 `navigator.clipboard.readText()` 는 문서에 포커스가 없으면
-`NotAllowedError: Document is not focused` 로 거절된다. 백그라운드 탭이면 `cdp Page.bringToFront`
-를 먼저 보낸다.
+`NotAllowedError: Document is not focused` 로 거절된다. **이것은 권한 이야기가 아니다** —
+`permissions grant` 를 아무리 해도 안 풀린다. 창이 앞에 있어야 한다는 뜻이고, 문구가
+`document.hasFocus()` 결과와 어긋나 보여서 진단이 권한 쪽으로 새기 쉽다.
+
+`tirno focus [-s <세션>]` 가 그 자리다. 두 층으로 올린다:
+
+1. `Page.bringToFront` — 크롬 안에서 그 탭을 활성으로. 실측(macOS · chrome 152)으로는
+   여기까지로 `hasFocus()` 가 true 가 되고 클립보드가 통과한다(보내기 전 `false|ERR`,
+   보낸 뒤 `true|OK`, 그 뒤로 유지).
+2. 그래도 아니면 **OS 앱 활성화**(macOS: 세션 pid 로 `osascript`). 사용자가 보던 창을
+   빼앗는 일이라 1번으로 충분하면 하지 않는다. macOS 밖에서는 아무것도 안 하고 그
+   사실을 말한다. `System Events` 로 다른 프로세스를 조작하려면 tirno 를 돌리는 터미널에
+   **손쉬운 사용(Accessibility)** 권한이 필요하고, 없으면 `-1712`/`-609` 로 실패하는데
+   그 문구로는 권한 이야기인 줄 알 수 없어서 그것도 번역해 준다.
+
+`eval` 은 **일부러** 창을 올리지 않는다 — 페이지를 읽는 것이 사용자가 보던 화면을
+빼앗으면 안 되기 때문이다. 대신 `Document is not focused` 로 실패하면 `tirno focus` 를
+치라고 알려 준다.
 
 ### 부트 URL 과 앵커
 

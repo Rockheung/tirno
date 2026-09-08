@@ -1,8 +1,9 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
+import { activateWindow } from '../core/os-focus.js';
 import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
-import { formatTable, success, error } from '../output/formatter.js';
+import { formatTable, success, warn, error } from '../output/formatter.js';
 
 export function registerNavCommands(program: Command): void {
   program
@@ -122,6 +123,47 @@ export function registerNavCommands(program: Command): void {
           p.url.slice(0, 80),
         ]);
         console.log(formatTable(['ID', 'TITLE', 'URL'], rows));
+      } catch (e) {
+        error((e as Error).message);
+        process.exit(1);
+      }
+    });
+
+  program
+    .command('focus')
+    .description('Bring the session window forward so focus-gated APIs (clipboard, paste) work. Raises the tab inside chrome first, and only escalates to OS window activation when that is not enough')
+    .option('-s, --session <name>', 'Session name')
+    .action(async (opts) => {
+      try {
+        const { browser, meta } = await connect(opts.session);
+        const page = await getActivePage(browser);
+
+        // 1층 — 크롬 안에서 이 탭을 활성으로. 실측(macOS·chrome 152)으로는 여기까지로
+        //       `document.hasFocus()` 가 true 가 되고 클립보드가 통과했다.
+        await page.bringToFront();
+        let focused = await page.evaluate(() => document.hasFocus());
+
+        // 2층 — 그래도 아니면 OS 활성화. 사용자가 보던 창을 빼앗는 일이라 **필요할 때만**
+        //       한다. 필요 없는데 하면 그 자체가 방해다.
+        let escalated = false;
+        let reason: string | undefined;
+        if (!focused) {
+          escalated = true;
+          const res = await activateWindow(meta.pid);
+          reason = res.reason;
+          if (res.ok) focused = await page.evaluate(() => document.hasFocus());
+        }
+
+        browser.disconnect();
+
+        if (focused) {
+          success(`Focused '${meta.name}'${escalated ? ' (raised the OS window too)' : ''}`);
+          return;
+        }
+        // 여기까지 왔으면 클립보드는 여전히 거부한다. 무엇이 부족한지 말하고 나온다 —
+        // 조용히 성공을 보고하면 다음 명령이 이유 없이 실패한다.
+        warn(reason ?? 'The window was raised but the document still reports no focus. Click the browser window once.');
+        process.exitCode = 1;
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
