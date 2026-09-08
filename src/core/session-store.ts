@@ -184,3 +184,14 @@ export function setActive(name: string): void {
 export function clearActive(): void {
   if (fs.existsSync(activeFile())) fs.unlinkSync(activeFile());
 }
+
+/**
+ * 세션이 기동될 때 chrome 에 넘긴 URL. 없으면 undefined.
+ *
+ * 따로 저장하지 않고 chromeFlags 에서 되읽는다 — `launch` 가 URL 을 마지막 위치
+ * 인자로 밀어 넣기 때문에, 플래그 아닌 항목이 그것 하나다. 이 규칙을 아는 자리를
+ * 하나로 둔다.
+ */
+export function bootUrlOf(meta: SessionMetadata): string | undefined {
+  return meta.chromeFlags?.find(f => !f.startsWith('--'));
+}

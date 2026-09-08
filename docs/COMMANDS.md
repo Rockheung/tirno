@@ -8,7 +8,7 @@
 ### 세션
 | 명령 | 설명 |
 |---|---|
-| `new <name> [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨) |
+| `new <name> [url] [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨). `[url]` 을 주면 **그 페이지가 커밋될 때까지 기다렸다가** 돌아온다(`--boot-timeout <ms>`, 기본 15000; 못 기다리면 세션은 그대로 두고 그 사실을 말한다) |
 | `ls` | 세션 목록 (port, status, **owner**, proxy, emulation, last access) |
 | `attach <name>` | active 세션 변경 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
@@ -601,6 +601,37 @@ CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.*
 권한이 있어도 `navigator.clipboard.readText()` 는 문서에 포커스가 없으면
 `NotAllowedError: Document is not focused` 로 거절된다. 백그라운드 탭이면 `cdp Page.bringToFront`
 를 먼저 보낸다.
+
+### 부트 URL 과 앵커
+
+`new <name> <url>` 은 URL 을 chrome 의 마지막 위치 인자로 넘긴다. 예전에는 DevTools 포트만
+확인하고 바로 돌아왔는데, **그 시점의 탭은 아직 `about:blank`** 이다. 그래서 바로 이어지는
+`eval` 이 에러 없이 0 을 냈다:
+
+```
+$ tirno new probe <4초 걸리는 URL>
+✓ Session 'probe' created (…)
+$ tirno eval -s probe "location.href"                      → "about:blank"
+$ tirno eval -s probe "document.querySelectorAll('p').length" → 0     에러 없음
+```
+
+앵커가 **틀린 탭**이어서가 아니다. 맞는 탭을 너무 일찍 읽은 것이라 기다리는 것 말고는
+답이 없다. 지금은 `new` 가 기다린다 — 커밋되고 `document.readyState` 가 `loading` 을
+벗어날 때까지다. 커밋만 보면 파싱 도중의 DOM 을 세게 되고, 그건 0 이 아닐 뿐 여전히
+틀린 값이라 알아보기 더 어렵다.
+
+`--boot-timeout <ms>`(기본 15000) 안에 못 열리면 **세션은 그대로 두고** 그 사실을 말한다.
+느린 페이지 때문에 `new` 가 실패하는 쪽이 더 나쁘다.
+
+그래도 `about:blank` 를 읽게 되는 경우(기다림이 시간을 넘겼거나 페이지가 그 뒤에 이동)를
+위해, `eval` 과 `snapshot` 은 앵커가 안 열린 채로 답할 때 그렇다고 말한다:
+
+```
+⚠ Anchor is about:blank, not https://… — the page has not committed, so DOM counts
+  here are 0 for that reason, not the page's. Re-run in a moment, or `tirno nav …`.
+```
+
+URL 없이 띄운 세션에서는 아무 말도 하지 않는다 — 거기서 `about:blank` 는 정상이다.
 
 ### 자기 갱신
 | 명령 | 설명 |

@@ -4,14 +4,14 @@ import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { loadHeaderExt } from '../core/header-ext.js';
 import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
-import { getActivePage } from '../cdp/page-resolver.js';
+import { getActivePage, waitForBootPage } from '../cdp/page-resolver.js';
 import type { Cookie } from 'puppeteer-core';
 import { isAlive, killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
 import { collectListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
 import * as gc from '../core/gc.js';
 import * as drift from '../core/drift.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, error } from '../output/formatter.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -109,7 +109,8 @@ export function registerSessionCommands(program: Command): void {
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
     .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
     .option('--group <name>', 'Tag this session with a group label')
-    .option('--url <url>', 'Same as positional [url] — kept for backward compat');
+    .option('--url <url>', 'Same as positional [url] — kept for backward compat')
+    .option('--boot-timeout <ms>', 'How long to wait for [url] to commit before returning. The session is created either way; on timeout `new` says so instead of leaving the next `eval` to read about:blank', intArg, 15000);
 
   // Chrome flags come after "--": tirno new test -- --no-proxy-server
   newCmd.allowUnknownOption(true);
@@ -173,7 +174,30 @@ export function registerSessionCommands(program: Command): void {
         store.update(name, { group: opts.group });
       }
 
+      // 부트 URL 이 커밋될 때까지 기다린 뒤에 성공을 알린다. 안 기다리면 바로 다음
+      // `eval` 이 아직 about:blank 인 탭을 읽어 **에러 없이 0** 을 낸다 — 값이 0 이면
+      // 사람은 빌드·프록시·서버를 먼저 뒤지고, 앵커는 그 셋을 지나온 다음에 의심한다 (#173).
+      let bootWarning: string | null = null;
+      if (bootUrl) {
+        try {
+          const { browser } = await connectWithoutPageSetup(name);
+          try {
+            if (!await waitForBootPage(browser, opts.bootTimeout)) {
+              bootWarning = `${bootUrl} has not committed after ${opts.bootTimeout}ms. `
+                + 'The session is up, but `eval`/`snapshot` read about:blank until it does — '
+                + 'they will say so. Raise --boot-timeout if the page is just slow.';
+            }
+          } finally {
+            browser.disconnect();
+          }
+        } catch (e) {
+          // 기다리다 실패한 것으로 세션 생성을 실패시키지 않는다 — 크롬은 이미 떴다.
+          bootWarning = `Could not confirm ${bootUrl} loaded: ${(e as Error).message}`;
+        }
+      }
+
       success(`Session '${name}' created (port ${meta.port}, PID ${meta.pid}${opts.group ? `, group: ${opts.group}` : ''}${opts.ephemeral ? ', ephemeral' : ''}${bootUrl ? `, url: ${bootUrl}` : ''})`);
+      if (bootWarning) warn(bootWarning);
 
       // A fixed port makes chrome skip DevToolsActivePort entirely (measured),
       // so a directory-anchored browser MCP has nothing to read.
@@ -573,7 +597,7 @@ export function registerSessionCommands(program: Command): void {
       const flags = d.expected
         .filter(f => f.startsWith('--') && !f.startsWith('--remote-debugging-port'))
         .map(drift.shellQuoteFlag);
-      const bootUrl = meta.chromeFlags.find(f => !f.startsWith('--'));
+      const bootUrl = store.bootUrlOf(meta);
       const parts = [`tirno restart ${target}`];
       if (bootUrl) parts.push(bootUrl);
       if (/(?:^|\s)--headless(?:[=\s]|$)/.test(d.cmdline ?? '')) parts.push('--headless');
