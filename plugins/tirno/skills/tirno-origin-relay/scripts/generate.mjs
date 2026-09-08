@@ -181,7 +181,13 @@ console.log(`
 다음 (host-resolver 를 세션 내내 켜 둔다 — restart 로 떼지 않는다):
 
   node ${path.relative(process.cwd(), path.join(outDir, 'serve.mjs'))} &
-  tirno new <세션> --headless -- --host-resolver-rules="MAP ${host} 127.0.0.1:${port}" --ignore-certificate-errors
+  tirno new <세션> ${cfg.origin}/<진입경로> -- \\
+    --host-resolver-rules="MAP ${host} 127.0.0.1:${port}" --ignore-certificate-errors \\
+    --disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessChecks
   tirno nav ${cfg.origin}/…       # 로그인·API 는 릴레이로 살아 있다
+
+--headless 는 쓰지 않는다 — restart 가 없어 창이 끝까지 떠 있어야 한다.
+--disable-features 도 빼지 않는다 — 자산 호스트만 MAP 하는 구성이면 크롬이 loopback 접근을
+막아 요청이 아예 나가지 않는다(serve.log 가 0건인데 서버는 멀쩡한 증상).
 
 관측은 serve.log 뿐: "200 <경로>" = 로컬, "→ <경로> (relay)" = origin.`);
