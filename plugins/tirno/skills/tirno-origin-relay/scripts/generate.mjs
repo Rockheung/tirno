@@ -103,6 +103,7 @@ fs.writeFileSync(path.join(outDir, 'serve.mjs'), `#!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
+import tls from 'node:tls';
 
 const DIR = path.dirname(new URL(import.meta.url).pathname);
 const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
@@ -133,7 +134,7 @@ const TYPES = {
   '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.pdf': 'application/pdf',
 };
 
-https.createServer({
+const server = https.createServer({
   cert: fs.readFileSync(path.join(DIR, 'cert.pem')),
   key: fs.readFileSync(path.join(DIR, 'key.pem')),
 }, (req, res) => {
@@ -163,7 +164,51 @@ https.createServer({
   // 마운트가 선언한 헤더는 뒤에 얹는다 — 확장자 추측을 덮을 수 있어야 한다.
   for (const [k, v] of Object.entries(hit.headers ?? {})) res.setHeader(k, v);
   fs.createReadStream(hit.file).pipe(res);
-}).listen(${port}, '127.0.0.1', () => console.log('listening on https://127.0.0.1:${port}'));
+});
+
+// ── WebSocket upgrade 도 릴레이한다.
+//
+// 'upgrade' 리스너가 없으면 이 요청은 위의 평범한 HTTP 경로로 떨어진다. 그러면
+// https.request 로 origin 에 가고 origin 은 실제로 101 을 낸다 — 그런데 101 은
+// ClientRequest 의 'response' 가 아니라 'upgrade' 로 올라오므로 아무것도 되돌려
+// 쓰이지 않는다. 클라이언트는 핸드셰이크를 영영 못 받고 매달리다 끊고, origin 쪽은
+// 그 소켓을 살아 있는 것으로 알고 있다. 양쪽 다 에러를 안 낸다 (#146, 실측).
+//
+// 여기는 릴레이만 있고 로컬 마운트가 없다 — 마운트는 파일 단위인데 이건 소켓이라
+// 낼 파일이 없다. 그래서 경로를 안 보고 전부 진짜 origin 으로 넘긴다.
+server.on('upgrade', (req, socket, head) => {
+  const u = new URL(ORIGIN);
+  const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
+  socket.setNoDelay(true);
+
+  const up = tls.connect({
+    host: u.hostname, port: u.port || 443, servername: u.hostname,
+  }, () => {
+    up.setNoDelay(true);
+    // 핸드셰이크는 그대로 재생한다. Sec-WebSocket-Key/Accept 는 이 요청 고유의 값이라
+    // 우리가 만들어 낼 수 없다 — origin 이 낸 101 을 클라이언트가 그대로 받아야 한다.
+    // Host 만 진짜 origin 으로 교정한다(https 릴레이와 같은 이유).
+    const lines = [req.method + ' ' + req.url + ' HTTP/1.1'];
+    for (let i = 0; i < req.rawHeaders.length; i += 2) {
+      const k = req.rawHeaders[i];
+      lines.push(k + ': ' + (/^host$/i.test(k) ? u.host : req.rawHeaders[i + 1]));
+    }
+    up.write(lines.join('\\r\\n') + '\\r\\n\\r\\n');
+    // 업그레이드를 파싱하며 이미 읽어 버린 첫 조각. 안 넘기면 첫 프레임이 사라진다.
+    if (head && head.length) up.write(head);
+    // 101 응답부터 그 뒤의 프레임까지 통째로 양방향 파이프다. 여기서부터는
+    // HTTP 가 아니므로 아무것도 해석하지 않는다.
+    up.pipe(socket);
+    socket.pipe(up);
+  });
+
+  const bail = e => { console.log('x', p, '(ws relay)', e.message); socket.destroy(); up.destroy(); };
+  up.on('error', bail);
+  socket.on('error', bail);
+  console.log('WS', req.method, p, '(ws relay)');
+});
+
+server.listen(${port}, '127.0.0.1', () => console.log('listening on https://127.0.0.1:${port}'));
 `);
 
 // ── 인증서는 있으면 다시 굽지 않는다. openssl 이 굽고, 신뢰는
