@@ -11,13 +11,31 @@ export async function resolveBackendNode(page: Page, backendNodeId: number): Pro
   return { objectId: res.object.objectId, cdp };
 }
 
+/**
+ * 진짜 클릭이 포커스를 옮기는 것을 흉내 낸다.
+ *
+ * `this.click()` 은 합성 클릭이라 **포커스를 건드리지 않는다.** 그래서 바로 앞에서 채운
+ * 필드가 블러되지 않고, 블러에서만 나오는 `change` 가 끝내 안 나온다. 값을 `change` 에서
+ * 커밋하는 폼(ExtJS 계열이 그렇다)은 DOM 에 값이 보이는데도 빈 값을 제출한다 — `fill` 도
+ * `click` 도 성공을 보고한 뒤라서 조용히 어긋난다 (#166).
+ *
+ * shadow root 안에 포커스가 있으면 `activeElement` 는 호스트를 준다. 커밋해야 할 것은
+ * 안쪽 요소이므로 끝까지 내려가서 그것을 블러한다.
+ */
+const BLUR_PREVIOUS = `
+  let prev = this.ownerDocument.activeElement;
+  while (prev && prev.shadowRoot && prev.shadowRoot.activeElement) prev = prev.shadowRoot.activeElement;
+  if (prev && prev !== this && typeof prev.blur === "function") prev.blur();
+`;
+
 export async function clickByRef(page: Page, backendNodeId: number, dbl = false): Promise<void> {
   const { objectId, cdp } = await resolveBackendNode(page, backendNodeId);
   try {
-    // scroll into view first to make the click reliable
+    // scroll into view first to make the click reliable, and move focus the way
+    // a real click would — see BLUR_PREVIOUS.
     await cdp.send('Runtime.callFunctionOn', {
       objectId,
-      functionDeclaration: 'function(){ this.scrollIntoView({block:"center", inline:"center"}); }',
+      functionDeclaration: `function(){ this.scrollIntoView({block:"center", inline:"center"});${BLUR_PREVIOUS}}`,
       awaitPromise: false,
     });
     const fn = dbl
