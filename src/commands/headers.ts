@@ -43,7 +43,7 @@ function resolveName(opts: { session?: string }): string {
 export function registerHeaderCommands(program: Command): void {
   const cmd = program
     .command('headers')
-    .description('Fixed headers added to requests — persistent by default, --once for connection-scoped');
+    .description('Fixed headers added to requests — persistent by default, --once for connection-scoped. Persistent rules are visible inside the browser too: the tirno-headers extension badge shows how many are active and its popup lists them');
 
   cmd.addHelpText('after', HEADERS_HELP);
 
@@ -115,7 +115,7 @@ export function registerHeaderCommands(program: Command): void {
 
   cmd
     .command('ls')
-    .description('List headers for a session, each with the hosts it is scoped to and whether it persists past the connection')
+    .description('List headers for a session, each with the hosts it is scoped to and whether it persists past the connection. Persistent ones also show in the browser (extension badge + popup); --once ones cannot, so this list is the only place they appear')
     .option('-s, --session <name>', 'Session name')
     .option('--json', 'Output as JSON')
     .action((opts) => {
@@ -153,6 +153,10 @@ Two mechanisms, chosen by --once:
             stack, so they hold after tirno disconnects, apply to requests a
             service worker or an out-of-process iframe makes on its own, and
             take a --host condition. The session must run with --extensions.
+            Because it is an extension, it can show itself: the toolbar badge
+            carries the rule count and the popup lists header, value (masked —
+            click to reveal) and scoped hosts. So the person looking at the
+            window can tell whether headers are on without leaving it.
             \`tirno restart <name>\` brings stored rules back and turns
             extensions on by itself when there are any; an extension only
             attaches after launch, so a boot URL is reloaded once rules are in.
@@ -161,7 +165,9 @@ Two mechanisms, chosen by --once:
             bound to the CDP connection, so the header is only on requests that
             happen while a tirno command is running — nothing the page sends on
             its own afterwards carries it — and it cannot be scoped to a host.
-            This is the only path on a session without --extensions.
+            This is the only path on a session without --extensions. There is no
+            extension, so there is no badge or popup either: \`headers ls\` is the
+            only place a --once header is visible at all.
 
 Examples:
   tirno headers set X-Debug 1                      every request, persistent

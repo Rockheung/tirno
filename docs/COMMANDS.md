@@ -543,10 +543,10 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 | `permissions grant <origin> <permission...>` | origin 에 권한을 주고 세션에 기록. origin 은 `new URL(x).origin` 으로 정규화되므로 경로·쿼리를 붙여도 된다 |
 | `permissions revoke [origin]` | 한 origin, 또는 인자 없으면 전부 해제 |
 | `permissions ls [--json]` | 이 세션에 기록된 grant 목록 |
-| `headers set <name> <value> [--host <domain>...]` | 요청에 붙일 고정 헤더. 세션 프로필에 굽는 확장으로 나가며 연결이 끊긴 뒤에도 유지된다 |
+| `headers set <name> <value> [--host <domain>...]` | 요청에 붙일 고정 헤더. 세션 프로필에 굽는 확장으로 나가며 연결이 끊긴 뒤에도 유지된다. 확장 뱃지에 개수가, 팝업에 목록이 뜬다 |
 | `headers set <name> <value> --once` | 대신 `Network.setExtraHTTPHeaders` 를 쓴다 — tirno 명령이 도는 동안만 유효 |
 | `headers rm [name] [--once]` | 헤더 하나, 인자 없으면 전부 |
-| `headers ls [--json]` | 이 세션의 고정 헤더, 호스트 조건과 유지 범위까지 |
+| `headers ls [--json]` | 이 세션의 고정 헤더, 호스트 조건과 유지 범위까지. persistent 는 창 안에서도 보인다(확장 뱃지·팝업), `--once` 는 여기가 유일한 자리 |
 
 `perm` 으로 줄여 쓸 수 있다.
 
@@ -556,6 +556,16 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 규칙이 브라우저 네트워크 스택에 걸리므로 CDP 연결이 끊긴 뒤에도 유지되고, 서비스워커와
 OOPIF 가 스스로 보내는 요청에도 붙으며, `--host` 로 호스트를 고를 수 있다(등록 가능 도메인
 기준이라 서브도메인이 함께 걸린다 — 실측). 세션은 `--extensions` 로 떠 있어야 한다.
+
+확장이라는 성질에는 부수 효과가 하나 더 있다 — **창 안에서 보인다.** 툴바 뱃지가 지금 걸린
+규칙 개수를 이고, 팝업이 헤더 이름 · 값 · 스코프된 호스트를 나열한다. 값은 기본 마스킹하고
+클릭해야 펼친다. 페이지를 건드리지 않으므로 그 DOM 을 재는 검증과 충돌하지 않는다.
+
+헤더가 결과를 가르는 환경에서 헤더 유무가 화면에 안 드러나면 **엉뚱한 대상을 재고도 모른다** —
+헤더 없이도 페이지는 정상으로 뜨기 때문에 눈으로는 안 갈린다. 뱃지가 그 자리를 메운다.
+
+`--once` 는 확장이 없으므로 뱃지도 팝업도 없다. `headers ls` 가 그 헤더를 볼 수 있는
+유일한 자리이고, `ls` 출력이 그 사실을 직접 말한다.
 
 확장은 `Extensions.loadUnpacked` 로만 들어간다. `--load-extension` 은 chrome 152 에서 죽은
 경로다 — 플래그가 커맨드라인에 실려도 확장이 붙지 않고, 프로필 밖 경로·`--disable-extensions-except`
