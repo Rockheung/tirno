@@ -3,7 +3,7 @@ import { intArg, stripTrailingNewline } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
-import { clickByRef, fillByRef, hoverByRef, requireElement } from '../cdp/dom-actions.js';
+import { clickByRef, fillByRef, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
 import { checkRef } from '../cdp/ref-guard.js';
@@ -25,14 +25,9 @@ async function readStdin(): Promise<string> {
 }
 
 async function elemCenter(page: Page, selector: string): Promise<[number, number]> {
-  const box = await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    return [r.left + r.width / 2, r.top + r.height / 2];
-  }, selector);
-  if (!box) throw new Error(`Element not found: ${selector}`);
-  return [Math.round(box[0]), Math.round(box[1])];
+  const box = await (await requireElement(page, selector)).boundingBox();
+  if (!box) throw new Error(`Element has no layout box (display:none?): ${selector}`);
+  return [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)];
 }
 
 export function registerInputCommands(program: Command): void {
@@ -49,10 +44,9 @@ export function registerInputCommands(program: Command): void {
         const page = await getInteractivePage(browser);
 
         // "x,y" coordinate form — dispatch raw CDP mouse events (trusted click).
-        const coordMatch = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/.exec(target);
-        if (coordMatch) {
-          const x = Number(coordMatch[1]);
-          const y = Number(coordMatch[2]);
+        const coords = asCoords(target);
+        if (coords) {
+          const [x, y] = coords;
           const cdp = await page.createCDPSession();
           try {
             const clickCount = opts.dbl ? 2 : 1;
@@ -240,8 +234,8 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('hover')
-    .description('Hover over an element (CSS selector or @ref). A selector that misses in the light DOM is retried through open shadow roots')
-    .argument('<target>', 'CSS selector or @ref from snapshot')
+    .description('Hover by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots')
+    .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
     .option('-s, --session <name>', 'Session name')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .action(async (target: string, opts) => {
@@ -249,7 +243,13 @@ export function registerInputCommands(program: Command): void {
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
-        if (refStore.isRef(target)) {
+        // 좌표를 받는 이유는 click 과의 대칭만이 아니다. 닫힌 shadow root 안이나
+        // 셀렉터가 없는 캔버스 위 요소에는 좌표가 유일한 길이고, 그 길이 click 에만
+        // 있으면 그런 요소는 hover 시킬 방법이 아예 없다.
+        const coords = asCoords(target);
+        if (coords) {
+          await page.mouse.move(coords[0], coords[1]);
+        } else if (refStore.isRef(target)) {
           await hoverByRef(page, await refToBackendId(page, meta.name, target, !!opts.staleOk));
         } else {
           await (await requireElement(page, target)).hover();
@@ -274,11 +274,7 @@ export function registerInputCommands(program: Command): void {
     .option('--native', 'Force native HTML5 drag intercept even with coord args')
     .action(async (from: string, to: string, opts) => {
       try {
-        const isCoord = (s: string) => /^\d+\s*,\s*\d+$/.test(s);
-        const parseCoord = (s: string): [number, number] => {
-          const [x, y] = s.split(',').map(n => parseInt(n.trim(), 10));
-          return [x, y];
-        };
+        const isCoord = (t: string) => asCoords(t) !== null;
 
         const { browser } = await connect(opts.session);
         const page = await getInteractivePage(browser);
@@ -286,8 +282,8 @@ export function registerInputCommands(program: Command): void {
         // native HTML5 drag intercept path (selector OR coord — drag with
         // CDP intercept gives the page the trusted dataTransfer it needs)
         if (!isCoord(from) && !isCoord(to) || opts.native) {
-          const [fx, fy] = isCoord(from) ? parseCoord(from) : await elemCenter(page, from);
-          const [tx, ty] = isCoord(to) ? parseCoord(to) : await elemCenter(page, to);
+          const [fx, fy] = asCoords(from) ?? await elemCenter(page, from);
+          const [tx, ty] = asCoords(to) ?? await elemCenter(page, to);
           const cdp = await page.createCDPSession();
           let dragData: unknown = null;
           cdp.on('Input.dragIntercepted', (e: unknown) => { dragData = (e as { data: unknown }).data; });
@@ -317,8 +313,8 @@ export function registerInputCommands(program: Command): void {
         }
 
         // coord-based fallback (mouse events only — no native drag)
-        const [fx, fy] = isCoord(from) ? parseCoord(from) : await elemCenter(page, from);
-        const [tx, ty] = isCoord(to) ? parseCoord(to) : await elemCenter(page, to);
+        const [fx, fy] = asCoords(from) ?? await elemCenter(page, from);
+        const [tx, ty] = asCoords(to) ?? await elemCenter(page, to);
         await page.mouse.move(fx, fy);
         await page.mouse.down();
         await new Promise(r => setTimeout(r, opts.hold));

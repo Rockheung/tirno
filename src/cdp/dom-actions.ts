@@ -90,7 +90,24 @@ export async function findElement(page: Page, selector: string): Promise<Element
 
 /** findElement 와 같되, 못 찾으면 puppeteer 와 같은 문구로 던진다. */
 export async function requireElement(page: Page, selector: string): Promise<ElementHandle<Element>> {
+  // 좌표를 셀렉터 자리에 넣으면 브라우저의 `querySelector` SyntaxError 가 그대로
+  // 올라와, 무엇이 잘못됐는지 한 번 더 생각해야 한다. 여기서 먼저 알아본다.
+  if (asCoords(selector)) {
+    throw new Error(`"${selector}" looks like coordinates, but this command takes a CSS selector or @ref. Only click, hover and drag take "x,y".`);
+  }
   const el = await findElement(page, selector);
   if (!el) throw new Error(`No element found for selector: ${selector}`);
   return el;
+}
+
+/**
+ * `"x,y"` 좌표 형태. `click`·`hover`·`drag` 가 셀렉터 대신 받는다.
+ *
+ * 한 벌만 둔다. 예전에는 명령마다 따로 있었고 받는 것이 서로 달랐다 — `click` 은
+ * 음수와 소수를 받는데 `drag` 는 정수만 받았다. `getBoundingClientRect` 가 내는 값이
+ * 소수이므로, 좌표를 캐서 넘기는 흐름에서 그 차이가 그대로 드러난다.
+ */
+export function asCoords(s: string): [number, number] | null {
+  const m = /^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/.exec(s);
+  return m ? [Number(m[1]), Number(m[2])] : null;
 }
