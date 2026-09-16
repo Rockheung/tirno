@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { SessionMetadata } from './session-store.js';
 import { isAlive } from './process-guard.js';
 import { readActivePort } from './devtools-port.js';
+import { scanProcListeners, cmdlineFromProc } from './proc-net.js';
 
 const exec = promisify(execFile);
 
@@ -23,7 +24,12 @@ const exec = promisify(execFile);
  * that is never acted on. See docs/plan-anchor-broker.md §3 Stage 2.
  */
 
-export type Ownership = 'ours' | 'foreign' | 'ambiguous' | 'ghost';
+/**
+ * `unknown` 은 다섯 번째 상태다 — **관측 자체가 안 됐다.** lsof 가 없거나 /proc 을 못 읽으면
+ * 리스너 목록이 비는데, 그 빈 목록을 "아무것도 안 듣는다" 로 읽으면 살아 있는 세션이
+ * foreign/ghost 가 된다 (#186). 허용 조치는 foreign 과 같다: 표시만, connect·kill 거부.
+ */
+export type Ownership = 'ours' | 'foreign' | 'ambiguous' | 'ghost' | 'unknown';
 
 export interface Listener {
   pid: number;
@@ -40,6 +46,8 @@ export interface Observation {
   pidAlive: boolean;
   /** every listener on resolvedPort, both address families */
   listeners: Listener[];
+  /** set when the listener scan itself failed — `listeners` is then meaningless */
+  listenersUnavailable?: string;
   /** `--user-data-dir` of the running process, normalized; null if unreadable */
   runningUserDataDir: string | null;
   /** the session's own user-data-dir, normalized the same way */
@@ -159,6 +167,11 @@ export function parseUserDataDir(cmdline: string): string | null {
  * matching command name proves nothing about which profile it opened.
  */
 export function classify(obs: Observation): Verdict {
+  // 못 봤으면 못 봤다고 한다. 빈 목록으로 판정하면 "nothing listens" 가 되고, 그것은
+  // 관측이 아니라 관측 도구의 부재다.
+  if (obs.listenersUnavailable) {
+    return { ownership: 'unknown', reason: `cannot observe listeners — ${obs.listenersUnavailable}` };
+  }
   const pids = new Set(obs.listeners.map(l => l.pid));
 
   // Checked first, and deliberately: two processes on one port (an old chrome on
@@ -226,23 +239,83 @@ export function classify(obs: Observation): Verdict {
 
 // ------------------------------------------------------------------- I/O
 
-/** Every TCP listener on this machine. Returns [] if lsof is unavailable. */
-export async function collectListeners(): Promise<Listener[]> {
+export type InventoryBackend = 'lsof' | 'proc';
+
+export interface ListenerScan {
+  listeners: Listener[];
+  backend: InventoryBackend;
+  /** 스캔이 실패했으면 그 이유. 이때 `listeners` 는 빈 배열이지 "없다" 가 아니다 */
+  failure?: string;
+}
+
+/**
+ * 어느 백엔드로 볼지. `TIRNO_INVENTORY=lsof|proc` 가 이기고, 아니면 linux 에서 /proc 이
+ * 읽히면 proc(외부 바이너리 0개), 그 외는 lsof.
+ */
+export function pickBackend(env: NodeJS.ProcessEnv = process.env, platform = process.platform): InventoryBackend {
+  const forced = env['TIRNO_INVENTORY'];
+  if (forced === 'lsof' || forced === 'proc') return forced;
+  if (platform === 'linux') {
+    try {
+      fs.accessSync('/proc/net/tcp', fs.constants.R_OK);
+      return 'proc';
+    } catch {
+      return 'lsof';
+    }
+  }
+  return 'lsof';
+}
+
+async function scanWithLsof(): Promise<ListenerScan> {
   try {
-    // lsof exits non-zero when some processes are unreadable; partial output on
-    // stdout is still usable, so the error path reads stdout too.
     const { stdout } = await exec('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-F', 'pcnt'], {
       timeout: 10000,
       maxBuffer: 8 * 1024 * 1024,
     });
-    return parseLsofListeners(stdout);
+    return { listeners: parseLsofListeners(stdout), backend: 'lsof' };
   } catch (e) {
-    const stdout = (e as { stdout?: string }).stdout;
-    return stdout ? parseLsofListeners(stdout) : [];
+    const err = e as NodeJS.ErrnoException & { stdout?: string; killed?: boolean };
+    // 바이너리가 없는 것만 관측 실패다. lsof 는 리스너가 하나도 없어도, 일부 프로세스를
+    // 못 읽어도 exit 1 이므로, 그 경우 stdout(빈 것 포함)을 그대로 쓴다.
+    if (err.code === 'ENOENT') {
+      return { listeners: [], backend: 'lsof', failure: 'lsof is not installed (install it, or set TIRNO_INVENTORY=proc on linux)' };
+    }
+    if (err.killed) return { listeners: [], backend: 'lsof', failure: 'lsof timed out after 10s' };
+    return { listeners: parseLsofListeners(err.stdout ?? ''), backend: 'lsof' };
   }
 }
 
+/** Every TCP listener on this machine, with whether the scan itself worked. */
+export async function scanListeners(backend: InventoryBackend = pickBackend()): Promise<ListenerScan> {
+  if (backend === 'proc') {
+    try {
+      return { listeners: scanProcListeners(), backend };
+    } catch (e) {
+      return { listeners: [], backend, failure: `/proc scan failed: ${(e as Error).message}` };
+    }
+  }
+  return scanWithLsof();
+}
+
+/**
+ * @deprecated 실패를 값으로 접는다 — 호출자가 "못 봤다" 와 "없다" 를 구별할 수 없다.
+ * `scanListeners()` 를 쓰고 `inspectSession` 에 그 결과를 넘겨라.
+ */
+export async function collectListeners(): Promise<Listener[]> {
+  return (await scanListeners()).listeners;
+}
+
 export async function readCmdline(pid: number): Promise<string | null> {
+  // linux 는 /proc 이 먼저다 — ps 가 없는 이미지에서도 읽히고, 인자 경계가 NUL 이라
+  // 값 속 공백을 잘못 나눌 일이 없다.
+  if (process.platform === 'linux') {
+    try {
+      const fromProc = cmdlineFromProc(fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8'));
+      if (fromProc) return fromProc;
+    } catch {
+      // 없거나(죽음) 못 읽음(남의 것) — ps 로 한 번 더
+    }
+  }
   try {
     const { stdout } = await exec('ps', ['-o', 'command=', '-p', String(pid)], { timeout: 5000 });
     return stdout.trim() || null;
@@ -278,11 +351,15 @@ export interface SessionInventory extends Verdict {
  */
 export async function inspectSession(
   meta: SessionMetadata,
-  allListeners?: Listener[],
+  scan?: ListenerScan | Listener[],
 ): Promise<SessionInventory> {
   const active = readActivePort(meta.userDataDir);
   const resolvedPort = active?.port ?? meta.port ?? null;
-  const listeners = (allListeners ?? await collectListeners()).filter(l => l.port === resolvedPort);
+  // 배열을 넘기는 옛 호출은 "스캔이 됐다" 로 본다 — 실패를 알릴 수 있는 것은 ListenerScan 뿐
+  const resolved: ListenerScan = scan === undefined
+    ? await scanListeners()
+    : Array.isArray(scan) ? { listeners: scan, backend: pickBackend() } : scan;
+  const listeners = resolved.listeners.filter(l => l.port === resolvedPort);
   const pidAlive = isAlive(meta.pid);
   const cmdline = pidAlive ? await readCmdline(meta.pid) : null;
   const runningUserDataDir = cmdline ? parseUserDataDir(cmdline) : null;
@@ -291,6 +368,7 @@ export async function inspectSession(
     resolvedPort,
     pidAlive,
     listeners,
+    listenersUnavailable: resolved.failure,
     runningUserDataDir: runningUserDataDir === null ? null : normalizeDir(runningUserDataDir),
     expectedUserDataDir: normalizeDir(meta.userDataDir),
     pid: meta.pid,

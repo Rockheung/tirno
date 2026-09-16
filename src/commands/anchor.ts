@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import * as store from '../core/session-store.js';
 import * as anchors from '../core/anchor-store.js';
-import { collectListeners, inspectSession } from '../core/inventory.js';
+import { scanListeners, inspectSession } from '../core/inventory.js';
 import { killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
@@ -34,7 +34,7 @@ export function registerAnchorCommands(program: Command): void {
         return;
       }
 
-      const listeners = await collectListeners();
+      const listeners = await scanListeners();
       const rows = [];
       for (const a of all) {
         let meta = null;

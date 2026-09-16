@@ -8,7 +8,7 @@ import { getActivePage, waitForBootPage } from '../cdp/page-resolver.js';
 import type { Cookie } from '../cdp/browser.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
-import { collectListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
+import { scanListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
 import * as gc from '../core/gc.js';
 import * as drift from '../core/drift.js';
 import { formatTable, success, info, warn, error } from '../output/formatter.js';
@@ -83,7 +83,7 @@ export function positionalUrl(
  */
 async function killIfOurs(meta: store.SessionMetadata, verb: string): Promise<boolean> {
   const inv = await inspectSession(meta);
-  if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
+  if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous' || inv.ownership === 'unknown') {
     info(`Leaving pid ${meta.pid} alone — ${inv.ownership}: ${inv.reason}`);
     info(`${verb} continues with a fresh browser; the old entry was a stale label.`);
     return false;
@@ -347,7 +347,7 @@ export function registerSessionCommands(program: Command): void {
       if (opts.group) sessions = sessions.filter(s => s.group === opts.group);
 
       // One lsof for the whole list; each session is then matched against it.
-      const listeners = sessions.length ? await collectListeners() : [];
+      const listeners = sessions.length ? await scanListeners() : { listeners: [], backend: 'lsof' as const };
       const owner = new Map<string, SessionInventory>();
       for (const s of sessions) owner.set(s.name, await inspectSession(s, listeners));
 
@@ -445,7 +445,7 @@ export function registerSessionCommands(program: Command): void {
           return;
         }
 
-        const listeners = await collectListeners();
+        const listeners = await scanListeners();
         let failures = 0;
 
         for (const meta of targets) {
@@ -458,7 +458,7 @@ export function registerSessionCommands(program: Command): void {
             // "tirno killed an unrelated app". Refuse and name it —
             // ghosts still pass, since killing a dead pid is a no-op.
             const inv = await inspectSession(meta, listeners);
-            if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous') {
+            if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous' || inv.ownership === 'unknown') {
               error(`Refusing to kill '${meta.name}' — ${inv.ownership}: ${inv.reason}`);
               failures++;
               continue;

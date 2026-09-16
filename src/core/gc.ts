@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as store from './session-store.js';
 import * as anchors from './anchor-store.js';
-import { collectListeners, inspectSession, type Listener, type SessionInventory } from './inventory.js';
+import { scanListeners, inspectSession, type Listener, type SessionInventory } from './inventory.js';
 import { readActivePort, activePortPath } from './devtools-port.js';
 import { isSafeSegment, isDirectChildOf } from './path-guard.js';
 
@@ -83,8 +83,9 @@ export function plan(scan: GcScan, opts: GcOptions, now: Date): GcPlan {
   const skipped: GcSkip[] = [];
 
   for (const s of scan.sessions) {
-    if (s.ownership === 'ambiguous') {
-      skipped.push({ target: s.name, reason: `ambiguous — ${s.reason}. No automatic action.` });
+    if (s.ownership === 'ambiguous' || s.ownership === 'unknown') {
+      // unknown 은 관측이 안 된 것이다 — 모르는 것을 정리하지 않는다
+      skipped.push({ target: s.name, reason: `${s.ownership} — ${s.reason}. No automatic action.` });
       continue;
     }
     if (s.ownership === 'ours') continue;        // running and ours — nothing to do
@@ -176,11 +177,12 @@ async function dirSizeKb(dir: string): Promise<number | undefined> {
 
 export async function scan(): Promise<GcScan> {
   const sessions = store.list();
-  const listeners = await collectListeners();
+  const scan = await scanListeners();
+  const listeners = scan.listeners;
   const listening = new Set(listeners.map((l: Listener) => l.port));
 
   const inventories: SessionInventory[] = [];
-  for (const meta of sessions) inventories.push(await inspectSession(meta, listeners));
+  for (const meta of sessions) inventories.push(await inspectSession(meta, scan));
 
   const anchoredSessions = new Map<string, string[]>();
   const anchoredDirs = new Map<string, string[]>();
