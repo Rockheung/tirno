@@ -4,7 +4,7 @@ import {
   apparmorProfile, chromeRoot, humanBytes, install, listInstalled,
   plan, platformKey, remember, usernsRestricted,
 } from '../core/provision.js';
-import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, fail } from '../output/formatter.js';
 
 /**
  * `tirno setup` — 있으면 그렇다고 말하고, 없으면 받아온다.
@@ -97,8 +97,7 @@ export function registerSetupCommand(program: Command): void {
         info(`Sessions will use it now: tirno new demo https://example.com --headless`);
         sandboxNote(result.binary);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

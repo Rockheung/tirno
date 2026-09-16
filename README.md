@@ -58,7 +58,7 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 | **셀렉터를 몰라도 조작한다** | `snapshot` 이 a11y 트리에 `@1 @2 …` 를 붙인다. `click @7` · `fill @39 "..."` |
 | **본 것을 적어둔다** | `snapshot` 이 URL × viewport 키로 a11y(role·name)와 bbox 를 저장한다. 재방문 시 `cache load` 로 **꺼내 볼 수 있다** — 조작하려면 `snapshot` 을 다시 찍어야 한다([아래](#아직-구현이-아닌-것-drift)) |
 | **여러 대에 동시에** | `broadcast … --group <g>` — 순차가 아니라 동시. 8세션 기준 1.35s → 0.35s |
-| **실패는 전부 exit 1** | 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서 받은 예외까지. `$?` 하나만 보면 된다 |
+| **실패는 전부 exit 1 — 종류는 `code:`** | 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서 받은 예외까지 `$?` 는 1 하나. 종류는 stderr 마지막 줄 `code: session_not_owned` 처럼 붙고, `--json`/`TIRNO_JSON=1` 이면 `{ok:false, code, message, data}` 한 줄이다 — 재시도해도 되는 실패와 안 되는 실패를 문장 파싱 없이 가른다 |
 
 ## 스킬 — 에이전트에게 시키려면
 

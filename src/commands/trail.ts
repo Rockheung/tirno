@@ -4,7 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as trailStore from '../core/trail-store.js';
 import type { RecordedEvent } from '../core/record-store.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, fail } from '../output/formatter.js';
 import { emit as metric } from '../core/metrics.js';
 import type { Page } from '../cdp/page.js';
 
@@ -116,8 +116,7 @@ export function registerTrailCommands(program: Command): void {
         success(`Trail "${name}" recording — goal: ${opts.goal ?? name}`);
         info(`Interact with the page, then "tirno trail save".`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -162,8 +161,7 @@ export function registerTrailCommands(program: Command): void {
         trailStore.clearActive();
         success(`Saved trail "${name}" — ${result.events.length} events, ${result.durationMs}ms`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -185,8 +183,7 @@ export function registerTrailCommands(program: Command): void {
           ])
         ));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -221,8 +218,7 @@ export function registerTrailCommands(program: Command): void {
           console.log(`${String(i + 1).padStart(3)}. +${e.t.toString().padStart(5)}ms  ${e.type.padEnd(8)}${value}${key}  [${channels.join(', ')}]`);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -307,8 +303,7 @@ export function registerTrailCommands(program: Command): void {
         const breakdown = Object.entries(channelStats).map(([k, v]) => `${k}:${v}`).join(' ');
         success(`Replayed trail "${name}" — ${count}/${t.steps.length} steps at ${speed}x${breakdown ? ` [${breakdown}]` : ''}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -320,8 +315,7 @@ export function registerTrailCommands(program: Command): void {
         trailStore.remove(name);
         success(`Removed trail "${name}"`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

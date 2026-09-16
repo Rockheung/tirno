@@ -3,7 +3,7 @@ import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
-import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, error, fail } from '../output/formatter.js';
 import { emitPageLines, resolveMaxOutput, boundariesEnabled } from '../output/page-content.js';
 import { captureRequests, type CapturedRequest } from '../cdp/network-capture.js';
 import * as refStore from '../core/ref-store.js';
@@ -48,8 +48,7 @@ export function registerInspectCommands(program: Command): void {
         }
         success(`${filepath} (${size})`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -211,8 +210,7 @@ export function registerInspectCommands(program: Command): void {
         }
 
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -293,8 +291,7 @@ export function registerInspectCommands(program: Command): void {
           console.log(`${String(msg.id).padStart(3)} ${prefix} [${msg.type}] ${msg.text}`);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -367,8 +364,7 @@ export function registerInspectCommands(program: Command): void {
         console.log(formatTable(['ID', 'METHOD', 'STATUS', 'TYPE', 'URL'], rows));
         info(`${filtered.length} requests captured${opts.reload === false ? ` in ${opts.ms}ms without reloading — already-received resources are in \`tirno net ls\`` : ''}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 

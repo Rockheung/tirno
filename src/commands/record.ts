@@ -3,7 +3,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as recStore from '../core/record-store.js';
 import * as store from '../core/session-store.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, fail } from '../output/formatter.js';
 
 interface ClientRecState {
   events: recStore.RecordedEvent[];
@@ -40,8 +40,7 @@ export function registerRecordCommands(program: Command): void {
         store.update(meta.name, { recording: { startUrl: url, startedAt: new Date().toISOString() } });
         success(`Recording on ${url} — interact with the page, then "tirno record stop"`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -118,8 +117,7 @@ export function registerRecordCommands(program: Command): void {
           if (result.events.length > 50) info(`... ${result.events.length - 50} more (use --json for full)`);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -140,8 +138,7 @@ export function registerRecordCommands(program: Command): void {
           ])
         ));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -153,8 +150,7 @@ export function registerRecordCommands(program: Command): void {
         recStore.remove(name);
         success(`Removed "${name}"`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

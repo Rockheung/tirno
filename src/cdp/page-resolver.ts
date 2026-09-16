@@ -79,6 +79,8 @@ export async function waitForBootPage(browser: Browser, timeoutMs: number): Prom
  */
 export function blankAnchorHint(pageUrl: string, bootUrl: string | undefined): string | null {
   if (!bootUrl || !uncommitted(pageUrl)) return null;
+  // about:blank 로 띄운 세션은 about:blank 에 있는 것이 맞다 — 경고할 것이 없다
+  if (uncommitted(bootUrl)) return null;
   return `Anchor is ${pageUrl === '' ? 'a tab with no URL yet' : 'about:blank'}, not ${bootUrl} — `
     + 'the page has not committed, so DOM counts here are 0 for that reason, not the page\'s. '
     + `Re-run in a moment, or \`tirno nav ${bootUrl}\` to force it.`;

@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { TirnoError } from '../util/errors.js';
 
 export interface FormatOptions {
   json?: boolean;
@@ -38,4 +39,31 @@ export function warn(msg: string): void {
 
 export function error(msg: string): void {
   console.error(chalk.red('✗'), msg);
+}
+
+let jsonFailures = !!process.env['TIRNO_JSON'];
+/** 명령이 자기 `--json` 을 받았으면 실패도 JSON 으로 낸다 */
+export function setJsonOutput(on: boolean | undefined): void {
+  if (on) jsonFailures = true;
+}
+
+/**
+ * 실패 하나로 끝낸다 — 산문 위에 `code:` 한 줄 (#185).
+ *
+ * 산문은 사람용이고 그대로다. 기계가 읽을 것은 마지막 줄의 `code: <snake_case>` 다 —
+ * 세션 없음 / 남의 것 / 낡은 ref / 분류 안 됨을 문장 파싱 없이 가른다. `--json`
+ * (또는 `TIRNO_JSON=1`) 이면 stdout 에 `{ok:false, code, message, data}` 한 줄.
+ * 종료 코드는 언제나 1.
+ */
+export function fail(e: unknown): never {
+  const err = e as Error & { code?: unknown; data?: unknown };
+  const code = err instanceof TirnoError ? err.code : 'error';
+  const message = err?.message ?? String(e);
+  if (jsonFailures) {
+    console.log(JSON.stringify({ ok: false, code, message, ...(err instanceof TirnoError && err.data ? { data: err.data } : {}) }));
+  } else {
+    error(message);
+    console.error(chalk.dim(`  code: ${code}`));
+  }
+  process.exit(1);
 }

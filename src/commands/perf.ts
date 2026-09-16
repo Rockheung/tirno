@@ -8,7 +8,7 @@ import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as store from '../core/session-store.js';
 
-import { success, info, error } from '../output/formatter.js';
+import { success, info, fail } from '../output/formatter.js';
 import { formatTable } from '../output/formatter.js';
 
 function resolveSession(name?: string): store.SessionMetadata {
@@ -283,8 +283,7 @@ export function registerPerfCommands(program: Command): void {
         }
         success(blame ? `${verdict} · biggest share: ${blame}` : verdict);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -325,8 +324,7 @@ export function registerPerfCommands(program: Command): void {
         fs.writeFileSync(outPath, buffer);
         success(`Trace saved: ${outPath} (open in chrome://tracing)`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -375,8 +373,7 @@ export function registerPerfCommands(program: Command): void {
         success(`Trace started (PID ${child.pid}) → ${outPath}`);
         info(`Stop with: tirno trace stop ${outPath}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -418,8 +415,7 @@ export function registerPerfCommands(program: Command): void {
         }
         success(`Trace saved: ${outPath} (${(size / 1024).toFixed(1)} KB — analyze with \`tirno trace insight ${outPath}\`)`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -501,8 +497,7 @@ export function registerPerfCommands(program: Command): void {
         ];
         console.log(formatTable(['METRIC', 'VALUE'], rows));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -530,8 +525,7 @@ export function registerPerfCommands(program: Command): void {
         fs.writeFileSync(outPath, chunks.join(''));
         success(`Heap snapshot: ${outPath} (open in Chrome DevTools Memory tab)`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -563,8 +557,7 @@ export function registerPerfCommands(program: Command): void {
         ];
         console.log(formatTable(['METRIC', 'VALUE'], rows));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -599,8 +592,7 @@ export function registerPerfCommands(program: Command): void {
         console.log(formatTable(['TYPE', 'NAME', 'COUNT', 'SIZE'], rows));
         info(`page ${opts.pageIdx} of ${Math.ceil(buckets.length / opts.pageSize) - 1} — ${buckets.length} total buckets`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }
