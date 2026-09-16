@@ -439,7 +439,7 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 ### 입력
 | 명령 | 설명 |
 |---|---|
-| `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래). **진짜 클릭처럼 포커스를 옮긴다**(아래) |
+| `click <selector\|@N\|@vG:N> [--stale-ok] [--synthetic]` | 실제 마우스 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래). **가려져 있으면 거부하고 가린 것을 말한다**(아래) |
 | `fill <selector\|@N> <value> [--no-verify]` | input clear + type. **타이핑 뒤 값을 되읽어 다르면 exit 1** — readonly·disabled 는 치기 전에 거절하고, maxlength 잘림·`preventDefault` 한 핸들러·타이핑 중 포커스 이동은 `expected … but element reads …` 에 원인을 붙여 낸다. 포맷터가 값을 고쳐 쓰는 입력(마스크·자동 하이픈)만 `--no-verify` |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
@@ -449,24 +449,39 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
 
-### 클릭은 포커스를 옮긴다
+### 클릭은 실제 마우스다 — 가려져 있으면 거절한다
 
-`@ref` 클릭은 `HTMLElement.click()` 으로 합성 클릭을 보낸다. 그 클릭은 **포커스를 건드리지
-않으므로**, 진짜 클릭이 하는 두 가지를 손으로 맞춰 준다 — 순서는 **블러 → 포커스 → 클릭**이다.
-진짜 클릭은 mousedown 에서 포커스를 옮기므로 click 핸들러가 돌기 **전**이어야 한다.
+`@ref` 도 셀렉터도 요소 중심 좌표로 **실제 마우스 이벤트**를 보낸다(`"x,y"` 와 같은 경로).
+보내기 전에 그 좌표에 무엇이 있는지 본다 — 모달·쿠키 배너·고정 헤더가 위에 있으면 사람은
+그것을 누르게 되므로, tirno 도 누르지 않고 **exit 1** 로 가린 것을 이름으로 말한다:
 
-- **이전에 포커스돼 있던 요소를 블러한다.** `change` 는 블러에서만 나온다. 그래서 `fill` 로
-  채운 값을 `change` 에서 커밋하는 폼(ExtJS·일부 제어 컴포넌트)은, 이것이 없으면 DOM 에 값이
-  보이는데도 **빈 값을 제출한다**. `fill` 도 `click` 도 성공을 보고한 뒤라 조용히 어긋난다
-- **누른 요소가 포커스를 받는다.** 그래서 `click` 뒤의 `type` 이 그 요소로 들어간다. 이것이
-  없으면 글자가 아무 데도 안 들어가고, 셀렉터로 누르면(진짜 마우스라) 들어가므로 **같은
-  명령이 대상 표기에 따라 갈렸다**
+```
+✗ @7 is covered at (960,540) by div#backdrop.modal-backdrop — a real click would land there.
+  Dismiss it (or click it) first, then snapshot again. --synthetic forces a click() that ignores what is on top
+```
 
-포커스를 못 받는 요소(평범한 div)에서는 블러만 일어난다 — 진짜 클릭도 그때는 포커스를
-비우기만 한다.
+예전에는 `@ref` 클릭이 `HTMLElement.click()` 합성 클릭이었다. 그것은 가려진 요소도, 문서에서
+떨어져 나간 노드도, `display:none` 도 "누르고" `✓ Clicked` 를 찍었다(실측, #183). pointerdown ·
+mousedown 도 안 나가서 그 이벤트에 붙은 컴포넌트는 반응하지 않았고, 포커스도 안 옮겨서 손으로
+맞춰야 했다(#166). 실제 마우스는 이 전부를 브라우저가 한다.
 
-셀렉터 경로와 `"x,y"` 좌표 경로는 진짜 마우스 이벤트라 브라우저가 알아서 옮긴다. 맞춰 준
-것은 `@ref` 경로뿐이고, 목적은 세 경로가 같은 결과를 내게 하는 것이다.
+판정은 `elementFromPoint`(열린 shadow root 안까지) 로 한다. 그 자리가 대상 자신·대상 안쪽·
+대상의 조상(`pointer-events:none` 아이콘 — 진짜 클릭도 부모에게 간다)이면 누른다. 그 외는
+거절이고, 종류별로 다음 할 일을 말한다:
+
+| 판정 | 뜻 | 다음 |
+|---|---|---|
+| `covered by <desc>` | 관계없는 요소가 위에 있다 | 그것을 치우거나 눌러라 |
+| `no longer in the document` | 리렌더로 교체된 노드 | `snapshot` 다시 |
+| `has no box` | `display:none` 또는 빈 인라인 | 보이게 만들거나 `--synthetic` |
+| `outside the viewport` | 스크롤해도 중심이 밖 (뷰포트보다 큰 요소) | `"x,y"` 로 안쪽 한 점 |
+
+**`--synthetic`** 은 옛 경로다 — `click()` 을 직접 부르고 가림·뷰포트를 무시한다. 포커스는
+블러 → 포커스 → 클릭 순서로 손으로 맞춘다(mousedown 이 없으므로). 뷰포트보다 큰 요소,
+보이지 않지만 핸들러는 있는 요소, 그리고 가려진 줄 알면서 뚫어야 할 때 쓴다.
+`(synthetic)` 이 성공 메시지에 붙는다.
+
+a11y 트리의 `StaticText` ref 는 텍스트 노드라 박스가 없다 — 그 부모 요소를 누른다.
 
 **셀렉터는 열린 shadow root 를 관통한다.** `click`·`fill`·`hover`·`wait-for` 는 light DOM 에서
 먼저 찾고, 없으면 열린 shadow root 를 순회해 다시 찾는다(puppeteer 의 `pierce/`). 웹 컴포넌트로
