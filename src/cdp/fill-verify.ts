@@ -21,6 +21,7 @@ export const READ_FIELD_STATE = `function(){
     type: typeof el.type === 'string' ? el.type : null,
     focused: active === el,
     tag: String(el.tagName || '').toLowerCase(),
+    selectedLabel: el.tagName === 'SELECT' && el.selectedOptions && el.selectedOptions[0] ? (el.selectedOptions[0].label || el.selectedOptions[0].text) : null,
   };
 }`;
 
@@ -34,6 +35,8 @@ export interface FieldState {
   type: string | null;
   focused: boolean;
   tag: string;
+  /** select 면 골라진 option 의 보이는 라벨 — value 와 라벨 어느 쪽으로도 맞을 수 있게 */
+  selectedLabel?: string | null;
 }
 
 /**

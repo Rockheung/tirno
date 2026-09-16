@@ -411,6 +411,33 @@ function main() {
   run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });
   check('hover @ref 가 mouseover 를 쐈다', q("document.getElementById('status').textContent") === 'hovered',
     `실측: ${q("document.getElementById('status').textContent")} (ref @${linkRef})`);
+  // role + 이름 문법과 expect / ensure (#210). 모호하면 거절, 없으면 거절 — 첫 것을 조용히 고르지 않는다.
+  run('click button "click me" (role+name)', ['click', 'button', 'click me', ...S], { expectMatch: /Clicked button "click me"/ });
+  check('role+name 클릭이 실제로 눌렸다', q("document.getElementById('status').textContent") === 'clicked');
+  run('click button (모호 → exit≠0)', ['click', 'button', ...S], { expectFail: true, expectMatch: /matches \d+:/ });
+  run('click button "Nope" (없음 → exit≠0)', ['click', 'button', 'Nope', ...S], { expectFail: true, expectMatch: /No button named "Nope"/ });
+  run('fill textbox "type here" (role+name)', ['fill', 'textbox', 'type here', 'by-role', ...S], { expectMatch: /Filled textbox "type here"/ });
+  check('role+name fill 값', q("document.getElementById('text').value") === 'by-role');
+  run('hover link "anchor" (role+name)', ['hover', 'link', 'anchor', ...S], { expectMatch: /Hovered link "anchor"/ });
+  run('wait-for link "anchor" (role+name)', ['wait-for', 'link', 'anchor', '--timeout', '3000', ...S], { expectMatch: /Visible: link "anchor"/ });
+  run('expect url matches', ['expect', 'url', 'matches', 'smoke-page', ...S], { expectMatch: /expect url/ });
+  run('expect url = (틀림 → exit≠0)', ['expect', 'url', '=', 'https://nope/', ...S], { expectFail: true, expectMatch: /page says/ });
+  run('expect text', ['expect', 'text', 'tirno smoke page', ...S]);
+  run('expect count button ge 2', ['expect', 'count', 'button', 'ge', '2', ...S]);
+  run('expect text 없음 within 300ms (→ exit≠0)', ['expect', 'text', 'never-there', 'within', '300ms', ...S], { expectFail: true, expectMatch: /after 300ms/ });
+  run('ensure textbox = (채움)', ['ensure', 'textbox', 'type here', '=', 'ensured-value', ...S], { expectMatch: /ensured — "ensured-value"/ });
+  run('ensure textbox = (already)', ['ensure', 'textbox', 'type here', '=', 'ensured-value', ...S], { expectMatch: /already/ });
+  run('ensure checkbox checked', ['ensure', 'checkbox', 'checked', ...S], { expectMatch: /ensured — checked/ });
+  check('체크박스가 실제로 켜졌다', q("document.getElementById('check').checked") === 'true');
+  run('ensure checkbox checked (already)', ['ensure', 'checkbox', 'checked', ...S], { expectMatch: /already/ });
+  run('ensure checkbox unchecked', ['ensure', 'checkbox', 'unchecked', ...S], { expectMatch: /ensured — unchecked/ });
+  run('ensure combobox = B (라벨로)', ['ensure', 'combobox', '=', 'B', ...S], { expectMatch: /ensured — "B" \(value "b"\)/ });
+  run('expect value combobox = b', ['expect', 'value', 'combobox', '=', 'b', ...S]);
+  run('ensure visible text (already)', ['ensure', 'visible', 'text', 'tirno smoke page', ...S], { expectMatch: /already/ });
+  run('ensure visible text 없음 within 300ms (→ exit≠0)', ['ensure', 'visible', 'text', 'never-there', 'within', '300ms', ...S], { expectFail: true, expectMatch: /still hidden/ });
+  const sn = run('snapshot (checked 상태)', ['snapshot', ...S]);
+  check('스냅샷이 체크 상태를 [checked] 로 낸다', !/checkbox \[checked\]/.test(sn.out), '해제한 뒤라 없어야 한다');
+  q("document.getElementById('text').value=''; document.getElementById('status').textContent='idle'");
   // 행동 뒤 delta (#209) — 눌렀으면 무엇이 변했는지, 안 변했으면 그렇다고.
   q("document.getElementById('status').textContent='idle'");
   const dl = run('click (delta: idle→clicked)', ['click', '#btn', ...S]);

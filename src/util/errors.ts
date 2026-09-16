@@ -24,7 +24,10 @@ export type ErrorCode =
   | 'timeout'
   | 'broadcast_partial'     // 일부 세션만 실패 — data.failed 에 이름
   | 'cache_stale'           // 캐시가 지금 화면과 다르다 — snapshot 다시 (--allow-stale 로 강행)
-  | 'cache_unresolved';     // 캐시 ref 일부를 지금 페이지에서 못 찾았다 — data.unresolved
+  | 'cache_unresolved'      // 캐시 ref 일부를 지금 페이지에서 못 찾았다 — data.unresolved
+  | 'target_not_found'      // role+이름·셀렉터가 아무것도 안 맞는다 → snapshot --interactive
+  | 'ambiguous_target'      // role+이름이 여럿에 맞는다 — data.candidates → --exact 또는 @N
+  | 'expect_failed';        // expect 의 조건이 틀렸다 — data.expected / data.actual
 
 /** 코드마다 한 줄 — schema 와 문서가 같은 출처를 읽는다 */
 export const ERROR_CODES: Record<ErrorCode, string> = {
@@ -43,6 +46,9 @@ export const ERROR_CODES: Record<ErrorCode, string> = {
   broadcast_partial: 'some sessions failed — `data.failed` names them',
   cache_stale: 'the cached entry no longer matches the page — `tirno snapshot` again (--allow-stale prints it anyway)',
   cache_unresolved: 'some cached refs were not found on the live page (--require-all) — `data.unresolved` lists them',
+  target_not_found: 'nothing on the page matches that role + name (or selector) — `tirno snapshot` lists what is there',
+  ambiguous_target: 'the role + name matches several elements — `data.candidates`; be exact (--exact) or use @N',
+  expect_failed: 'the expectation did not hold — `data.expected` vs `data.actual`',
 };
 
 export class TirnoError extends Error {

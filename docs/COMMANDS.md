@@ -469,8 +469,8 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 ### 입력
 | 명령 | 설명 |
 |---|---|
-| `click <selector\|@N\|@vG:N> [--stale-ok] [--synthetic]` | 실제 마우스 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래). **가려져 있으면 거부하고 가린 것을 말한다**(아래) |
-| `fill <selector\|@N> <value> [--no-verify]` | input clear + type. **타이핑 뒤 값을 되읽어 다르면 exit 1** — readonly·disabled 는 치기 전에 거절하고, maxlength 잘림·`preventDefault` 한 핸들러·타이핑 중 포커스 이동은 `expected … but element reads …` 에 원인을 붙여 낸다. 포맷터가 값을 고쳐 쓰는 입력(마스크·자동 하이픈)만 `--no-verify` |
+| `click <role> "<name>"` · `click <selector\|@N\|@vG:N> [--exact] [--stale-ok] [--synthetic]` | 실제 마우스 클릭. **role + 이름이 1급 대상**(아래 "대상 문법"). 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래). **가려져 있으면 거부하고 가린 것을 말한다**(아래) |
+| `fill <role> "<name>" <value>` · `fill <selector\|@N> <value> [--no-verify]` | input clear + type. **타이핑 뒤 값을 되읽어 다르면 exit 1** — readonly·disabled 는 치기 전에 거절하고, maxlength 잘림·`preventDefault` 한 핸들러·타이핑 중 포커스 이동은 `expected … but element reads …` 에 원인을 붙여 낸다. 포맷터가 값을 고쳐 쓰는 입력(마스크·자동 하이픈)만 `--no-verify` |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
 | `press <modifier>+<key>` | `Meta+v` · `Ctrl+a` · `Shift+Tab`. 수식키는 Alt·Ctrl·Meta·Shift(별칭 cmd/command/option 도 받는다) |
@@ -478,6 +478,63 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
+
+### 대상 문법 — role + 보이는 이름이 1급
+
+`click` · `fill` · `hover` · `wait-for` 의 첫 인자는 넷 중 하나다:
+
+| 꼴 | 예 | 뜻 |
+|---|---|---|
+| **role 낱말 + 이름** | `click button "Submit"` · `fill textbox "Email" me@x` · `hover link "Docs"` | a11y 트리에서 그 role 에 그 이름. `snapshot` 이 보여 주는 바로 그 이름이다(Chrome 의 이름 계산) |
+| `@N` / `@vG:N` | `click @7` | 스냅샷 ref. 세대·identity 검사 |
+| CSS 셀렉터 | `click '#submit'` · `click 'form button'` | light DOM 먼저, 없으면 열린 shadow root 관통 |
+| `"x,y"` | `click 960,540` | 좌표 |
+
+이름은 **부분 일치, 대소문자 무시**가 기본이다. 여럿과 겹치면 정확히 같은 이름 하나를 고르고
+(`"Save"` 가 `"Save draft"` 와 겹치는 흔한 자리), 그래도 여럿이면 **후보를 나열하고 거절한다**:
+
+```
+✗ button "Save" matches 3: @12 "Save draft" · @19 "Save" · @31 "Save and close" — be exact (--exact), or use @N
+  code: ambiguous_target
+```
+
+`--exact` 로 정확·대소문자 일치. 이름 없이 role 만 주면 그 role 이 페이지에 **하나일 때만** 맞는다
+— CSS 태그 `button` 이 첫 것을 조용히 고르던 것과 다르다. 그것이 원하는 거면 `css:button`.
+role 낱말: `button link textbox searchbox checkbox radio combobox listbox option menuitem tab
+switch slider spinbutton heading image text cell row dialog alert navigation main banner form list
+listitem table article group …` (`text` = StaticText, `img` = image, `input` = textbox).
+
+### 선언 — `expect` / `ensure`
+
+**`expect`** 는 관측만 한다. 맞으면 exit 0, 틀리면 exit 1 + `code: expect_failed` 에 기대와 실측.
+
+```bash
+tirno expect url matches /dash            # ~ 도 되지만 셸이 홈으로 푼다 — 낱말이 안전하다
+tirno expect title is "My Page"
+tirno expect text "Saved" within 5s       # 5초 안에 나타날 때까지 200ms 마다
+tirno expect count tr.row ge 3            # >= 는 리다이렉트라 따옴표가 필요하다 — ge
+tirno expect value textbox "Email" = me@x
+tirno expect checked checkbox "Remember"
+tirno expect visible dialog "Cookies"  ·  expect hidden text "Loading"
+tirno expect focused textbox "Search"
+```
+비교자: `= is` · `!= ne` · `~ matches` · `contains` · `>= ge` · `<= le` · `> gt` · `< lt`.
+`within` 이 없으면 1초 동안 본다.
+
+**`ensure`** 는 **멱등**이다 — 이미 그 상태면 `already`, 아니면 만들고 되읽어 `ensured`, 그래도
+아니면 exit 1. 같은 줄을 두 번 쳐도 안전하므로 재시도가 "같은 줄을 다시 친다" 가 된다.
+
+```bash
+tirno ensure textbox "Email" = me@x.com        # 값이 다르면 채운다(되읽기 포함)
+tirno ensure combobox "Country" = Korea        # select 는 라벨이나 value 로 고른다
+tirno ensure checkbox "Remember me" checked    # 아니면 누른다
+tirno ensure checkbox checked                  # 체크박스가 하나뿐이면 이름 생략
+tirno ensure url https://app/dash              # 아니면 nav (도달 판정까지)
+tirno ensure visible text "Welcome"            # 기다린다 (기본 10s, within 으로 조정)
+tirno ensure focused textbox "Search"
+```
+출력은 셋 중 하나 — `already` / `ensured — <실측>` (+ delta) / `✗ … acted, but page says …`.
+`count` · `title` · `text` 는 만들 수 없으므로 `ensure` 가 거절한다 — `expect` 로.
 
 ### 행동 뒤에 무엇이 변했는지 말한다 (delta)
 
