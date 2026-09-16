@@ -148,6 +148,10 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'scroll':       { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
   'wait':         { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
   'wait-for':     { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
+  // ---- 선언 · 감사
+  'expect':       { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
+  'ensure':       { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'a11y':         { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'upload':       { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
 
   // ---- execution
