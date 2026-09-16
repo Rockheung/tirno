@@ -20,6 +20,7 @@ async function realProgram(): Promise<Command> {
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
+    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'],
     ['net', 'registerNetCommands'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
     ['headers', 'registerHeaderCommands'],
@@ -143,7 +144,7 @@ test('every "tirno <cmd>" in a message names a real command', async () => {
       .replace(/^\s*\/\/.*$/gm, '');
     // Only quoted forms — a backtick or quote is what makes it a command someone
     // is meant to type, rather than the word "tirno" in a sentence.
-    for (const m of text.matchAll(/[`'"]tirno ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?/g)) {
+    for (const m of text.matchAll(/[`'"]tirno ([a-z][a-z0-9-]*)(?: ([a-z][a-z0-9-]*))?/g)) {
       // A second word that is an option or a placeholder means the command is
       // the first word alone.
       const two = m[2] && names.has(`${m[1]} ${m[2]}`) ? `${m[1]} ${m[2]}` : m[1];

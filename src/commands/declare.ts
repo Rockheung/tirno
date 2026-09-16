@@ -20,6 +20,8 @@ import { READ_FIELD_STATE, type FieldState } from '../cdp/fill-verify.js';
 import { judgeNavigation } from '../cdp/nav-verdict.js';
 import type { Page } from '../cdp/page.js';
 import { actWithDelta, printDelta } from './delta-output.js';
+import { runAudit } from './a11y.js';
+import { IMPACT_ORDER, type Impact } from '../a11y/audit.js';
 
 // ------------------------------------------------------------ 문법
 
@@ -126,6 +128,17 @@ export function parseClause(argv: string[]): Clause {
       else takeTarget();
       break;
     }
+    case 'a11y': {
+      // a11y clean [rules a,b] · a11y <impact> <op> <n>
+      if (rest[0] === 'clean') {
+        rest.shift(); c.value = 'clean';
+        const kw: string | undefined = rest[0];
+        if (kw === 'rules') { rest.shift(); c.name = rest.shift(); }
+      }
+      else if (rest.length >= 3 && COMPARATORS.has(rest[1])) { c.value = rest[0]; c.op = norm(rest[1]); c.name = rest[2]; }
+      else throw new Error('a11y needs: a11y clean [rules names,alt] · a11y serious le 0');
+      break;
+    }
     default:
       throw new Error(`Unknown expectation "${what}" — url · title · text · count · value · checked · unchecked · visible · hidden · focused`);
   }
@@ -227,6 +240,19 @@ async function observe(page: Page, c: Clause, session: string, exact: boolean): 
       const s = await fieldState(page, t.backendNodeId);
       return { ok: s.focused, actual: s.focused ? 'focused' : 'not focused', expected: 'focused' };
     }
+    case 'a11y': {
+      const rules = c.value === 'clean' && c.name ? c.name.split(',') : undefined;
+      const r = await runAudit(page, session, { rules });
+      if (c.value === 'clean') {
+        const ok = r.violations.length === 0;
+        const worst = r.violations[0];
+        return { ok, actual: ok ? 'clean' : `${r.violations.length} violation(s) — worst ${worst.impact} ${worst.rule}${worst.ref ? ' ' + worst.ref : ''}: ${worst.message}`, expected: `clean${rules ? ` (${rules.join(',')})` : ''}` };
+      }
+      const impact = c.value as Impact;
+      if (!IMPACT_ORDER.includes(impact)) throw new Error(`a11y impact must be one of ${IMPACT_ORDER.join(' · ')}`);
+      const n = r.violations.filter(v => IMPACT_ORDER.indexOf(v.impact) <= IMPACT_ORDER.indexOf(impact)).length;
+      return { ok: compare(c.op!, n, c.name!), actual: `${n} at ${impact} or worse`, expected: `${impact} ${c.op} ${c.name}` };
+    }
     case 'visible': case 'hidden': {
       const want = c.what === 'visible';
       if (c.value !== undefined) {
@@ -263,7 +289,7 @@ function describeTarget(c: Clause): string {
 export function registerDeclareCommands(program: Command): void {
   program
     .command('expect')
-    .description('Assert page state; exit 1 with code expect_failed (and expected/actual) when it does not hold. Forms: `url [~] <v>` · `title [~] <v>` · `text <v>` · `count <sel> <op> <n>` · `value <role> "<name>" [=] <v>` · `checked|unchecked <role> "<name>"` · `visible|hidden <role> "<name>" | text <v>` · `focused <role> "<name>"`. Append `within 5s` to keep checking until then (default 1s)')
+    .description('Assert page state; exit 1 with code expect_failed (and expected/actual) when it does not hold. Forms: `url [~] <v>` · `title [~] <v>` · `text <v>` · `count <sel> <op> <n>` · `value <role> "<name>" [=] <v>` · `checked|unchecked <role> "<name>"` · `visible|hidden <role> "<name>" | text <v>` · `focused <role> "<name>"` · `a11y clean [rules a,b]` · `a11y serious le 0`. Append `within 5s` to keep checking until then (default 1s)')
     .argument('<clause...>', 'e.g. url matches /dash · text Saved within 5s · count tr.row ge 3 · value textbox Email is me@x. Comparators: = is · != ne · ~ matches · contains · >= ge · <= le · > gt · < lt (words need no shell quoting)')
     .option('-s, --session <name>', 'Session name')
     .option('--exact', 'Match accessible names exactly')

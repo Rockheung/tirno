@@ -411,6 +411,26 @@ function main() {
   run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });
   check('hover @ref 가 mouseover 를 쐈다', q("document.getElementById('status').textContent") === 'hovered',
     `실측: ${q("document.getElementById('status').textContent")} (ref @${linkRef})`);
+  // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
+  const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
+  run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);
+  const ax = run('a11y', ['a11y', ...S]);
+  for (const rule of ['names', 'labels', 'alt', 'headings', 'contrast', 'lang', 'title', 'tabindex', 'aria-refs', 'duplicate-id']) {
+    check(`a11y 가 ${rule} 을 잡는다`, new RegExp(`\\s${rule}\\s`).test(ax.out), ax.out.split('\n').find(l => l.includes(rule)) ?? '(없음)');
+  }
+  check('위반에 @N 이 붙는다', /\[serious\]\s+alt\s+@\d+ img/.test(ax.out), ax.out.split('\n').find(l => /alt/.test(l)) ?? '');
+  const axRef = (/alt\s+(@\d+) img/.exec(ax.out) ?? [])[1];
+  run('click @N (a11y 가 준 ref 로 바로 조작)', ['click', axRef ?? '@0', '--synthetic', ...S], { expectMatch: /Clicked/ });
+  run('a11y --rules headings', ['a11y', '--rules', 'headings', ...S], { expectMatch: /2 violations/ });
+  run('a11y --fail-on serious (→ exit≠0)', ['a11y', '--fail-on', 'serious', ...S], { expectFail: true, expectMatch: /at serious or worse/ });
+  run('expect a11y clean (→ exit≠0)', ['expect', 'a11y', 'clean', ...S], { expectFail: true, expectMatch: /worst serious/ });
+  run('expect a11y serious le 20', ['expect', 'a11y', 'serious', 'le', '20', ...S]);
+  const tab = run('a11y --tab-order', ['a11y', '--tab-order', ...S]);
+  check('Tab 걷기가 tabindex=3 을 첫 정거장으로 낸다', /^\s+1 link "Jump"/m.test(tab.out), tab.out.split('\n')[1]);
+  check('이름 없는 정거장 · 포커스 링 없음 · 화면 밖을 잡는다', /no accessible name/.test(tab.out) && /no visible focus ring/.test(tab.out) && /off-screen/.test(tab.out), tab.out.slice(0, 200));
+  run('nav (example.com — a11y clean)', ['nav', 'https://example.com', ...S]);
+  run('expect a11y clean (example.com)', ['expect', 'a11y', 'clean', ...S], { expectMatch: /clean/ });
+  run('nav (픽스처 복귀)', ['nav', PAGE, ...S]);
   // role + 이름 문법과 expect / ensure (#210). 모호하면 거절, 없으면 거절 — 첫 것을 조용히 고르지 않는다.
   run('click button "click me" (role+name)', ['click', 'button', 'click me', ...S], { expectMatch: /Clicked button "click me"/ });
   check('role+name 클릭이 실제로 눌렸다', q("document.getElementById('status').textContent") === 'clicked');

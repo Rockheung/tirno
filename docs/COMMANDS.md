@@ -536,6 +536,50 @@ tirno ensure focused textbox "Search"
 출력은 셋 중 하나 — `already` / `ensured — <실측>` (+ delta) / `✗ … acted, but page says …`.
 `count` · `title` · `text` 는 만들 수 없으므로 `ensure` 가 거절한다 — `expect` 로.
 
+### 접근성 감사 — `a11y`
+
+```bash
+tirno a11y                              # 현재 페이지. 위반마다 @N
+tirno a11y --selector '#checkout'       # 부분
+tirno a11y --rules names,alt,contrast   # 일부 규칙만
+tirno a11y --fail-on serious            # 그 이상이 있으면 exit 1 (code a11y_failed)
+tirno a11y --tab-order                  # Tab 을 실제로 눌러 포커스 순서
+tirno a11y --json
+tirno expect a11y clean  ·  expect a11y clean rules headings  ·  expect a11y serious le 0
+```
+
+```
+→ a11y: 14 violations (10 serious · 2 moderate · 2 minor)  rules 10 · nodes 48 · 15ms
+[serious]  alt          @12 img — image has no alt text; alt="…" describing it, or alt="" if decorative  WCAG 1.1.1
+[serious]  contrast     @19 p "Low contrast paragraph…" — 2.85:1 (needs 4.5:1) — rgb(153,153,153) on rgb(255,255,255); …  WCAG 1.4.3
+[serious]  labels       @14 textbox — textbox has no label; <label for=…>, aria-label, or aria-labelledby  WCAG 1.3.1
+[moderate] tabindex     @24 a "Jump" — tabindex=3 overrides the natural focus order; …  WCAG 2.4.3
+```
+
+**의존 0** — 재료가 이미 있다. `snapshot` 이 곧 접근성 트리고, 색은 페이지 안에서 계산하고,
+키보드는 tirno 의 것이다. 규칙 열: `names`(인터랙티브에 이름) · `labels`(폼 컨트롤에 라벨) ·
+`alt` · `headings`(건너뜀·h1) · `contrast`(WCAG 공식, 배경은 조상을 따라 합성; 이미지 배경은
+판정 안 함) · `lang` · `title` · `tabindex`(양수) · `aria-refs`(가리키는 id 존재) · `duplicate-id`.
+겹치는 규칙은 axe 의 이름과 WCAG 참조를 그대로 써 결과를 대조할 수 있다.
+
+**위반의 `@N` 은 그 시점의 스냅샷 세대다** — `a11y` 가 ref store 를 채우므로 바로 `click @12`
+할 수 있고, 다음 `snapshot` 도 같은 요소에 같은 번호를 준다(같은 렌더러).
+
+**`--tab-order`** 는 정적 분석이 못 하는 것이다 — 포커스가 어디로 가는지는 브라우저가 키를
+받아야 안다. 한 바퀴를 돌아 사람이 새 페이지에서 보는 순서(양수 tabindex 오름차순 → 문서 순)로
+낸다. 잡는 것: 이름 없는 정거장 · 화면 밖/숨은 요소에 간 포커스 · 포커스 링 없음
+(`outline:none` 에 box-shadow 도 없음) · 갇힘(같은 자리에 3번). Chrome 의 순차 포커스 시작점은
+마지막 클릭 자리에 남아 되돌릴 수 없으므로(실측), 어디서 시작하든 같은 요소를 다시 만날 때까지
+모아서 정렬한다.
+
+```
+→ tab order (9 stops, 6 problems, full cycle)
+  1 link "Jump"                              ✓
+  2 button                                   ✗ no accessible name
+  8 button "no ring"                         ✗ no visible focus ring
+  9 div "offscreen focusable"                ✗ focused element is off-screen or hidden
+```
+
 ### 행동 뒤에 무엇이 변했는지 말한다 (delta)
 
 `click` · `fill` · `type` · `press` · `upload` 는 성공 줄 아래에 **변한 것만** 붙인다 — 행동 전후의

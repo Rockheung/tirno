@@ -27,7 +27,8 @@ export type ErrorCode =
   | 'cache_unresolved'      // 캐시 ref 일부를 지금 페이지에서 못 찾았다 — data.unresolved
   | 'target_not_found'      // role+이름·셀렉터가 아무것도 안 맞는다 → snapshot --interactive
   | 'ambiguous_target'      // role+이름이 여럿에 맞는다 — data.candidates → --exact 또는 @N
-  | 'expect_failed';        // expect 의 조건이 틀렸다 — data.expected / data.actual
+  | 'expect_failed'         // expect 의 조건이 틀렸다 — data.expected / data.actual
+  | 'a11y_failed';          // a11y --fail-on 의 문턱을 넘는 위반이 있다 — data.counts
 
 /** 코드마다 한 줄 — schema 와 문서가 같은 출처를 읽는다 */
 export const ERROR_CODES: Record<ErrorCode, string> = {
@@ -49,6 +50,7 @@ export const ERROR_CODES: Record<ErrorCode, string> = {
   target_not_found: 'nothing on the page matches that role + name (or selector) — `tirno snapshot` lists what is there',
   ambiguous_target: 'the role + name matches several elements — `data.candidates`; be exact (--exact) or use @N',
   expect_failed: 'the expectation did not hold — `data.expected` vs `data.actual`',
+  a11y_failed: 'accessibility violations at or above --fail-on — `data.counts`',
 };
 
 export class TirnoError extends Error {

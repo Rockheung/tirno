@@ -116,7 +116,8 @@ tirno network --show <id>          # 그 요청의 헤더·본문
 tirno click <selector|@N> [--dbl]      # 실제 마우스. 가려져 있으면 exit 1 + 가린 요소 이름. 뚫어야 하면 --synthetic
 tirno click button "Submit"            # role + 보이는 이름 (부분·대소문자 무시, 모호하면 거절 → --exact / @N)
 tirno ensure textbox "Email" = me@x    # 멱등 선언: already / ensured / 실패. checkbox … checked · url … · visible text …
-tirno expect url matches /dash within 5s   # 관측만. text · count <sel> ge 3 · value · checked · visible · focused
+tirno expect url matches /dash within 5s   # 관측만. text · count <sel> ge 3 · value · checked · visible · focused · a11y clean
+tirno a11y [--tab-order] [--fail-on serious]   # 접근성 감사, 위반마다 @N. --tab-order 는 실제 Tab 순서·갇힘·포커스 링
                                        # 성공 줄 아래 delta(url·focus·±줄·console). 'no change' 면 안 된 것. --no-delta 로 끔
                                        # 진짜 클릭처럼 포커스를 옮긴다 — 앞 필드가 블러돼
                                        # change 가 나오고, 누른 요소가 포커스를 받아
