@@ -85,6 +85,14 @@ export interface SessionMetadata {
    */
   injects?: Array<{ id: string; source: string; addedAt: string }>;
   group?: string;
+  /** `--headless` 로 떴는가. 뱃지처럼 "화면이 있을 때만" 인 것들이 이 값을 본다. */
+  headless?: boolean;
+  /**
+   * 세션 뱃지(cdp/badge). 기본은 headful 이면 켬 — `--badge` 로 강제, `--no-badge` 로 끔.
+   * 색은 만들 때 한 번 뽑아 세션이 사는 동안 같다.
+   */
+  badge?: boolean;
+  badgeColor?: string;
   /**
    * Set by `record start`. The recorder itself lives in the page and its buffer
    * is per-origin localStorage, so it cannot answer "where did this recording

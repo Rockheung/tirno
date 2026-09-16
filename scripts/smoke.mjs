@@ -243,6 +243,27 @@ function main() {
   const sub = run('snapshot --selector form', ['snapshot', '--selector', 'form', ...S]);
   check('부분 트리는 @1 부터 다시 매기고 밖은 안 낸다', /^@1  form/m.test(sub.out) && !/heading/.test(sub.out), sub.out.slice(0, 80));
   run('snapshot (전체로 복귀)', ['snapshot', ...S]);
+  // 세션 뱃지 — headless 에선 기본 꺼지므로 별도 세션을 --badge 로 띄워 본다. 관측을
+  // 더럽히지 않는 조건 셋(a11y · 스크린샷 · 레이아웃)과 끌기를 실제로 확인한다.
+  run('new --badge (headless 강제)', ['new', 'badge', PAGE, '--ephemeral', '--badge', ...LAUNCH]);
+  const B = ['-s', 'badge'];
+  const qb = (expr) => q(expr, 'badge');
+  check('뱃지가 붙어 있고 상단 가운데다', (() => {
+    const v = JSON.parse(qb("(()=>{const h=document.getElementById('__tirno_badge');const r=h.getBoundingClientRect();return JSON.stringify([!!h,h.getAttribute('aria-hidden'),Math.abs((r.left+r.width/2)-innerWidth/2)<2,r.top])})()"));
+    return v[0] && v[1] === 'true' && v[2] && v[3] === 8;
+  })(), qb("(()=>{const h=document.getElementById('__tirno_badge');const r=h&&h.getBoundingClientRect();return h?JSON.stringify([r.left,r.top,r.width,innerWidth]):'no badge'})()"));
+  const bs = run('snapshot (뱃지 세션)', ['snapshot', ...B]);
+  check('a11y 트리에 뱃지가 없다', !/badge/.test(bs.out.replace(/tirno click/g, '')), bs.out.split('\n').find(l => /badge/.test(l) && !/tirno click/.test(l)) ?? '');
+  run('screenshot (뱃지 숨김 후 복원)', ['screenshot', '--out', path.join(OUT, 'badge.png'), ...B]);
+  check('스크린샷 뒤 뱃지가 다시 보인다', qb("getComputedStyle(document.getElementById('__tirno_badge')).visibility") === 'visible', qb("getComputedStyle(document.getElementById('__tirno_badge')).visibility"));
+  // 끌기 — 뱃지 중심을 잡아 (+300, +200) 옮긴다. mouse 는 실제 Input 이벤트다.
+  const before = JSON.parse(qb("(()=>{const r=document.getElementById('__tirno_badge').getBoundingClientRect();return JSON.stringify([r.left,r.top,r.width,r.height])})()"));
+  const [bx, by] = [Math.round(before[0] + before[2] / 2), Math.round(before[1] + before[3] / 2)];
+  run('drag 뱃지', ['drag', `${bx},${by}`, `${bx + 300},${by + 200}`, ...B]);
+  const after = JSON.parse(qb("(()=>{const r=document.getElementById('__tirno_badge').getBoundingClientRect();return JSON.stringify([r.left,r.top])})()"));
+  check('뱃지가 끌려갔다', Math.abs(after[0] - (before[0] + 300)) < 4 && Math.abs(after[1] - (before[1] + 200)) < 4, `before ${before} after ${after}`);
+  run('kill (뱃지 세션)', ['kill', 'badge', '--clean']);
+  run('attach smoke (뱃지 세션이 active 를 가져갔다)', ['attach', 'smoke']);
   // a11y 트리에 픽스처의 버튼이 보여야 스냅샷이 "내용을 본" 것이다.
   check('snapshot 에 버튼이 보인다', snap.out.includes('click me'), snap.out.slice(0, 80));
   const snapVerbose = run('snapshot --verbose', ['snapshot', '--verbose', ...S]);

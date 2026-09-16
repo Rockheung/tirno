@@ -7,15 +7,20 @@ export interface FormatOptions {
 }
 
 
+// 색 코드는 폭이 아니다 — 셀에 chalk 가 들어가면(ls 의 뱃지 점) 보이는 길이로 맞춘다
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
+const visibleLength = (s: string): number => s.replace(ANSI, '').length;
+const padVisible = (s: string, w: number): string => s + ' '.repeat(Math.max(0, w - visibleLength(s)));
+
 export function formatTable(headers: string[], rows: string[][]): string {
   const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map(r => (r[i] ?? '').length))
+    Math.max(h.length, ...rows.map(r => visibleLength(r[i] ?? '')))
   );
 
   const sep = widths.map(w => '─'.repeat(w + 2)).join('┼');
   const headerLine = headers.map((h, i) => ` ${h.padEnd(widths[i])} `).join('│');
   const dataLines = rows.map(row =>
-    row.map((cell, i) => ` ${(cell ?? '').padEnd(widths[i])} `).join('│')
+    row.map((cell, i) => ` ${padVisible(cell ?? '', widths[i])} `).join('│')
   );
 
   return [

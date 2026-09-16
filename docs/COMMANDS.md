@@ -13,11 +13,28 @@
 | `attach <name>` | active 세션 변경 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
 | `new`/`restart` `--extensions` | 확장이 돌게 한다. **기본은 꺼짐** — 확장은 페이지가 하는 일을 바꾸고, 이 도구는 페이지를 있는 그대로 관측하려고 있다 |
+| `new`/`restart` `--badge` / `--no-badge` | 세션 뱃지(아래). headful 기본 켬 |
 | `restart <name> [url] [--keep-cookies] [-- <flags>]` | 죽이고 새 flag 로 재생성. **`--keep-cookies` 는 세션 쿠키까지 넘겨 로그인이 살아남는다** — `Expires` 없는 쿠키는 브라우저 종료와 함께 사라지므로, 이걸 안 주면 프로필은 남아도 로그인은 안 남는다 |
 | `gc [--dry-run] [--older-than <N>]` | 낡은 장부 정리. 기본은 장부만(ghost/foreign 엔트리, 잔존 `DevToolsActivePort`). `--older-than <N>`일 때만 **N일 이상 안 쓴 orphan 프로필 삭제** |
 | `drift [name] [--all] [-- <flags>]` | 선언한 chrome flag 와 실행 중 프로세스 비교. 차이 있으면 재기동 명령 제안 + **exit 1** |
 | `rename <old> <new>` | 이름 변경 |
 | `export <name>` | 메타데이터 출력 |
+
+#### 세션 뱃지 — 어느 창이 어느 세션인가
+
+headful 세션은 페이지 상단 가운데에 **세션 이름 조각**을 띄운다. 창 다섯이 같은 크기로 겹쳐
+뜨면 창 제목(=페이지 제목)만으로는 구별이 안 되기 때문이다. `ls` 의 이름 앞 `●` 이 같은 색이다.
+
+- **끌어서 옮길 수 있다.** 옮긴 자리는 origin 마다 남는다(localStorage).
+- 배경색은 세션을 만들 때 한 번 뽑아 대장에 적는다 — 세션이 사는 동안 같은 색.
+- **관측을 더럽히지 않는다**: `aria-hidden` 이라 `snapshot`·delta·캐시에 없고, `screenshot` 은
+  찍기 직전 숨겼다 복원하므로 스크린샷·지문에 없고, `position:fixed` 라 레이아웃·좌표를 안
+  민다. 닫힌 shadow root 안이라 페이지 CSS·스크립트가 닿지 않는다.
+- 뱃지 자리에 있는 요소를 `click` 하면 가림 판정이 `div#__tirno_badge` 를 이름으로 대고
+  거절한다 — 끌어서 치우거나 `--no-badge`.
+- `new --no-badge` / `--badge`(headless 에서 강제). `restart` 는 이전 설정을 물려받는다.
+- 한계: tirno 가 붙은 뒤에 사용자가 직접 연 탭에는 다음 tirno 명령까지 뱃지가 없다(연결 시
+  주입하는 stateless 모델).
 
 #### 샌드박스 — Ubuntu 23.10+ 에서 기동이 안 될 때
 

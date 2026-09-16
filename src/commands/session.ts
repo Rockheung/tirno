@@ -1,4 +1,6 @@
 import { Command } from 'commander';
+import chalk from 'chalk';
+import { badgeColorHex } from '../cdp/badge.js';
 import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
@@ -108,6 +110,8 @@ export function registerSessionCommands(program: Command): void {
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
     .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
+    .option('--badge', 'Show the session name as a badge in the page (default when headful). Draggable; hidden from snapshots and screenshots')
+    .option('--no-badge', 'No badge')
     .option('--group <name>', 'Tag this session with a group label')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
     .option('--boot-timeout <ms>', 'How long to wait for [url] to commit before returning. The session is created either way; on timeout `new` says so instead of leaving the next `eval` to read about:blank', intArg, 15000);
@@ -165,6 +169,7 @@ export function registerSessionCommands(program: Command): void {
         executablePath: opts.executablePath,
         headless: opts.headless,
         extensions: opts.extensions,
+        badge: opts.badge,
         userDataDir: userDataDirOverride,
         bootUrl,
       });
@@ -221,6 +226,8 @@ export function registerSessionCommands(program: Command): void {
     .option('--executable-path <path>', 'Chrome path')
     .option('--ephemeral', 'Use a temporary user-data-dir')
     .option('--extensions', 'Let extensions run (off by default). Turned on anyway when the session has stored header rules, since those are an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
+    .option('--badge', 'Show the session badge (default when headful; inherited from the previous run if unspecified)')
+    .option('--no-badge', 'No badge')
     .option('--group <name>', 'Group label')
     .option('--keep-cookies', 'Carry cookies across the restart, session cookies included — otherwise the login dies with the browser')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
@@ -280,6 +287,7 @@ export function registerSessionCommands(program: Command): void {
           executablePath: opts.executablePath ?? existing?.executablePath,
           headless: opts.headless,
           extensions: opts.extensions || headerRules.length > 0,
+          badge: opts.badge ?? existing?.badge,
           userDataDir: userDataDirOverride,
           bootUrl,
         });
@@ -398,7 +406,9 @@ export function registerSessionCommands(program: Command): void {
         const ownership = inv
           ? inv.ownership === 'foreign' && squatter ? `foreign(${squatter})` : inv.ownership
           : '?';
-        const row = [marker, s.name, String(inv?.resolvedPort ?? s.port), status, ownership, proxy, emulation];
+        // 뱃지 색 점 — 창 위의 뱃지와 같은 색이라 표에서 창을 찾는다
+        const dot = s.badge && s.badgeColor ? `${chalk.hex(badgeColorHex(s.badgeColor) ?? '#888')('●')} ` : '';
+        const row = [marker, `${dot}${s.name}`, String(inv?.resolvedPort ?? s.port), status, ownership, proxy, emulation];
         if (showGroup) row.push(s.group ?? '-');
         if (showFlags) row.push(summarizeFlags(s.chromeFlags));
         row.push(s.lastAccessedAt.slice(0, 19).replace('T', ' '));
