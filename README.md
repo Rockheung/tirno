@@ -58,6 +58,7 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 | **셀렉터를 몰라도 조작한다** | `snapshot` 이 a11y 트리에 `@1 @2 …` 를 붙인다. `click @7` · `fill @39 "..."` |
 | **본 것을 적어둔다** | `snapshot` 이 URL × viewport 키로 a11y(role·name)·selector·bbox·화면 지문을 저장한다. 재방문 시 `cache load` 가 **지금 화면과 대보고(낡았으면 `STALE`), ref 를 되찾아(selector → a11y → bbox) 채워 준다** — 새 세션에서 `cache load` 뒤 바로 `click @7`. 못 찾은 것은 `UNRESOLVED` 로 이름을 댄다 |
 | **여러 대에 동시에** | `broadcast … --group <g>` — 순차가 아니라 동시. 8세션 기준 1.35s → 0.35s |
+| **바이너리에 든 것은 tirno 뿐** | 런타임 의존 0. `audit`(lighthouse)만 `tirno plugin install audit` 로 따로 붙인다 — 바이너리의 절반이 그것 하나였다 |
 | **MCP 서버가 내장** | `tirno mcp` — 툴이 `tirno schema` 에서 자동 생성되어 명령을 추가하면 툴이 생긴다. `readOnlyHint`·`destructiveHint` 는 `effects` 에서. 앵커 우회가 필요 없다 |
 | **정책은 세션에 선언한다** | `new --allow bank.com`(CLI 사전검사 + 확장의 요청 차단, WebRTC 까지) · `--read-only`(관측만) · `--confirm destructive`(delete·pay·삭제·결제… 이름은 `--confirm` 없이 안 누름). 거부는 `code: policy_denied` |
 | **목적을 말하면 그것만 낸다** | `snapshot --interactive` · `forms` · `links` · `table` · `read` · `explain @7`(왜 안 눌리나 — 가림·보임·enabled·필드 상태·캐시 이력 한 화면) · `watch`(이벤트 NDJSON 스트림) |

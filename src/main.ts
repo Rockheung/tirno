@@ -13,6 +13,7 @@ import { registerRecipeCommands, recordIfRecording } from './commands/recipe.js'
 import { registerPlanCommands } from './commands/plan.js';
 import { registerObserveCommands } from './commands/observe.js';
 import { registerMcpCommand } from './commands/mcp.js';
+import { registerPluginCommands } from './commands/plugin.js';
 import { guardPolicy } from './core/policy-guard.js';
 import { TirnoError } from './util/errors.js';
 import { registerEvalCommand } from './commands/eval.js';
@@ -73,6 +74,7 @@ registerAuditCommand(program);
 registerScreencastCommands(program);
 registerSchemaCommand(program);
 registerMcpCommand(program, () => program);
+registerPluginCommands(program);
 registerUpdateCommand(program);
 
 // 명령이 자기 --json 을 받았으면 실패도 JSON 으로 — 성공은 JSON 인데 실패만 산문이면

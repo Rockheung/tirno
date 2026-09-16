@@ -6,6 +6,7 @@
 // requires a clean reload.
 
 import { Command } from 'commander';
+import { loadLighthouse } from '../core/plugin-lighthouse.js';
 import fs from 'node:fs';
 import * as store from '../core/session-store.js';
 import { success, info, fail } from '../output/formatter.js';
@@ -65,7 +66,7 @@ export function registerAuditCommand(program: Command): void {
         // Lighthouse supports navigation | snapshot | timespan.
         // Loose typing at the boundary — lighthouse's Flags type is huge and
         // changes between minor versions; we only need a narrow subset.
-        const lhMod = await import('lighthouse');
+        const lhMod = await loadLighthouse();
         const lighthouse = lhMod.default as any;
         const desktopConfig = lhMod.desktopConfig as any;
 

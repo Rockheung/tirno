@@ -59,6 +59,9 @@ jobs:
           ./tirno-bun-linux-x64 --version
           ./tirno-bun-linux-x64 schema | jq '.commands | length'
           ./tirno-bun-linux-x64 ls
+          # lighthouse 는 번들에 없어야 한다 (#216) — 있으면 크기가 도로 두 배다
+          ! grep -c "lighthouse-core\|LighthouseError" tirno-bun-linux-x64 >/dev/null || (echo "lighthouse is in the bundle" && exit 1)
+          ls -la tirno-bun-linux-x64 | awk '{print "binary size:", $5/1048576 " MB"}'
 
       - uses: actions/upload-artifact@v4
         with:
