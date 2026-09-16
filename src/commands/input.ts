@@ -4,6 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, fail } from '../output/formatter.js';
 import { TirnoError } from '../util/errors.js';
+import { actWithDelta, printDelta, DELTA_FLAG } from './delta-output.js';
 import { clickByRef, clickElement, fillByRef, fillElement, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
@@ -40,6 +41,7 @@ export function registerInputCommands(program: Command): void {
     .option('--dbl', 'Double click')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .option('--synthetic', 'Dispatch element.click() instead of a mouse click. Ignores whatever covers the element and the viewport — for elements larger than the viewport, or hidden ones that still have handlers. No pointer/mouse events are fired')
+    .option(...DELTA_FLAG)
     .action(async (target: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -49,33 +51,36 @@ export function registerInputCommands(program: Command): void {
         const coords = asCoords(target);
         if (coords) {
           const [x, y] = coords;
-          const cdp = await page.createCDPSession();
-          try {
-            const clickCount = opts.dbl ? 2 : 1;
-            await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount });
-            await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount });
-            if (opts.dbl) {
+          const { delta } = await actWithDelta(page, opts, async () => {
+            const cdp = await page.createCDPSession();
+            try {
+              const clickCount = opts.dbl ? 2 : 1;
               await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount });
               await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount });
+              if (opts.dbl) {
+                await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount });
+                await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount });
+              }
+            } finally {
+              await cdp.detach();
             }
-          } finally {
-            await cdp.detach();
-          }
+          });
           browser.disconnect();
           success(`Clicked (${x},${y})${opts.dbl ? ' (dbl)' : ''}`);
+          printDelta(delta);
           return;
         }
 
         const clickOpts = { label: target, dbl: !!opts.dbl, synthetic: !!opts.synthetic };
-        if (refStore.isRef(target)) {
-          const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
-          await clickByRef(page, backendId, clickOpts);
-        } else {
-          await clickElement(page, await requireElement(page, target), clickOpts);
-        }
+        // 대상은 행동 밖에서 푼다 — 낡은 ref 거절은 행동이 아니고, 그 전엔 캡처할 이유가 없다
+        const backendId = refStore.isRef(target) ? await refToBackendId(page, meta.name, target, !!opts.staleOk) : null;
+        const el = backendId === null ? await requireElement(page, target) : null;
+        const { delta } = await actWithDelta(page, opts, () =>
+          backendId !== null ? clickByRef(page, backendId, clickOpts) : clickElement(page, el!, clickOpts));
 
         browser.disconnect();
         success(`Clicked ${target}${opts.synthetic ? ' (synthetic)' : ''}`);
+        printDelta(delta);
       } catch (e) {
         fail(e);
       }
@@ -90,6 +95,7 @@ export function registerInputCommands(program: Command): void {
     .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},...]')
     .option('--value-stdin', 'Read the value from stdin instead of the argument, e.g. `pbpaste | tirno fill \'input[type=password]\' --value-stdin`. The value is never printed.')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
+    .option(...DELTA_FLAG)
     .option('--no-verify', 'Skip reading the value back after typing. By default a field that ends up holding something else (readonly, maxlength, a keydown handler, focus moved) fails with exit 1 instead of "Filled" — turn this off only for inputs whose formatter rewrites what you type')
     .action(async (target: string | undefined, value: string | undefined, opts) => {
       try {
@@ -119,16 +125,21 @@ export function registerInputCommands(program: Command): void {
             if (!entry.target || typeof entry.value !== 'string') {
               throw new Error(`--batch entries need {target, value}`);
             }
-            const fillOpts = { label: entry.target, verify: opts.verify !== false };
-            if (refStore.isRef(entry.target)) {
-              const backendId = await refToBackendId(page, meta.name, entry.target, !!opts.staleOk);
-              await fillByRef(page, backendId, entry.value, fillOpts);
-            } else {
-              await fillElement(page, await requireElement(page, entry.target), entry.value, fillOpts);
-            }
           }
+          const { delta } = await actWithDelta(page, opts, async () => {
+            for (const entry of entries) {
+              const fillOpts = { label: entry.target, verify: opts.verify !== false };
+              if (refStore.isRef(entry.target)) {
+                const backendId = await refToBackendId(page, meta.name, entry.target, !!opts.staleOk);
+                await fillByRef(page, backendId, entry.value, fillOpts);
+              } else {
+                await fillElement(page, await requireElement(page, entry.target), entry.value, fillOpts);
+              }
+            }
+          });
           browser.disconnect();
           success(`Filled ${entries.length} field${entries.length === 1 ? '' : 's'}`);
+          printDelta(delta);
           return;
         }
 
@@ -137,12 +148,11 @@ export function registerInputCommands(program: Command): void {
         }
 
         const fillOpts = { label: target, verify: opts.verify !== false, hideValue: fromStdin };
-        if (refStore.isRef(target)) {
-          const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
-          await fillByRef(page, backendId, value, fillOpts);
-        } else {
-          await fillElement(page, await requireElement(page, target), value, fillOpts);
-        }
+        const fillBackendId = refStore.isRef(target) ? await refToBackendId(page, meta.name, target, !!opts.staleOk) : null;
+        const fillEl = fillBackendId === null ? await requireElement(page, target) : null;
+        const v = value;
+        const { delta } = await actWithDelta(page, opts, () =>
+          fillBackendId !== null ? fillByRef(page, fillBackendId, v, fillOpts) : fillElement(page, fillEl!, v, fillOpts));
 
         browser.disconnect();
         // stdin 으로 받은 값은 찍지 않는다 — argv 를 피해 넣은 것을 터미널에
@@ -150,6 +160,7 @@ export function registerInputCommands(program: Command): void {
         success(fromStdin
           ? `Filled ${target} (${value.length} chars from stdin)`
           : `Filled ${target} with "${value}"`);
+        printDelta(delta);
       } catch (e) {
         fail(e);
       }
@@ -161,15 +172,17 @@ export function registerInputCommands(program: Command): void {
     .argument('<text>', 'Text to type')
     .option('-s, --session <name>', 'Session name')
     .option('--delay <ms>', 'Delay between keystrokes', intArg, 0)
+    .option(...DELTA_FLAG)
     .action(async (text: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
-        await page.keyboard.type(text, { delay: opts.delay });
+        const { delta } = await actWithDelta(page, opts, () => page.keyboard.type(text, { delay: opts.delay }));
 
         browser.disconnect();
         success(`Typed "${text.slice(0, 40)}${text.length > 40 ? '...' : ''}"`);
+        printDelta(delta);
       } catch (e) {
         fail(e);
       }
@@ -180,12 +193,14 @@ export function registerInputCommands(program: Command): void {
     .description('Press a key, or a modifier combo like "Meta+v" / "Shift+Tab"')
     .argument('<key>', 'Key name (Enter, Tab, Escape, ArrowDown, ...) or <modifier>+<key>')
     .option('-s, --session <name>', 'Session name')
+    .option(...DELTA_FLAG)
     .action(async (key: string, opts) => {
       try {
         const combo = parseKeyCombo(key);
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
+        const { delta } = await actWithDelta(page, opts, async () => {
         if (combo.modifiers.length === 0) {
           await page.keyboard.press(key as string);
         } else {
@@ -220,9 +235,11 @@ export function registerInputCommands(program: Command): void {
             }
           }
         }
+        });
 
         browser.disconnect();
         success(`Pressed ${key}`);
+        printDelta(delta);
       } catch (e) {
         fail(e);
       }
@@ -428,6 +445,7 @@ export function registerInputCommands(program: Command): void {
     .argument('<selector>', 'CSS selector for file input')
     .argument('<files...>', 'File paths to upload')
     .option('-s, --session <name>', 'Session name')
+    .option(...DELTA_FLAG)
     .action(async (selector: string, files: string[], opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -436,10 +454,11 @@ export function registerInputCommands(program: Command): void {
         const input = await page.$(selector);
         if (!input) throw new Error(`Element not found: ${selector}`);
 
-        await input.uploadFile(...files);
+        const { delta } = await actWithDelta(page, opts, () => input.uploadFile(...files));
 
         browser.disconnect();
         success(`Uploaded ${files.length} file(s) to ${selector}`);
+        printDelta(delta);
       } catch (e) {
         fail(e);
       }

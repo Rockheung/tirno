@@ -243,6 +243,8 @@ export class Page {
       }
     });
     s.on('Runtime.consoleAPICalled', (e) => this.emitter.emit('console', new ConsoleMessage(e)));
+    s.on('Runtime.exceptionThrown', (e) => this.emitter.emit('pageerror', new Error(e.exceptionDetails.exception?.description ?? e.exceptionDetails.text)));
+    s.on('Page.frameNavigated', ({ frame }) => { if (!frame.parentId) this.emitter.emit('navigated', frame.url); });
     s.on('Page.javascriptDialogOpening', (e) => this.emitter.emit('dialog', new Dialog(s, e.type, e.message)));
   }
 
@@ -250,6 +252,8 @@ export class Page {
 
   on(event: 'console', handler: (m: ConsoleMessage) => void): this;
   on(event: 'dialog', handler: (d: Dialog) => void): this;
+  on(event: 'pageerror', handler: (e: Error) => void): this;
+  on(event: 'navigated', handler: (url: string) => void): this;
   on(event: string, handler: (...a: never[]) => void): this {
     this.emitter.on(event, handler as (...a: unknown[]) => void);
     return this;
@@ -347,6 +351,11 @@ export class Page {
       if (Date.now() >= deadline) throw new Error(`Waiting failed: ${timeout}ms exceeded`);
       await sleep(opts.polling ?? 100);
     }
+  }
+
+  /** 진행 중 요청이 없으면 마지막 활동 뒤 지난 ms, 있으면 -1 — 짧은 정착 판정용 */
+  networkQuietFor(): number {
+    return this.inflight.size === 0 ? Date.now() - this.lastActivity : -1;
   }
 
   /** 진행 중 요청이 `concurrency` 이하인 채로 `idleTime` 이 지나면 idle (puppeteer 와 같은 정의) */

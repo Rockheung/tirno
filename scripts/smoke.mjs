@@ -390,6 +390,18 @@ function main() {
   run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });
   check('hover @ref 가 mouseover 를 쐈다', q("document.getElementById('status').textContent") === 'hovered',
     `실측: ${q("document.getElementById('status').textContent")} (ref @${linkRef})`);
+  // 행동 뒤 delta (#209) — 눌렀으면 무엇이 변했는지, 안 변했으면 그렇다고.
+  q("document.getElementById('status').textContent='idle'");
+  const dl = run('click (delta: idle→clicked)', ['click', '#btn', ...S]);
+  check('delta 가 빠진 줄과 생긴 줄을 낸다', /\+1  StaticText "clicked"/.test(dl.out) && /-1  StaticText "idle"/.test(dl.out), dl.out.slice(0, 160));
+  const dl2 = run('click (delta: no change)', ['click', '#btn', ...S]);
+  check('변한 게 없으면 no change', /no change/.test(dl2.out), dl2.out.slice(0, 120));
+  const dl3 = run('click --no-delta', ['click', '#btn', '--no-delta', ...S]);
+  check('--no-delta 면 성공 줄뿐', dl3.out.trim().split('\n').length === 1, dl3.out);
+  q("document.getElementById('text').focus()");
+  const dl4 = run('press Tab (delta: focus)', ['press', 'Tab', ...S]);
+  check('포커스 이동이 delta 에 나온다', /focus: textbox "text" → textbox "area"/.test(dl4.out), dl4.out.slice(0, 120));
+  q("document.getElementById('status').textContent='idle'");
   // 가려진 요소는 사람이 못 누른다. 합성 click() 은 뚫고 들어가 "Clicked" 를 찍었다 (#183).
   q("document.getElementById('cover').classList.add('on')");
   const cov = run('click 가려진 셀렉터 (→ exit≠0)', ['click', '#under', ...S], { expectFail: true });
