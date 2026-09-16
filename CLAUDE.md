@@ -4,7 +4,8 @@
 
 tirno — Multi-session browser automation CLI on raw CDP.
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다.
-puppeteer-core 기반.
+기동(`cdp/launch.ts`)과 전송(`cdp/client.ts`)은 tirno 자신의 것이다. Page 층은 puppeteer-core
+에서 자체 클라이언트로 옮기는 중 — 단계와 현황은 #182.
 
 ## tirno 가치 흐름 (불변)
 
@@ -84,7 +85,7 @@ node bin/tirno.js kill test --clean
 
 ## 의존성
 
-- puppeteer-core: Chrome CDP 클라이언트
+- puppeteer-core: Page 층 (evaluate·입력·스크린샷·에뮬레이션) — #182 로 걷어내는 중. 기동·전송은 이미 자체(`cdp/launch.ts`·`cdp/client.ts`, 타입은 `devtools-protocol`)
 - commander: CLI 프레임워크
 - chalk: 터미널 컬러
 - pixelmatch + pngjs: 스크린샷 비교

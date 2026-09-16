@@ -58,7 +58,8 @@ export interface DriftReport {
 }
 
 /**
- * Compares only what was expected. Extra flags are NOT reported: puppeteer and
+ * Compares only what was expected. Extra flags are NOT reported: tirno's own
+ * baseline (cdp/launch.ts BASELINE_ARGS) and
  * chrome add dozens of their own (`--disable-background-networking`, …), so
  * "present but not declared" is the normal case, not a defect — flagging it
  * would bury the two signals that do mean something.

@@ -1,21 +1,12 @@
-import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as store from './session-store.js';
 import { profileDir } from './session-store.js';
 import { allocate } from './port-allocator.js';
-import { waitForActivePort, clearActivePort } from './devtools-port.js';
+import { clearActivePort } from './devtools-port.js';
 import { resolveChrome } from './chrome-finder.js';
 import { sandboxHint } from './launch-hint.js';
-
-function portFromWsEndpoint(wsEndpoint: string): number | null {
-  try {
-    const port = Number.parseInt(new URL(wsEndpoint).port, 10);
-    return Number.isNaN(port) ? null : port;
-  } catch {
-    return null;
-  }
-}
+import { buildChromeArgs, spawnChrome, waitForDevTools, releaseChrome, type DevToolsEndpoint } from '../cdp/launch.js';
 
 export interface LaunchOptions {
   name: string;
@@ -69,13 +60,13 @@ function seedProfilePrefs(userDataDir: string): void {
 }
 
 /**
- * puppeteer 의 기동 실패는 chromium stderr 를 그대로 싣고 오는데, 거기 적힌 조언
- * (`--no-sandbox` 를 써봐라)을 tirno 문법으로 옮기는 일은 사용자 몫이었다.
- * 그 번역만 얹어서 다시 던진다 — 원문은 건드리지 않는다.
+ * 기동 실패는 chromium stderr 를 그대로 싣고 온다. 거기 적힌 조언(`--no-sandbox` 를
+ * 써봐라)을 tirno 문법으로 옮기는 일은 사용자 몫이었다. 그 번역만 얹어서 다시 던진다 —
+ * 원문은 건드리지 않는다.
  */
-export async function launchOrExplain<T>(
-  options: Parameters<typeof puppeteer.launch>[0],
-  launcher: (o: Parameters<typeof puppeteer.launch>[0]) => Promise<T> = puppeteer.launch as never,
+export async function launchOrExplain<O, T>(
+  options: O,
+  launcher: (o: O) => Promise<T>,
   argv: string[] = process.argv,
 ): Promise<T> {
   try {
@@ -85,6 +76,28 @@ export async function launchOrExplain<T>(
     const hint = sandboxHint(err.message, argv);
     if (hint) err.message = `${err.message}${hint}`;
     throw err;
+  }
+}
+
+interface SpawnSpec {
+  executablePath: string;
+  args: string[];
+  userDataDir: string;
+  requestedPort: number;
+}
+
+/** 띄우고, DevTools 가 열릴 때까지 기다리고, 핸들을 놓는다. 실패하면 stderr 를 실어 던진다. */
+async function spawnAndWait(spec: SpawnSpec): Promise<{ pid: number } & DevToolsEndpoint> {
+  const chrome = spawnChrome(spec.executablePath, spec.args);
+  try {
+    const endpoint = await waitForDevTools(chrome, spec.userDataDir, spec.requestedPort);
+    return { pid: chrome.pid, ...endpoint };
+  } catch (e) {
+    // 떴다가 못 붙은 프로세스는 남기지 않는다 — 대장에 없는 Chrome 은 gc 도 못 본다
+    try { chrome.process.kill(); } catch { /* 이미 죽었다 */ }
+    throw e;
+  } finally {
+    releaseChrome(chrome);
   }
 }
 
@@ -111,6 +124,10 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
   // visual cache / journaling to be reproducible. User can override by
   // passing their own `--window-size=...` after `--`; chrome uses the
   // last value on the cmdline.
+  //
+  // 이것이 대장에 적히는 `chromeFlags` 다 — tirno 가 **명시적으로** 넘긴 것. 기준 인자
+  // (BASELINE_ARGS)는 여기 없다: drift 의 재기동 제안과 restart 가 이 목록을 그대로
+  // 다시 쓰므로, 기준을 섞으면 두 번 깔린다.
   const args = [
     `--remote-debugging-port=${requestedPort}`,
     '--no-first-run',
@@ -119,77 +136,22 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     '--window-position=0,0',
     ...(opts.chromeFlags ?? []),
   ];
-  // Chrome treats trailing positional args as start URLs. Putting bootUrl
-  // last means chrome opens it on launch — no about:blank flash, no separate
-  // navigate round-trip.
-  if (opts.bootUrl) args.push(opts.bootUrl);
 
-  // puppeteer assumes the browser dies with the process that launched it, and
-  // wires that up three ways: SIGINT/SIGTERM/SIGHUP handlers, and a `process`
-  // 'exit' listener that is not behind any option. A tirno session has to
-  // outlive the CLI invocation that created it, so all three have to go — the
-  // signal handlers by option, the exit listener by hand below.
-  const exitListenersBefore = new Set(process.listeners('exit'));
-
-  const browser = await launchOrExplain<Awaited<ReturnType<typeof puppeteer.launch>>>({
-    executablePath,
-    headless: opts.headless ?? false,
+  // 기동은 tirno 가 한다 (cdp/launch.ts). puppeteer 시절 싸우던 것들 — 기본 인자가 우리
+  // 포트를 덮고(#33), --disable-extensions 를 되돌릴 수 없고(#113), 프로세스와 함께
+  // 브라우저를 죽이는 exit 리스너를 손으로 떼던 일 — 은 여기 없다.
+  const fullArgs = buildChromeArgs({
+    declared: args,
     userDataDir,
-    args,
-    // puppeteer's default args inject their own `--remote-debugging-port`,
-    // which silently overrides ours. Drop both so only our
-    // `--remote-debugging-port=${requestedPort}` reaches chrome.
-    //
-    // `--disable-extensions` is also puppeteer's, and it cannot be undone from
-    // the far side: passing `--load-extension` after it does not cancel it, and
-    // `Extensions.loadUnpacked` still answers with an extension id while
-    // activating nothing — no extension target, no content script. A CDP call
-    // that reports success and does nothing is worse than one that fails, so
-    // the flag has to be dropped at launch or not at all.
-    ignoreDefaultArgs: [
-      '--enable-automation',
-      '--remote-debugging-port',
-      ...(opts.extensions ? ['--disable-extensions'] : []),
-    ],
-    pipe: false,
-    defaultViewport: null,
-    handleSIGINT: false,
-    handleSIGTERM: false,
-    handleSIGHUP: false,
+    headless: opts.headless ?? false,
+    extensions: opts.extensions ?? false,
+    bootUrl: opts.bootUrl,
   });
 
-  const chromeProcess = browser.process();
-  const pid = chromeProcess?.pid;
-  if (!pid) throw new Error('Failed to get Chrome PID');
-
-  const wsEndpoint = browser.wsEndpoint();
-
-  // disconnect without closing — Chrome stays running
-  browser.disconnect();
-
-  // Whatever puppeteer added is its browser-killing listener; anything that was
-  // already there belongs to the caller and stays.
-  for (const listener of process.listeners('exit')) {
-    if (!exitListenersBefore.has(listener)) process.removeListener('exit', listener);
-  }
-
-  // Chrome is a child of this process, and node keeps the event loop alive for
-  // a live child handle and its stdio pipes. Without this the command never
-  // returns — and killing it to get the shell back takes Chrome with it.
-  // The stdio streams are typed as plain Readable/Writable but are net.Socket
-  // at runtime (stdio: 'pipe'), so unref is there. Unref rather than destroy —
-  // a destroyed read end gives Chrome EPIPE on its next stderr write.
-  for (const stream of [chromeProcess.stdin, chromeProcess.stdout, chromeProcess.stderr]) {
-    (stream as { unref?: () => void } | null)?.unref?.();
-  }
-  chromeProcess.unref();
-
-  // With port 0 the requested port is not the real one. DevToolsActivePort is
-  // what chrome itself wrote, and it is the same file a directory-anchored MCP
-  // reads, so prefer it. wsEndpoint (parsed by puppeteer from chrome's stderr)
-  // is the fallback — it carries the real port too, just without the file.
-  const active = requestedPort === 0 ? await waitForActivePort(userDataDir) : null;
-  const port = active?.port ?? portFromWsEndpoint(wsEndpoint) ?? requestedPort;
+  const { pid, port, wsEndpoint } = await launchOrExplain(
+    { executablePath, args: fullArgs, userDataDir, requestedPort },
+    spawnAndWait,
+  );
 
   const now = new Date().toISOString();
   const meta: store.SessionMetadata = {
