@@ -138,8 +138,12 @@ export interface DevToolsEndpoint {
  * `/json/version` 을 두드린다. 그 전에 프로세스가 죽으면 stderr 를 실어 던진다 —
  * 샌드박스 실패의 조언이 거기 있다(launch-hint 가 그것을 tirno 문법으로 옮긴다).
  */
+/**
+ * 기본 30초. 15초였을 때 CI 러너의 첫 기동(콜드 캐시)이 넘겼다 — "did not open its DevTools
+ * endpoint within 15000ms" 뒤 이어진 세션은 멀쩡했다. 로컬은 1초 안이라 상한이 길어도 비용이 없다.
+ */
 export async function waitForDevTools(
-  chrome: SpawnedChrome, userDataDir: string, requestedPort: number, timeoutMs = 15000,
+  chrome: SpawnedChrome, userDataDir: string, requestedPort: number, timeoutMs = 30000,
 ): Promise<DevToolsEndpoint> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
