@@ -3,6 +3,7 @@ import chalk from 'chalk';
 import { badgeColorHex } from '../cdp/badge.js';
 import { TirnoError } from '../util/errors.js';
 import { checkPolicy, describePolicy, WEBRTC_CONTAINMENT_FLAGS, type Policy } from '../core/policy.js';
+import { checkExtensions, checkPrefs, expectsExtension, type Axis } from '../core/drift-axes.js';
 import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
@@ -594,6 +595,7 @@ export function registerSessionCommands(program: Command): void {
     .usage('[options] [name] [-- <chrome-flags>]')
     .argument('[name]', 'Session name (default: active session)')
     .option('--all', 'Also print the full running command line')
+    .option('--json', 'Structured report: flags and the other axes (extensions, prefs)')
     .allowUnknownOption(true)
     .allowExcessArguments(true)
     .addHelpText('after', CHROME_FLAGS_HELP);
@@ -618,13 +620,40 @@ export function registerSessionCommands(program: Command): void {
         process.exit(1);
       }
 
+      // 다른 축 — 확장(헤더 규칙·허용 목록이 확장으로 사는데 붙어 있나) · prefs (#192)
+      const axes: Axis[] = [];
+      try {
+        const { browser } = await connectWithoutPageSetup(target);
+        try { axes.push(await checkExtensions(browser, meta)); } finally { browser.disconnect(); }
+      } catch (e) {
+        axes.push({ axis: 'extensions', status: 'n/a', expected: expectsExtension(meta) ?? 'none declared', actual: `could not connect: ${(e as Error).message}` });
+      }
+      axes.push(checkPrefs(meta));
+      const axisDrift = axes.some(a => a.status === 'drift');
+
+      if (opts.json) {
+        console.log(JSON.stringify({ name: target, flags: { hasDrift: d.hasDrift, missing: d.missing, changed: d.changed, unverifiable: d.unverifiable }, axes }, null, 2));
+        if (d.hasDrift || axisDrift) process.exit(1);
+        return;
+      }
+
       if (opts.all) info(`running: ${d.cmdline}`);
+
+      for (const a of axes) {
+        const mark = a.status === 'ok' ? '✓' : a.status === 'drift' ? '✗' : a.status === 'changed-by-user' ? '⚠' : '·';
+        info(`${a.axis.padEnd(11)} ${mark} ${a.status === 'ok' ? a.actual : a.status === 'n/a' ? a.actual : `${a.status.toUpperCase()} — expected ${a.expected}; ${a.actual}`}${a.fix ? `
+              → ${a.fix}` : ''}`);
+      }
 
       for (const c of d.unverifiable) {
         info(`unreadable  ${c.flag}: declared ${c.expected ?? '(no value)'} — the running command line shows only "${c.actual ?? ''}", because a value containing " --" cannot be read back from it. Not reported as drift.`);
       }
 
       if (!d.hasDrift) {
+        if (axisDrift) {
+          error(`'${target}' flags match, but another axis has drifted (see above)`);
+          process.exit(1);
+        }
         success(`'${target}' matches its ${d.expectedSource === 'ledger' ? 'declared flags' : 'expected flags'}`);
         return;
       }

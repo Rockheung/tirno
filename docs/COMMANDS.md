@@ -215,6 +215,25 @@ tirno drift d1 -- --host-resolver-rules="…"   # 지금 원하는 flags vs 실�
 없어 `unreadable` 로 따로 보고하고 drift 로 세지 않는다. 거짓 일치도 아니고, 재기동해도
 풀리지 않는 거짓 drift 도 아니다.
 
+플래그 말고 두 축을 더 본다 — 세션 메타의 "적용했다" 주장 중 기동 뒤에 조용히 어긋날 수
+있는 것들(#192):
+
+```
+→ extensions  ✗ DRIFT — expected allow example.com — the tirno-headers extension must be loaded; Target.getTargets shows 0 extension targets
+              → tirno restart dx
+→ prefs       ✓ translate.enabled=false
+```
+
+- **extensions** — `headers set` 과 `--allow` 는 확장으로 산다. `Extensions.loadUnpacked` 로 얹은
+  확장은 프로필에 남지 않아 Chrome 이 다시 뜨면 사라진다: 규칙은 메타에 있는데 요청에는 안 붙는
+  상태. 확장 타깃 수로 본다. 어긋나면 **exit 1**.
+- **prefs** — `new` 가 심는 `translate.enabled=false`. 바뀌었으면 `⚠ changed-by-user` 로 표시만
+  한다 — 그쪽이 나중 의사라 drift 로 세지 않는다.
+- emulation 은 축이 아니다 — 오버라이드는 연결 수명이라 connect 마다 메타에서 다시 적용된다.
+  새 연결로 재 보면 늘 "적용 안 됨" 이고, 그것은 설계지 drift 가 아니다.
+
+`--json` 은 `{flags: {missing, changed, unverifiable}, axes: [{axis, status, expected, actual, fix}]}`.
+
 차이가 있으면 **exit 1** 이라 자동화에서 게이트로 쓸 수 있다. 재기동 비용은 앵커 방식에서
 사실상 0 이다 — 포트 경합 없고, 프로필이 영속이라 로그인이 유지되고, MCP 는 다음 툴
 호출에서 알아서 새 Chrome 에 붙는다.
