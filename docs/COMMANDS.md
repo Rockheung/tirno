@@ -256,7 +256,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 ### 네비게이션
 | 명령 | 설명 |
 |---|---|
-| `nav <url>` | URL로 이동 |
+| `nav <url> [--strict]` | URL로 이동. 문서가 커밋되면 `✓ url (status, ms)`. **4xx/5xx 는 exit 0 이되 `⚠ non-2xx` 한 줄을 더 낸다** — 다음에 찍을 것이 에러 페이지라는 뜻이다. `--strict` 면 exit 1. http(s) 인데 응답이 없거나(status 0) `chrome-error://` 로 끝나면 항상 exit 1 |
 | `reload [--hard]` / `back` / `forward` | 페이지 이력 제어. `--hard` 는 캐시를 우회해 다시 받는다 |
 | `pages` / `select <id>` / `new-tab [url]` / `close-tab <id>` | 탭 제어. ID 는 CDP targetId 앞 8자리로, 탭이 열리고 닫혀도 안 바뀐다(위치 인덱스가 아니다). 4자 이상이면 접두사로도 된다 |
 | `focus` | 세션 창을 앞으로. 클립보드 등 포커스가 필요한 API 가 통과하게 한다. 크롬 안에서 탭을 올리고(대개 이걸로 충분하다), **그것으로 부족할 때만** OS 창까지 올린다(macOS). `eval` 은 일부러 창을 안 올리므로 이 명령이 따로 있다 |
