@@ -22,8 +22,8 @@ tirno — Multi-session browser automation CLI on raw CDP.
 
 **이 흐름은 목표지 현황이 아니다.** 2026-08-20 실측 기준으로 1·2번은 절반이다 —
 `cache load` 는 출력만 하고 ref store 를 안 채워서 꺼낸 `@N` 으로 바로 조작할 수 없고,
-캐시에 담기는 채널은 `a11y` 와 `bbox` 둘뿐이라 selector 가 없으며, `visualFp` 는 저장만
-되고 비교되지 않아 낡음을 판정하지 못한다. 2번의 다채널 fallback 이 실제로 도는 곳은
+캐시에 담기는 채널은 `a11y` 와 `bbox` 둘뿐이라 selector 가 없다(`visualFp` 비교는 2026-09-16
+에 들어왔다 — `cache load` 가 STALE 을 판정한다). 2번의 다채널 fallback 이 실제로 도는 곳은
 `replay`(`dom.selector → a11y → bbox → 기록 좌표`)뿐이다. 어긋난 항목은 README 의
 "아직 구현이 아닌 것(drift)" 절에 근거와 함께 적혀 있고, 고칠 때 같이 지운다.
 

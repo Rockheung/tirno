@@ -795,8 +795,8 @@ navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS �
 ### Visual cache (viewport-aware)
 | 명령 | 설명 |
 |---|---|
-| `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록 |
-| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>]` | 캐시된 항목을 **출력**한다 — a11y(role·name)와 bbox. viewport 미지정 시 가장 최근 |
+| `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록. `AGE` 열 — 거리 비교 없이도 석 달 된 캐시는 그 자체로 신호다 |
+| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>] [-s <name>] [--no-compare] [--stale-threshold <bits>] [--allow-stale]` | 캐시된 항목을 **출력**한다 — a11y(role·name)와 bbox. viewport 미지정 시 가장 최근. **세션이 있으면 지금 화면과 대본다**(아래 "낡음") — `STALE` 이면 exit 1 (`code: cache_stale`), `--allow-stale` 로 출력만 |
 | `cache prune (--older-than <days> \| --all) [--domain <d>]` | 정리. **나이나 `--all` 중 하나를 반드시 준다** — 무인자로 전량을 지우지 않는다 |
 
 저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
@@ -808,11 +808,29 @@ navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS �
 `cache load` 는 **출력만 하고 ref store 를 채우지 않는다.** 꺼낸 `@N` 으로 바로 `click` 하면
 `Unknown ref` 로 실패하므로, 조작하려면 `snapshot` 을 다시 찍어야 한다.
 
-`visualFp`(dHash)는 저장되지만 **비교하는 코드가 없다** — 페이지가 바뀌어도 캐시는 그대로
-나온다. 유효한지는 부르는 쪽이 판단한다.
-
-셋 다 목표에 못 미친 상태고, [README 의 drift 절](../README.md#아직-구현이-아닌-것-drift)에
+둘 다 목표에 못 미친 상태고, [README 의 drift 절](../README.md#아직-구현이-아닌-것-drift)에
 같이 적어뒀다.
+
+#### 낡음 — `cache load` 가 지금 화면과 대본다
+
+`snapshot` 은 화면 지문(`visualFp`)을 저장하고, `cache load` 는 세션이 있으면(`-s`, 없으면
+active) **지금 화면의 지문을 찍어 비트 거리를 낸다.** 머리글 한 줄이 판정이다:
+
+```
+# fp: ffff…  viewport: 1920x1080@1  age: 3d  distance: 4/256 (fresh, threshold 32)
+# fp: ffff…  viewport: 1920x1080@1  age: 3d  distance: 59/256 (STALE, threshold 32)
+# fp: ffff…  viewport: 1920x1080@1  age: 3d  distance: n/a (not compared — session 'x' is on <other url>, not <entry url>)
+```
+
+**비교를 못 했으면 못 했다고 적는다** — 세션이 없거나, 세션이 다른 URL 에 있거나,
+`--no-compare` 거나, 항목이 옛 지문 형식이거나. 조용히 fp 만 찍던 때와 다른 점이 그것이다.
+
+지문은 **16x16 면적 평균 aHash, 256 비트**다. 예전 9x8 dHash 는 최근접 표본이라 1080p 에서
+점이 여백에 떨어져 example.com 이 `0000000000000000` 이었다 — 정보 없는 지문 위의 낡음
+판정은 "fresh" 오탐이 된다. 실측(1920x1080): 같은 페이지 0 · 같은 레이아웃 다른 글(HN
+front vs newest) 12 · 모달 얹힘 59 · 다른 사이트 85–130. 기본 임계 **32** 는 "레이아웃이
+같으면 fresh(ref 가 아직 맞는다), 위에 무언가 덮이면 stale" 자리다. 옛 16자 지문 항목은
+비교하지 않고 다시 찍으라고 한다.
 
 ### 기록 · 재생
 

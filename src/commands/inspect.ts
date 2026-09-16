@@ -10,7 +10,7 @@ import * as refStore from '../core/ref-store.js';
 import { bootUrlOf } from '../core/session-store.js';
 import type { RefStore } from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
-import { dHash } from '../cdp/screenshot-hash.js';
+import { pageFingerprint } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
 import { requireElement } from '../cdp/dom-actions.js';
 import type { Bbox } from '../cdp/iou.js';
@@ -146,7 +146,7 @@ export function registerInspectCommands(program: Command): void {
                   channels,
                 };
               });
-              const visualFp = await dHash(screenshot);
+              const visualFp = await pageFingerprint(screenshot);
               const key = visualCache.parseUrl(url);
               cachePayload = {
                 schemaVersion: visualCache.ENTRY_SCHEMA_VERSION,

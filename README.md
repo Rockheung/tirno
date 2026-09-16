@@ -56,7 +56,7 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 | **세션이 여럿이고 서로 격리된다** | `user-data-dir` 이 따로라 쿠키·로그인이 섞이지 않는다. 한 번 로그인해두면 그 세션에 계속 붙는다 |
 | **소유권을 관찰로 판정한다** | pid 생존 ∧ 그 pid 가 그 포트를 청취 ∧ `--user-data-dir` 일치. 셋이 안 맞으면 **붙지도 죽이지도 않는다** — 남의 브라우저를 조종하거나 죽이는 사고를 구조적으로 막는다. **못 봤으면 못 봤다고 한다**(`unknown`) — linux 는 `/proc` 을 직접 읽어 `lsof` 없이도 본다 |
 | **셀렉터를 몰라도 조작한다** | `snapshot` 이 a11y 트리에 `@1 @2 …` 를 붙인다. `click @7` · `fill @39 "..."` |
-| **본 것을 적어둔다** | `snapshot` 이 URL × viewport 키로 a11y(role·name)와 bbox 를 저장한다. 재방문 시 `cache load` 로 **꺼내 볼 수 있다** — 조작하려면 `snapshot` 을 다시 찍어야 한다([아래](#아직-구현이-아닌-것-drift)) |
+| **본 것을 적어둔다** | `snapshot` 이 URL × viewport 키로 a11y(role·name)와 bbox, 화면 지문을 저장한다. 재방문 시 `cache load` 가 **꺼내 주고 지금 화면과 대본다** — 낡았으면 `STALE` 로 거절한다. 조작하려면 아직 `snapshot` 을 다시 찍어야 한다([아래](#아직-구현이-아닌-것-drift)) |
 | **여러 대에 동시에** | `broadcast … --group <g>` — 순차가 아니라 동시. 8세션 기준 1.35s → 0.35s |
 | **실패는 전부 exit 1 — 종류는 `code:`** | 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서 받은 예외까지 `$?` 는 1 하나. 종류는 stderr 마지막 줄 `code: session_not_owned` 처럼 붙고, `--json`/`TIRNO_JSON=1` 이면 `{ok:false, code, message, data}` 한 줄이다 — 재시도해도 되는 실패와 안 되는 실패를 문장 파싱 없이 가른다 |
 
@@ -124,7 +124,6 @@ tirno schema | jq '.commands[] | select(.destructive) | .name'
 |---|---|---|
 | 캐시에서 꺼낸 ref 로 **바로 조작** | `cache load` 는 출력만 하고 ref store 를 안 채운다. `click @7` 은 `Unknown ref` 로 실패하고, `snapshot` 을 다시 찍어야 한다 | 새 세션에서 실행 확인 |
 | 캐시에 **selector** 를 담기 | `snapshot` 이 담는 채널은 `a11y`(role·name·backendId)와 `visual`(bbox) 둘뿐이다. `backendId` 는 페이지가 다시 뜨면 무효라, 세션을 넘겨 쓸 수 있는 건 bbox 하나다. **무효인 것을 조용히 쓰지는 않는다** — `snapshot` 세대와 요소 identity 로 거부한다 | 캐시 파일의 채널 분포 실측 |
-| 캐시가 **낡았는지 판정** | `visualFp`(dHash)를 저장은 하지만 비교하는 코드가 없다 — 페이지가 바뀌어도 그대로 나온다. 유효성 판단은 부르는 쪽 몫이다 | `hammingDistance` 호출자 0건 |
 
 **다채널 fallback 은 `record`/`trail` 쪽에서는 실제로 돈다** — `replay` 가
 `dom.selector → a11y(role+name) → bbox → 기록 좌표` 순으로 되찾는다. 캐시 경로가 그
