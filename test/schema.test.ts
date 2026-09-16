@@ -20,7 +20,7 @@ async function realProgram(): Promise<Command> {
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
-    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'], ['plan', 'registerPlanCommands'], ['observe', 'registerObserveCommands'],
+    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'], ['plan', 'registerPlanCommands'], ['observe', 'registerObserveCommands'], ['mcp', 'registerMcpCommand'],
     ['net', 'registerNetCommands'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
     ['headers', 'registerHeaderCommands'],
@@ -35,8 +35,8 @@ async function realProgram(): Promise<Command> {
     ['screencast', 'registerScreencastCommands'], ['schema', 'registerSchemaCommand'], ['update', 'registerUpdateCommand'],
   ] as const;
   for (const [file, fn] of mods) {
-    const mod = await import(`../src/commands/${file}.js`) as Record<string, (p: Command) => void>;
-    mod[fn](program);
+    const mod = await import(`../src/commands/${file}.js`) as Record<string, (p: Command, root: () => Command) => void>;
+    mod[fn](program, () => program);
   }
   return program;
 }

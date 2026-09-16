@@ -264,6 +264,30 @@ tirno nav chrome-extension://<id>/popup.html
 tirno eval "chrome.runtime.getManifest().name"
 ```
 
+### MCP 서버 — `tirno mcp`
+
+tirno 자신이 MCP 서버다. 툴은 **`tirno schema` 에서 자동 생성**된다 — 손으로 유지하는 정의가
+없고, 명령을 추가하면 툴이 생긴다(`test/schema.test.ts` 가 옵션이 schema 에 빠지지 않게
+지키므로 툴도 낡을 수 없다).
+
+```jsonc
+// .mcp.json
+{ "mcpServers": { "tirno": { "command": "tirno", "args": ["mcp", "--session", "main"] } } }
+```
+
+- `--tools core`(기본) — 일상 자동화 24개: new · ls · kill · nav · snapshot · click · fill · type ·
+  press · hover · scroll · wait-for · eval · screenshot · expect · ensure · forms · links · read ·
+  explain · a11y · recipe run/ls …. `--tools all` 은 명령 전부.
+- 툴 이름은 `tirno_<명령>`(`tirno_recipe_run`). positional 은 필수/선택 문자열 속성, 옵션은 긴
+  플래그 이름(`staleOk`), `--no-delta` 는 `delta: false`. `effects` 가 `readOnlyHint` ·
+  `destructiveHint` · `idempotentHint` 로 실린다 — 클라이언트의 승인 프롬프트가 그것을 본다.
+- `--session` 은 모든 호출의 기본 세션(호출 자체의 `session` 이 이긴다).
+- 호출은 tirno 자신을 자식으로 친다 — 결과 텍스트가 곧 터미널에서 보는 것이고, 실패는
+  `isError: true` 에 `_meta.code`(#185 의 코드).
+- stdout 은 프로토콜 채널이다. 로그는 전부 stderr.
+
+앵커(아래)는 **다른** MCP(chrome-devtools-mcp)를 붙일 때의 우회로 남는다.
+
 ### 앵커 (브라우저 MCP 접속 대상)
 
 | 명령 | 설명 |

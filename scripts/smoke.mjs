@@ -493,6 +493,26 @@ function main() {
   check('WebRTC 억제 플래그가 선언에 있다', /webrtc-ip-handling-policy/.test(run('export al', ['export', 'al']).out));
   run('kill al', ['kill', 'al', '--clean']);
   run('attach smoke (정책 세션들이 active 를 가져갔다)', ['attach', 'smoke']);
+  // MCP 서버 (#215) — stdin 으로 JSON-RPC 를 넣고 stdout 을 읽는다. 툴은 schema 에서 온다.
+  {
+    const msgs = [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } } },
+      { jsonrpc: '2.0', method: 'notifications/initialized' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+      { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'tirno_expect', arguments: { clause: ['count', 'button', 'ge', '1'] } } },
+      { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'tirno_click', arguments: { target: 'button', name: 'Nope' } } },
+    ];
+    let out = '';
+    try {
+      out = execFileSync('node', [TIRNO, 'mcp', '--session', 'smoke'], { env, input: msgs.map(m => JSON.stringify(m)).join('\n') + '\n', encoding: 'utf8', timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (e) { out = String(e.stdout ?? ''); }
+    const replies = out.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    const by = Object.fromEntries(replies.map(r => [r.id, r]));
+    check('mcp initialize 가 서버 정보를 낸다', by[1]?.result?.serverInfo?.name === 'tirno', out.slice(0, 120));
+    check('mcp tools/list 가 schema 에서 툴을 낸다', (by[2]?.result?.tools?.length ?? 0) > 10 && by[2].result.tools.some(t => t.name === 'tirno_snapshot'), String(by[2]?.result?.tools?.length));
+    check('mcp tools/call 이 명령을 치고 텍스트를 돌려준다', /expect count/.test(by[3]?.result?.content?.[0]?.text ?? '') && by[3].result.isError === false, JSON.stringify(by[3]).slice(0, 160));
+    check('mcp 실패는 isError 와 code', by[4]?.result?.isError === true && by[4].result._meta?.code === 'target_not_found', JSON.stringify(by[4]).slice(0, 160));
+  }
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);
