@@ -462,6 +462,30 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
 
+### 행동 뒤에 무엇이 변했는지 말한다 (delta)
+
+`click` · `fill` · `type` · `press` · `upload` 는 성공 줄 아래에 **변한 것만** 붙인다 — 행동 전후의
+a11y 트리·URL·포커스·console 을 대본 결과다:
+
+```
+✓ Clicked button "Submit"
+  url: app/form → app/form/done
+  +3  alert "Saved" · heading "Thanks" · link "Back"
+  -1  button "Submit"
+  console: 1 error — TypeError: x is undefined
+```
+
+변한 것이 없으면 그렇다고 말한다 — `no change (url · tree · console all as before, watched 0.3s)`.
+"눌렀는데 아무 일도 안 났다" 가 스냅샷을 다시 찍지 않아도 그 자리에서 보인다. `press Tab` 처럼
+트리가 아니라 포커스만 옮기는 행동은 `focus: textbox "text" → textbox "area"` 로 나온다.
+
+- 줄은 스냅샷과 같은 표기(`role "name" value=`)이고 **번호가 없다** — ref 가 아니라 표기다.
+  누르려면 `snapshot` 을 찍어 그 세대의 `@N` 을 쓴다(#138 규율 그대로).
+- 추가·삭제는 각 8줄까지, 넘으면 `… +N more`. 순서만 바뀐 것은 변화가 아니다(다중집합 차).
+- 정착: 행동이 네비게이션을 일으키면 새 문서의 파싱이 끝날 때까지(최대 3s), 아니면 네트워크가
+  300ms 조용할 때까지(상한 1.5s). 이것은 관측이지 대기가 아니다 — 더 기다려야 하면 `wait-for`.
+- `--no-delta` 로 끈다. `TIRNO_JSON=1` 이면 `{"delta":{…}}` 한 줄이 따로 나온다.
+
 ### 클릭은 실제 마우스다 — 가려져 있으면 거절한다
 
 `@ref` 도 셀렉터도 요소 중심 좌표로 **실제 마우스 이벤트**를 보낸다(`"x,y"` 와 같은 경로).
