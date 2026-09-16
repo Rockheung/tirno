@@ -20,12 +20,10 @@ tirno — Multi-session browser automation CLI on raw CDP.
 `record / replay / trail capture` 는 4번에 해당. 메인 가치는 1~3의 결정론 흐름이고,
 그게 강해질수록 4번 호출 빈도가 줄어드는 것이 self-journaling 의 진짜 의의다.
 
-**이 흐름은 목표지 현황이 아니다.** 2026-08-20 실측 기준으로 1·2번은 절반이다 —
-`cache load` 는 출력만 하고 ref store 를 안 채워서 꺼낸 `@N` 으로 바로 조작할 수 없고,
-캐시에 담기는 채널은 `a11y` 와 `bbox` 둘뿐이라 selector 가 없으며, `visualFp` 는 저장만
-되고 비교되지 않아 낡음을 판정하지 못한다. 2번의 다채널 fallback 이 실제로 도는 곳은
-`replay`(`dom.selector → a11y → bbox → 기록 좌표`)뿐이다. 어긋난 항목은 README 의
-"아직 구현이 아닌 것(drift)" 절에 근거와 함께 적혀 있고, 고칠 때 같이 지운다.
+**현황 (2026-09-16).** 1·2번이 캐시 경로에서 돈다 — `cache load` 가 지문을 대봐 STALE 을
+판정하고(#188), waypoint 를 `dom.selector → a11y → bbox` 로 되찾아 ref store 를 채운다(#187).
+새 세션에서 `cache load` 뒤 바로 `click @N`. 남은 어긋남은 selector 채널의 적용 범위(안정적인
+속성이 있을 때만 적힌다)이고 README 의 "아직 구현이 아닌 것(drift)" 절에 근거와 함께 있다.
 
 **tirno 안에 LLM 은 없다.** 예전 흐름에는 3번과 시연 사이에 "LLM + RAG retrieval" 이
 있었고 `tirno ask` / `tirno explore` 가 그것이었다. 2026-08-19 에 전부 들어냈다 —

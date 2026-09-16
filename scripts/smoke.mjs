@@ -573,6 +573,27 @@ function main() {
     cl.out.split('\n').some(l => /^\s+│/.test(l)),
     `DOMAIN 이 빈 행이 없음 (load 는 찾는데): ${cl.out.trim().split('\n').length}줄`);
   // 무인자 prune 은 나이 검사 없이 전량을 지웠다 — 설명은 "old" 였다. 이제 거부한다.
+  // 낡음 판정 (#188) — 세션이 그 페이지에 있으면 fresh, 위에 무언가 덮이면 STALE, 다른 URL 이면 비교 안 함
+  const fresh = run('cache load (지금 화면과 비교 → fresh)', ['cache', 'load', PAGE, ...S]);
+  check('fresh 와 거리가 머리글에 있다', /distance: \d+\/256 \(fresh/.test(fresh.out), fresh.out.split('\n')[2]);
+  q("document.body.insertAdjacentHTML('beforeend','<div id=smoke-modal style=\"position:fixed;inset:15% 25%;background:#222\"></div>')");
+  run('cache load (모달 덮임 → STALE, exit≠0)', ['cache', 'load', PAGE, ...S], { expectFail: true, expectMatch: /STALE/ });
+  run('cache load --allow-stale', ['cache', 'load', PAGE, '--allow-stale', ...S], { expectMatch: /STALE/ });
+  q("document.getElementById('smoke-modal').remove()");
+  // 되찾기 (#187) — 문서를 다시 띄운 뒤에도 캐시의 @N 으로 바로 눌린다. 그 전엔 Unknown ref 였다.
+  run('reload (backendId 무효화)', ['reload', ...S]);
+  const rs = run('cache load (되찾아 ref store 채움)', ['cache', 'load', PAGE, ...S]);
+  check('못 찾은 것(닫힌 select 의 팝업)은 UNRESOLVED 로 이름을 댄다', /MenuListPopup.*UNRESOLVED/.test(rs.out), rs.out.split('\n').find(l => /UNRESOLVED/.test(l)) ?? '(없음)');
+  run('cache load --require-all (→ exit≠0)', ['cache', 'load', PAGE, '--require-all', ...S], { expectFail: true, expectMatch: /could not be found/ });
+  const btnLine = rs.out.split('\n').find(l => /button "click me"/.test(l)) ?? '';
+  check('버튼 ref 가 되찾아졌다', /← resolved/.test(btnLine), btnLine.slice(0, 100));
+  check('요약 줄이 채널별 개수를 센다', /loaded \d+ refs, \d+ resolved \(/.test(rs.out), rs.out.split('\n').at(-2));
+  const cachedBtn = (/^@(\d+)\s.*button "click me"/m.exec(rs.out) ?? [])[1];
+  q("document.getElementById('status').textContent='idle'");
+  run('click @N (캐시에서 되찾은 ref)', ['click', `@${cachedBtn ?? 0}`, ...S], { expectMatch: /Clicked/ });
+  check('되찾은 ref 로 누른 것이 실제로 눌렸다', q("document.getElementById('status').textContent") === 'clicked');
+  const nc = run('cache load --no-compare', ['cache', 'load', PAGE, '--no-compare', ...S]);
+  check('비교 안 했으면 그렇다고 적는다', /not compared — --no-compare/.test(nc.out), nc.out.split('\n')[2]);
   run('cache prune (무인자 → exit≠0)', ['cache', 'prune'],
     { expectFail: true, expectMatch: /--older-than|--all/ });
   run('cache prune --older-than', ['cache', 'prune', '--older-than', '0']);

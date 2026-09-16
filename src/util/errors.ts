@@ -22,7 +22,9 @@ export type ErrorCode =
   | 'stale_ref'             // 페이지가 바뀌었다 → snapshot 다시 (--stale-ok 로 강행 가능)
   | 'page_threw'            // eval 한 식이 페이지에서 예외를 냈다 — tirno 의 실패가 아니다
   | 'timeout'
-  | 'broadcast_partial';    // 일부 세션만 실패 — data.failed 에 이름
+  | 'broadcast_partial'     // 일부 세션만 실패 — data.failed 에 이름
+  | 'cache_stale'           // 캐시가 지금 화면과 다르다 — snapshot 다시 (--allow-stale 로 강행)
+  | 'cache_unresolved';     // 캐시 ref 일부를 지금 페이지에서 못 찾았다 — data.unresolved
 
 /** 코드마다 한 줄 — schema 와 문서가 같은 출처를 읽는다 */
 export const ERROR_CODES: Record<ErrorCode, string> = {
@@ -39,6 +41,8 @@ export const ERROR_CODES: Record<ErrorCode, string> = {
   page_threw: 'the evaluated expression threw inside the page — not a tirno failure',
   timeout: 'the operation did not settle in time',
   broadcast_partial: 'some sessions failed — `data.failed` names them',
+  cache_stale: 'the cached entry no longer matches the page — `tirno snapshot` again (--allow-stale prints it anyway)',
+  cache_unresolved: 'some cached refs were not found on the live page (--require-all) — `data.unresolved` lists them',
 };
 
 export class TirnoError extends Error {
