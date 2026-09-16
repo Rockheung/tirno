@@ -139,6 +139,16 @@ pid 생존 ∧ 그 pid 가 그 포트를 LISTEN ∧ 그 프로세스의 `--user-
 | `foreign(<app>)` | 하나라도 불일치 — 그 포트는 남의 것 | 표시만. connect·kill 거부 |
 | `ambiguous` | 같은 포트에 리스너 둘 이상 (IPv4/IPv6) | 표시만. 자동 조치 전면 금지 |
 | `ghost` | 대장에만 있고 리스너·pid 없음 | connect 불가 (kill 로 정리 가능) |
+| `unknown` | **관측 자체가 안 됐다** — lsof 가 없거나 `/proc` 을 못 읽음 | 표시만. connect·kill·gc 전부 거부. 사유에 고칠 방법이 붙는다 |
+
+`unknown` 이 따로 있는 이유: 예전에는 lsof 가 없으면 리스너 목록이 `[]` 로 접혀, 살아 있는
+세션이 `foreign`("nothing listens") 이나 `ghost` 로 읽혔다(#186). 관측 도구의 부재와
+프로세스의 부재는 다른 답이어야 한다.
+
+리스너를 보는 백엔드는 둘이다. linux 에서는 `/proc/net/tcp{,6}` + `/proc/<pid>/fd` 를
+직접 읽는다 — 외부 바이너리가 없고, `lsof` 가 없는 최소 이미지(`debian:slim` · distroless)
+에서도 돈다. macOS 는 `lsof`. `TIRNO_INVENTORY=lsof|proc` 로 강제할 수 있다. 자기 uid 의
+프로세스만 보이는 것은 둘 다 같다.
 
 #### drift — 실행 중인 옵션이 여전히 맞나
 
@@ -907,6 +917,7 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 |---|---|---|
 | `TIRNO_DIR` | `~/.tirno` | 데이터 루트 전체 |
 | `TIRNO_CHROME` | (없음) | Chrome 실행 파일. 설정 파일보다 우선 |
+| `TIRNO_INVENTORY` | linux `proc` · 그 외 `lsof` | 리스너를 보는 백엔드. `proc` 은 `/proc` 직접 읽기(외부 바이너리 없음), `lsof` 는 `lsof -iTCP -sTCP:LISTEN` |
 | `CHROME_PATH` · `PUPPETEER_EXECUTABLE_PATH` | (없음) | 같은 용도. `TIRNO_CHROME` 다음 순서로 본다 |
 | `TIRNO_CACHE_DIR` | `<루트>/visual-cache` | visual cache |
 | `TIRNO_RECORDINGS_DIR` | `<루트>/recordings` | 기록 |

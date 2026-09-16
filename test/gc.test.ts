@@ -60,6 +60,12 @@ test('a foreign entry is removed, but only the entry', () => {
   assert.equal(p.actions.some(a => a.kind === 'profile-dir'), false);
 });
 
+test('an unknown session (scan failed) is reported and never acted on', () => {
+  const p = gc.plan(emptyScan({ sessions: [inv({ name: 'blind', ownership: 'unknown' })] }), {}, NOW);
+  assert.deepEqual(p.actions, [], '못 본 것을 정리하면 안 된다');
+  assert.match(p.skipped[0].reason, /unknown/);
+});
+
 test('an ambiguous session is reported and never acted on', () => {
   const p = gc.plan(emptyScan({ sessions: [inv({ name: 'two', ownership: 'ambiguous' })] }), {}, NOW);
   assert.deepEqual(p.actions, []);

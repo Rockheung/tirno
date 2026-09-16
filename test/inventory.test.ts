@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  pickBackend,
   parseLsofListeners,
   parseUserDataDir,
   classify,
@@ -145,6 +146,28 @@ const obs = (over: Partial<Observation> = {}): Observation => ({
 
 test('ours requires all three facts to agree', () => {
   assert.equal(classify(obs()).ownership, 'ours');
+});
+
+// lsof 가 없으면 리스너 목록이 [] 로 접혔고, 살아 있는 세션이 "nothing listens" 로
+// foreign 이 됐다 (#186). 관측 도구의 부재는 프로세스의 부재가 아니다 — 다섯 번째 상태.
+test('a failed listener scan is unknown, never foreign or ghost', () => {
+  const v = classify(obs({ listeners: [], listenersUnavailable: 'lsof is not installed' }));
+  assert.equal(v.ownership, 'unknown');
+  assert.match(v.reason, /cannot observe listeners — lsof is not installed/);
+  // 죽은 pid 라도 마찬가지 — ghost 라고 단정할 근거가 없다
+  assert.equal(classify(obs({ pidAlive: false, listeners: [], listenersUnavailable: 'x' })).ownership, 'unknown');
+});
+
+test('an empty scan that did work is still "nothing listens"', () => {
+  assert.equal(classify(obs({ listeners: [] })).ownership, 'foreign');
+});
+
+test('pickBackend: env wins, linux prefers /proc, elsewhere lsof', () => {
+  assert.equal(pickBackend({ TIRNO_INVENTORY: 'lsof' }, 'linux'), 'lsof');
+  assert.equal(pickBackend({ TIRNO_INVENTORY: 'proc' }, 'darwin'), 'proc');
+  assert.equal(pickBackend({}, 'darwin'), 'lsof');
+  // linux 는 /proc/net/tcp 가 읽히는지에 달렸다 — 이 호스트에서 그 답이 무엇이든 둘 중 하나다
+  assert.ok(['lsof', 'proc'].includes(pickBackend({}, 'linux')));
 });
 
 // T1 — the actual incident: the ledger claimed port 9222 was tirno session
