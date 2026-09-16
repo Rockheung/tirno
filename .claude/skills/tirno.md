@@ -120,6 +120,7 @@ tirno expect url matches /dash within 5s   # 관측만. text · count <sel> ge 3
 tirno a11y [--tab-order] [--fail-on serious]   # 접근성 감사, 위반마다 @N. --tab-order 는 실제 Tab 순서·갇힘·포커스 링
 tirno recipe begin login --var PW … recipe end # 이후 행동 명령을 기록. @N 은 role+이름으로, $PW 값은 파일에 안 남음
 tirno recipe run login PW=…  [--from 3]        # 그대로 다시 친다. 실패한 단계에서 멈추고 code recipe_step_failed
+tirno plan flow.json · apply flow.json [--group qa]   # 파일(JSON, 단계=한 줄 문자열)에 선언. plan 은 판정만, apply 는 실행(매트릭스)
                                        # 성공 줄 아래 delta(url·focus·±줄·console). 'no change' 면 안 된 것. --no-delta 로 끔
                                        # 진짜 클릭처럼 포커스를 옮긴다 — 앞 필드가 블러돼
                                        # change 가 나오고, 누른 요소가 포커스를 받아

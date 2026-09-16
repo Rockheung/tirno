@@ -436,6 +436,20 @@ function main() {
   run('recipe ls', ['recipe', 'ls'], { expectMatch: /smoke-flow/ });
   run('recipe rm', ['recipe', 'rm', 'smoke-flow'], { expectMatch: /removed/ });
   q("document.getElementById('text').value=''; document.getElementById('status').textContent='idle'");
+  // plan / apply (#212) — 실행 전 판정과 적용. 레시피와 같은 실행기.
+  const PLAN = path.join(OUT, 'plan.json');
+  fs.writeFileSync(PLAN, JSON.stringify({ vars: ['VAL'], steps: [
+    'expect count button ge 2', 'click button "click me"', 'ensure textbox "type here" = $VAL', 'expect text clicked', 'click button "Nope"',
+  ] }));
+  const pj = run('plan (판정만)', ['plan', PLAN, 'VAL=x', ...S]);
+  check('plan 이 있는 것·없는 것을 가른다', /click button click me\s+found on the page/.test(pj.out) && /click button Nope\s+NOT on the page/.test(pj.out), pj.out.slice(0, 300));
+  check('plan 은 실행하지 않는다', q("document.getElementById('status').textContent") !== 'clicked');
+  run('apply (단계 5 에서 멈춤)', ['apply', PLAN, 'VAL=plan-value', ...S], { expectFail: true, expectMatch: /step 5 failed[\s\S]*--from 5/ });
+  check('apply 가 실제로 눌렀다', q("document.getElementById('status').textContent") === 'clicked');
+  check('apply 가 값을 채웠다', q("document.getElementById('text').value") === 'plan-value');
+  fs.writeFileSync(PLAN, JSON.stringify({ steps: ['expect text clicked'] }));
+  run('apply (전부 ok)', ['apply', PLAN, ...S], { expectMatch: /1 step ok/ });
+  q("document.getElementById('text').value=''; document.getElementById('status').textContent='idle'");
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);
