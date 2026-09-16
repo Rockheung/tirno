@@ -513,6 +513,8 @@ function main() {
     check('mcp tools/call 이 명령을 치고 텍스트를 돌려준다', /expect count/.test(by[3]?.result?.content?.[0]?.text ?? '') && by[3].result.isError === false, JSON.stringify(by[3]).slice(0, 160));
     check('mcp 실패는 isError 와 code', by[4]?.result?.isError === true && by[4].result._meta?.code === 'target_not_found', JSON.stringify(by[4]).slice(0, 160));
   }
+  // 플러그인 (#216) — lighthouse 는 번들에 없다. 스모크의 audit 은 레포의 node_modules 로 돈다.
+  run('plugin ls', ['plugin', 'ls'], { expectMatch: /audit.*found \((repo|plugin|global)\)/ });
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);

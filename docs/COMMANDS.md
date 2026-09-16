@@ -264,6 +264,19 @@ tirno nav chrome-extension://<id>/popup.html
 tirno eval "chrome.runtime.getManifest().name"
 ```
 
+### 플러그인 — `plugin`
+
+바이너리에 든 것은 tirno 뿐이다. `audit` 이 쓰는 lighthouse 는 번들 밖이고 실행 시점에 찾는다:
+
+```bash
+tirno plugin ls                    # 어디서 찾았나 (env · plugin · global · repo) / 없음
+tirno plugin install audit         # npm 으로 ~/.tirno/plugins/audit 에 (npm 이 있어야 한다)
+tirno plugin rm audit
+TIRNO_LIGHTHOUSE=/dir-with-node_modules tirno audit   # 직접 가리키기. 틀리면 다음 후보로 안 간다
+```
+찾는 순서: `$TIRNO_LIGHTHOUSE` → `~/.tirno/plugins/audit` → `npm root -g` → (개발) 레포의
+node_modules. 없으면 `audit` 이 설치 안내를 낸다.
+
 ### MCP 서버 — `tirno mcp`
 
 tirno 자신이 MCP 서버다. 툴은 **`tirno schema` 에서 자동 생성**된다 — 손으로 유지하는 정의가

@@ -20,7 +20,7 @@ async function realProgram(): Promise<Command> {
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
-    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'], ['plan', 'registerPlanCommands'], ['observe', 'registerObserveCommands'], ['mcp', 'registerMcpCommand'],
+    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'], ['plan', 'registerPlanCommands'], ['observe', 'registerObserveCommands'], ['mcp', 'registerMcpCommand'], ['plugin', 'registerPluginCommands'],
     ['net', 'registerNetCommands'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
     ['headers', 'registerHeaderCommands'],
@@ -60,7 +60,7 @@ test('destructive commands are flagged', async () => {
   const destructive = schema.commands.filter(c => c.destructive).map(c => c.name).sort();
   assert.deepEqual(destructive, [
     'cache prune', 'close-tab', 'gc', 'kill',
-    'recipe rm', 'record rm', 'restart', 'trail rm',
+    'plugin rm', 'recipe rm', 'record rm', 'restart', 'trail rm',
   ]);
 });
 

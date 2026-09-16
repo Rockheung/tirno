@@ -86,12 +86,13 @@ node bin/tirno.js kill test --clean
 
 ## 의존성
 
-- (없음) puppeteer-core — 2026-09-16 에 걷어냈다(#182). `tirno audit` 이 쓰는 lighthouse 가 자기 의존으로 여전히 들고 있으므로 `node_modules` 에는 남아 있지만 tirno 코드가 import 하는 자리는 0 이다
+- (없음) puppeteer-core — 2026-09-16 에 걷어냈다(#182)
+- (번들 밖) lighthouse — `tirno audit` 이 실행 시점에 찾는다(`core/plugin-lighthouse.ts`: `$TIRNO_LIGHTHOUSE` → `~/.tirno/plugins/audit` → `npm root -g` → 레포 node_modules). devDependency 라 개발·스모크에는 있고 바이너리에는 없다(#216). 사용자는 `tirno plugin install audit`
 - devtools-protocol (devDependency, 타입 전용): `cdp.send('Page.navigate', …)` 의 파라미터·응답 타입
 - commander: CLI 프레임워크
 - chalk: 터미널 컬러
 - pixelmatch + pngjs: 스크린샷 비교
-- lighthouse: `tirno audit`
+- lighthouse (devDependency, 번들 밖): `tirno audit` — 위 참조
 
 ## 덜어낸 것 (2026-08-19)
 
