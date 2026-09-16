@@ -161,6 +161,7 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'recipe rm':    { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
   'recipe run':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   'plan':         { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
+  'mcp':          { effects: 'read_only', output_kind: 'stream', cardinality: 'unbounded' },
   'apply':        { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   // ---- 목적별 관측
   'forms':        { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
