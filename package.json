@@ -1,7 +1,7 @@
 {
   "name": "tirno",
   "version": "0.2.13",
-  "description": "Multi-session browser automation CLI on raw CDP — agent self-journaling",
+  "description": "Multi-session browser automation CLI — isolated Chrome sessions, a11y @refs, ownership-checked kill, broadcast",
   "keywords": [
     "cdp",
     "chrome-devtools-protocol",

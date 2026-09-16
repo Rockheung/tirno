@@ -5,7 +5,7 @@ description: tirno CLI 레퍼런스 — 세션 관리(new/ls/kill/restart/gc)·�
 
 # tirno
 
-Multi-session browser automation CLI on raw CDP.
+Multi-session browser automation CLI — puppeteer-core 로 띄우고 붙되, 필요한 자리는 CDP 를 직접 부른다 (`tirno cdp` 패스스루 포함).
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 보낸다.
 
 ## 사용법

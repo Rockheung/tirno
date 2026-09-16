@@ -2,9 +2,11 @@
 
 ## 프로젝트 개요
 
-tirno — Multi-session browser automation CLI on raw CDP.
+tirno — 다중 세션 브라우저 자동화 CLI.
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다.
-puppeteer-core 기반.
+**puppeteer-core 위에 있다** — 기동·연결·입력·스크린샷은 puppeteer 의 Page/Browser API 고,
+CDP 직접 호출은 필요한 자리(`createCDPSession`, `tirno cdp` 패스스루)에 한정된다. "raw CDP"
+는 목표지 현황이 아니다 — 단계별 탈피는 #182, README 의 drift 절에 올라 있다.
 
 ## tirno 가치 흐름 (불변)
 

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-tirno — raw CDP 위의 다중 세션 브라우저 자동화 CLI. **이 도구를 고칠 때**와 **이 도구를 쓸 때**
+tirno — 다중 세션 브라우저 자동화 CLI (puppeteer-core 위, 필요한 자리는 CDP 직접). **이 도구를 고칠 때**와 **이 도구를 쓸 때**
 둘 다 여기에 적는다.
 
 ## Setup
