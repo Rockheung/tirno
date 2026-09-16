@@ -188,3 +188,20 @@ test('선언된 옵션은 하나도 빠짐없이 schema 에 나온다', async ()
   const missing = [...declared].filter(d => !inSchema.has(d)).sort();
   assert.deepEqual(missing, [], `schema 에서 빠진 옵션: ${missing.join(', ')}`);
 });
+
+// 명령 개수가 세 곳에서 달랐다 — 배지 66 · README 본문 71 · schema 85 (#191). 손으로 적은
+// 숫자는 명령이 늘 때 따라가지 않는다. 정본이 `tirno schema` 라고 말하는 문서가 사본에
+// 숫자를 들고 있으면, 그 숫자는 결국 틀린다. 그래서 숫자를 두지 않는 쪽으로 잠근다.
+test('문서에 손으로 적은 명령 개수가 없다', () => {
+  const root = path.join(import.meta.dirname, '..', '..');
+  const docs = ['README.md', 'AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', 'docs/COMMANDS.md', 'docs/ONBOARDING.md']
+    .map(f => path.join(root, f)).filter(f => fs.existsSync(f));
+  const bad: string[] = [];
+  for (const file of docs) {
+    const text = fs.readFileSync(file, 'utf-8');
+    for (const m of text.matchAll(/badge\/commands-\d+|\d+\s*개(?:의)?\s*명령|#\s*\d+\s*개\s*$/gm)) {
+      bad.push(`${path.relative(root, file)}: ${m[0]}`);
+    }
+  }
+  assert.deepEqual(bad, [], `개수는 \`tirno schema | jq '.commands|length'\` 가 정본이다 — ${bad.join(' · ')}`);
+});

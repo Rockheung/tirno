@@ -2,7 +2,6 @@
 
 [![ci](https://github.com/Rockheung/tirno/actions/workflows/ci.yml/badge.svg)](https://github.com/Rockheung/tirno/actions/workflows/ci.yml)
 ![node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)
-![commands](https://img.shields.io/badge/commands-66-blue)
 ![license](https://img.shields.io/badge/license-ISC-lightgrey)
 
 **여러 Chrome 을 세션으로 굴리는 CLI.** raw CDP 위에 얹혀 있고, 안에 LLM 이 없다 —
@@ -86,7 +85,7 @@ claude plugin install tirno@tirno
 | 문서 | 무엇 |
 |---|---|
 | [docs/ONBOARDING.md](docs/ONBOARDING.md) | **처음이라면 여기.** 설치부터 첫 세션까지, 자주 걸리는 자리와 그 메시지 |
-| [docs/COMMANDS.md](docs/COMMANDS.md) | 71개 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수 |
+| [docs/COMMANDS.md](docs/COMMANDS.md) | 명령 reference · 소유권 · 앵커 · 데이터 위치 · 환경변수. 개수는 `tirno schema \| jq '.commands\|length'` |
 | [AGENTS.md](AGENTS.md) | 에이전트가 읽을 것 — 명령·경계·함정 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 개발 · 테스트 · CI |
 | [docs/research-sw-cdn-proxy.md](docs/research-sw-cdn-proxy.md) | 배포 전 빌드를 진짜 origin 위에 얹기 — 서비스워커 오버레이 설계 |
