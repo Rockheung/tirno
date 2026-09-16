@@ -99,6 +99,8 @@ export interface SessionMetadata {
    * begin" once the flow navigates. The CLI keeps that here instead.
    */
   recording?: { startUrl: string; startedAt: string };
+  /** 세션 정책 — 만들 때 선언, 명령마다 확인, restart 가 물려받는다 (#214) */
+  policy?: import('./policy.js').Policy;
   /** `recipe begin` 이 켠 진행 중 기록 — `recipe end` 가 파일로 굳히고 지운다 (#211) */
   recipeRecording?: import('./recipe-store.js').RecipeRecording;
 }

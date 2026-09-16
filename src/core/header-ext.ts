@@ -43,8 +43,28 @@ const MANIFEST = {
   background: { service_worker: 'bg.js' },
 };
 
-export function buildRules(rules: HeaderRule[]): unknown[] {
-  return rules.map((r, i) => ({
+/**
+ * 허용 도메인 밖의 **모든 요청**을 막는 규칙 — 문서·스크립트·XHR·WebSocket·beacon.
+ * `requestDomains` 는 하위 도메인을 포함하므로 `a.com` 하나로 `x.a.com` 도 열린다.
+ * 헤더 규칙 뒤 id 를 쓴다. 우선순위를 낮게 두어 헤더 규칙(수정)과 충돌하지 않는다.
+ */
+export function buildBlockRules(allow: string[], firstId: number): unknown[] {
+  if (!allow.length) return [];
+  const domains = allow.map(d => d.replace(/^\*\./, '').toLowerCase());
+  return [{
+    id: firstId,
+    priority: 1,
+    action: { type: 'block' },
+    condition: {
+      excludedRequestDomains: domains,
+      urlFilter: '*',
+      resourceTypes: RESOURCE_TYPES,
+    },
+  }];
+}
+
+export function buildRules(rules: HeaderRule[], allow: string[] = []): unknown[] {
+  return [...rules.map((r, i) => ({
     id: i + 1,
     priority: 1,
     action: {
@@ -55,7 +75,7 @@ export function buildRules(rules: HeaderRule[]): unknown[] {
       ...(r.hosts?.length ? { requestDomains: r.hosts } : { urlFilter: '*' }),
       resourceTypes: RESOURCE_TYPES,
     },
-  }));
+  })), ...buildBlockRules(allow, rules.length + 1)];
 }
 
 /**
@@ -191,11 +211,11 @@ fetch(chrome.runtime.getURL('view.json'))
 `;
 
 /** 규칙을 디스크에 굽고, chrome 에 넘길 확장 경로를 돌려준다. */
-export function writeHeaderExt(userDataDir: string, rules: HeaderRule[]): string {
+export function writeHeaderExt(userDataDir: string, rules: HeaderRule[], allow: string[] = []): string {
   const dir = headerExtDir(userDataDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(MANIFEST, null, 2));
-  fs.writeFileSync(path.join(dir, 'rules.json'), JSON.stringify(buildRules(rules), null, 2));
+  fs.writeFileSync(path.join(dir, 'rules.json'), JSON.stringify(buildRules(rules, allow), null, 2));
   // 창 안에서 보이게 하는 쪽. 규칙과 같은 호출에서 함께 써야 뱃지가 규칙보다
   // 낡지 않는다.
   fs.writeFileSync(path.join(dir, 'view.json'), JSON.stringify(buildView(rules), null, 2));
@@ -220,7 +240,7 @@ export function writeHeaderExt(userDataDir: string, rules: HeaderRule[]): string
  */
 export async function loadHeaderExt(sessionName: string, opts: { reload?: boolean } = {}): Promise<void> {
   const meta = store.get(sessionName);
-  const dir = writeHeaderExt(meta.userDataDir, meta.headerRules ?? []);
+  const dir = writeHeaderExt(meta.userDataDir, meta.headerRules ?? [], meta.policy?.allowDomains ?? []);
   const { browser } = await connect(sessionName);
   try {
      

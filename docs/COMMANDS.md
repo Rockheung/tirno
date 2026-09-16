@@ -14,11 +14,35 @@
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
 | `new`/`restart` `--extensions` | 확장이 돌게 한다. **기본은 꺼짐** — 확장은 페이지가 하는 일을 바꾸고, 이 도구는 페이지를 있는 그대로 관측하려고 있다 |
 | `new`/`restart` `--badge` / `--no-badge` | 세션 뱃지(아래). headful 기본 켬 |
+| `new`/`restart` `--allow <domains>` · `--read-only` · `--confirm destructive` | 세션 정책(아래). `restart` 가 물려받는다 |
 | `restart <name> [url] [--keep-cookies] [-- <flags>]` | 죽이고 새 flag 로 재생성. **`--keep-cookies` 는 세션 쿠키까지 넘겨 로그인이 살아남는다** — `Expires` 없는 쿠키는 브라우저 종료와 함께 사라지므로, 이걸 안 주면 프로필은 남아도 로그인은 안 남는다 |
 | `gc [--dry-run] [--older-than <N>]` | 낡은 장부 정리. 기본은 장부만(ghost/foreign 엔트리, 잔존 `DevToolsActivePort`). `--older-than <N>`일 때만 **N일 이상 안 쓴 orphan 프로필 삭제** |
 | `drift [name] [--all] [-- <flags>]` | 선언한 chrome flag 와 실행 중 프로세스 비교. 차이 있으면 재기동 명령 제안 + **exit 1** |
 | `rename <old> <new>` | 이름 변경 |
 | `export <name>` | 메타데이터 출력 |
+
+#### 세션 정책 — `--allow` · `--read-only` · `--confirm destructive`
+
+정책은 **세션을 만들 때** 선언한다. 판단이 아니라 정책이고, 정책은 호출자가 정한다 — tirno
+안에 LLM 이 없다는 선과 맞는다. `restart` 가 물려받고(`--no-policy` 로 버림), `ls` 에 POLICY 열.
+
+```bash
+tirno new bank https://bank --allow bank.com,*.bank.com   # 밖으로 못 나간다
+tirno new probe https://x --read-only                       # 관측만
+tirno new qa https://app --confirm destructive              # 위험해 보이는 이름은 --confirm 없이 안 누른다
+```
+
+| 정책 | CLI 층 (명령 진입 전, argv 만) | 브라우저 층 |
+|---|---|---|
+| `--allow` | `nav` · `new` · `ensure url` 의 URL 이 목록 밖이면 거부 (`policy_denied`). `a.com` 은 `x.a.com` 도 | `headers` 확장에 declarativeNetRequest **차단** 규칙 — 문서·스크립트·XHR·WebSocket·beacon 전부. 스크립트가 여는 이동도 막힌다(`chrome-error://`). 확장을 켠 채로 뜬다. dNR 이 못 보는 WebRTC 는 `--webrtc-ip-handling-policy=disable_non_proxied_udp` 로 |
+| `--read-only` | `click` `fill` `type` `press` `upload` `drag` `select` `eval` `ensure` `apply` `recipe run` `replay` `inject` `cdp` 거부. `eval` 은 쓰기인지 알 수 없어 통째로 — `--allow-eval` 로 명시 | — |
+| `--confirm destructive` | `click`/`ensure`/`press` 의 대상 **이름**이 delete·remove·pay·purchase·checkout·transfer·unsubscribe·삭제·결제·구매·송금·해지… 에 맞으면 `--confirm` 없이 거부. role+이름과 `@N`(저장된 이름)만 본다 — **셀렉터 뒤의 이름은 모른다** | — |
+
+`--destructive-pattern <regex>` 로 목록에 덧붙인다. 오탐은 `--confirm` 으로 넘기면 되므로
+목록은 보수적이다. 거부는 `code: policy_denied`, `data.policy` 에 어느 정책인지.
+
+한계를 적는다: 이것은 인젝션 방어의 한 층이지 전부가 아니다. 허용 도메인 안의 페이지가 하는
+말도 여전히 데이터다(`--content-boundaries`).
 
 #### 세션 뱃지 — 어느 창이 어느 세션인가
 

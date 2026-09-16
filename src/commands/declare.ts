@@ -318,6 +318,7 @@ export function registerDeclareCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--exact', 'Match accessible names exactly')
     .option('--no-delta', 'Do not report what changed when an action was needed')
+    .option('--confirm', 'Act even though the target looks destructive (session policy --confirm destructive)')
     .action(async (argv: string[], opts) => {
       try {
         const c = normalizeEnsure(argv);

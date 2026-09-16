@@ -122,6 +122,7 @@ tirno recipe begin login --var PW … recipe end # 이후 행동 명령을 기�
 tirno recipe run login PW=…  [--from 3]        # 그대로 다시 친다. 실패한 단계에서 멈추고 code recipe_step_failed
 tirno plan flow.json · apply flow.json [--group qa]   # 파일(JSON, 단계=한 줄 문자열)에 선언. plan 은 판정만, apply 는 실행(매트릭스)
 tirno snapshot --interactive · forms · links · table '#t' --json · read · explain @7 · watch --for 10s   # 목적별 관측
+tirno new x <url> --allow a.com · --read-only · --confirm destructive   # 세션 정책. 거부는 code policy_denied (click --confirm / eval --allow-eval 로 명시)
                                        # 성공 줄 아래 delta(url·focus·±줄·console). 'no change' 면 안 된 것. --no-delta 로 끔
                                        # 진짜 클릭처럼 포커스를 옮긴다 — 앞 필드가 블러돼
                                        # change 가 나오고, 누른 요소가 포커스를 받아

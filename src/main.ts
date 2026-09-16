@@ -12,6 +12,8 @@ import { registerA11yCommands } from './commands/a11y.js';
 import { registerRecipeCommands, recordIfRecording } from './commands/recipe.js';
 import { registerPlanCommands } from './commands/plan.js';
 import { registerObserveCommands } from './commands/observe.js';
+import { guardPolicy } from './core/policy-guard.js';
+import { TirnoError } from './util/errors.js';
 import { registerEvalCommand } from './commands/eval.js';
 import { registerEmulateCommand } from './commands/emulate.js';
 import { registerPermissionCommands } from './commands/permissions.js';
@@ -74,7 +76,11 @@ registerUpdateCommand(program);
 // 명령이 자기 --json 을 받았으면 실패도 JSON 으로 — 성공은 JSON 인데 실패만 산문이면
 // 파서가 두 벌 필요하다 (#185)
 program.hook('preAction', (_thisCommand, actionCommand) => {
-  setJsonOutput((actionCommand.opts() as { json?: boolean }).json);
+  const opts = actionCommand.opts() as { json?: boolean; session?: string; confirm?: boolean; allowEval?: boolean };
+  setJsonOutput(opts.json);
+  // 세션 정책 — 명령 진입 전에 argv 만 보고 거절한다 (#214). 세션이 없으면 볼 정책도 없다.
+  const denial = guardPolicy(actionCommand.name(), process.argv.slice(2), opts);
+  if (denial) fail(new TirnoError(denial.message, 'policy_denied', { policy: denial.policy }));
 });
 
 // 세션이 레시피를 기록 중이면 **성공한** 행동 명령을 적는다 — postAction 은 액션이 정상

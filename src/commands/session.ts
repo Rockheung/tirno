@@ -1,6 +1,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { badgeColorHex } from '../cdp/badge.js';
+import { TirnoError } from '../util/errors.js';
+import { checkPolicy, describePolicy, WEBRTC_CONTAINMENT_FLAGS, type Policy } from '../core/policy.js';
 import { intArg } from '../util/parsers.js';
 import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
@@ -94,6 +96,19 @@ async function killIfOurs(meta: store.SessionMetadata, verb: string): Promise<bo
   return true;
 }
 
+/** `new`/`restart` 의 정책 옵션 → Policy. 아무것도 없으면 undefined. */
+function policyFromOpts(opts: { allow?: string; readOnly?: boolean; confirm?: string; destructivePattern?: string }): Policy | undefined {
+  const p: Policy = {};
+  if (opts.allow) p.allowDomains = String(opts.allow).split(',').map(s => s.trim()).filter(Boolean);
+  if (opts.readOnly) p.readOnly = true;
+  if (opts.confirm) {
+    if (opts.confirm !== 'destructive') throw new Error(`--confirm takes "destructive" (got "${opts.confirm}")`);
+    p.confirmDestructive = true;
+    if (opts.destructivePattern) p.destructivePattern = opts.destructivePattern;
+  }
+  return Object.keys(p).length ? p : undefined;
+}
+
 export function registerSessionCommands(program: Command): void {
   const newCmd = program
     .command('new')
@@ -112,6 +127,10 @@ export function registerSessionCommands(program: Command): void {
     .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
     .option('--badge', 'Show the session name as a badge in the page (default when headful). Draggable; hidden from snapshots and screenshots')
     .option('--no-badge', 'No badge')
+    .option('--allow <domains>', 'Policy: only these domains (comma-separated; a.com covers *.a.com). Enforced before nav in the CLI and by a request-blocking extension in the browser (turns --extensions on); WebRTC UDP is disabled too')
+    .option('--read-only', 'Policy: refuse commands that change the page (click · fill · type · press · upload · drag · select · eval · ensure · apply · recipe run). Observe only')
+    .option('--confirm <what>', 'Policy: `destructive` — targets whose name looks like delete/pay/remove/… are refused unless the command carries --confirm')
+    .option('--destructive-pattern <regex>', 'Extra words for --confirm destructive')
     .option('--group <name>', 'Tag this session with a group label')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
     .option('--boot-timeout <ms>', 'How long to wait for [url] to commit before returning. The session is created either way; on timeout `new` says so instead of leaving the next `eval` to read about:blank', intArg, 15000);
@@ -158,6 +177,15 @@ export function registerSessionCommands(program: Command): void {
         userDataDirOverride = fs.mkdtempSync(path.join(os.tmpdir(), `tirno-${name}-`));
       }
 
+      // 정책 — 만들 때 한 번. 부트 URL 도 정책을 지킨다.
+      const policy = policyFromOpts(opts);
+      if (policy && bootUrl) {
+        const denial = checkPolicy(policy, { command: 'new', argv: [bootUrl] });
+        if (denial) throw new TirnoError(denial.message, 'policy_denied', { policy: denial.policy });
+      }
+      // dNR 은 WebRTC 를 못 본다 — 허용 목록이 있으면 UDP 로 새는 길을 플래그로 막는다
+      if (policy?.allowDomains?.length) chromeFlags.push(...WEBRTC_CONTAINMENT_FLAGS.filter(f => !chromeFlags.includes(f)));
+
       const meta = await launch({
         name,
         port: opts.port,
@@ -168,11 +196,19 @@ export function registerSessionCommands(program: Command): void {
         // the session half-respecified.
         executablePath: opts.executablePath,
         headless: opts.headless,
-        extensions: opts.extensions,
+        // 허용 목록의 브라우저 층은 확장이다 — 없으면 CLI 층만 남는 반쪽이므로 켠다
+        extensions: opts.extensions || !!policy?.allowDomains?.length,
         badge: opts.badge,
         userDataDir: userDataDirOverride,
         bootUrl,
       });
+      if (policy) {
+        store.update(name, { policy });
+        if (policy.allowDomains?.length) {
+          try { await loadHeaderExt(name, { reload: Boolean(bootUrl) }); }
+          catch (e) { warn(`--allow: the request-blocking extension did not load (${(e as Error).message}) — only the CLI layer is active`); }
+        }
+      }
 
       // wish F — group tag
       if (opts.group) {
@@ -228,6 +264,10 @@ export function registerSessionCommands(program: Command): void {
     .option('--extensions', 'Let extensions run (off by default). Turned on anyway when the session has stored header rules, since those are an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
     .option('--badge', 'Show the session badge (default when headful; inherited from the previous run if unspecified)')
     .option('--no-badge', 'No badge')
+    .option('--allow <domains>', 'Policy: only these domains (inherited from the previous run if unspecified)')
+    .option('--read-only', 'Policy: observe only (inherited)')
+    .option('--confirm <what>', 'Policy: `destructive` (inherited)')
+    .option('--no-policy', 'Drop the inherited policy')
     .option('--group <name>', 'Group label')
     .option('--keep-cookies', 'Carry cookies across the restart, session cookies included — otherwise the login dies with the browser')
     .option('--url <url>', 'Same as positional [url] — kept for backward compat')
@@ -279,6 +319,8 @@ export function registerSessionCommands(program: Command): void {
         // 있는 편이 덜 놀랍다.
         const headerRules = existing?.headerRules ?? [];
         const injects = existing?.injects ?? [];
+        const restartPolicy = opts.policy === false ? undefined : (policyFromOpts(opts) ?? existing?.policy);
+        if (restartPolicy?.allowDomains?.length) chromeFlags.push(...WEBRTC_CONTAINMENT_FLAGS.filter(f => !chromeFlags.includes(f)));
 
         const meta = await launch({
           name,
@@ -286,7 +328,7 @@ export function registerSessionCommands(program: Command): void {
           chromeFlags,
           executablePath: opts.executablePath ?? existing?.executablePath,
           headless: opts.headless,
-          extensions: opts.extensions || headerRules.length > 0,
+          extensions: opts.extensions || headerRules.length > 0 || !!restartPolicy?.allowDomains?.length,
           badge: opts.badge ?? existing?.badge,
           userDataDir: userDataDirOverride,
           bootUrl,
@@ -297,9 +339,11 @@ export function registerSessionCommands(program: Command): void {
         // 받아온 것이고, 심은 뒤 다시 읽혀야 화면과 저장된 것이 어긋나지 않는다.
         if (headerRules.length) store.update(name, { headerRules });
         if (injects.length) store.update(name, { injects });
-        if (headerRules.length || injects.length) {
+        if (restartPolicy) store.update(name, { policy: restartPolicy });
+        const needExt = headerRules.length > 0 || !!restartPolicy?.allowDomains?.length;
+        if (needExt || injects.length) {
           try {
-            if (headerRules.length) {
+            if (needExt) {
               // 이 안의 connect 가 저장된 훅까지 함께 건다.
               await loadHeaderExt(name, { reload: Boolean(bootUrl) });
             } else {
@@ -376,7 +420,7 @@ export function registerSessionCommands(program: Command): void {
       const showFlags = opts.flags === true;
       const showGroup = sessions.some(s => s.group);
 
-      const headers = ['', 'NAME', 'PORT', 'STATUS', 'OWNER', 'PROXY', 'EMULATION'];
+      const headers = ['', 'NAME', 'PORT', 'STATUS', 'OWNER', 'PROXY', 'EMULATION', 'POLICY'];
       if (showGroup) headers.push('GROUP');
       if (showFlags) headers.push('FLAGS');
       headers.push('LAST ACCESS');
@@ -408,7 +452,7 @@ export function registerSessionCommands(program: Command): void {
           : '?';
         // 뱃지 색 점 — 창 위의 뱃지와 같은 색이라 표에서 창을 찾는다
         const dot = s.badge && s.badgeColor ? `${chalk.hex(badgeColorHex(s.badgeColor) ?? '#888')('●')} ` : '';
-        const row = [marker, `${dot}${s.name}`, String(inv?.resolvedPort ?? s.port), status, ownership, proxy, emulation];
+        const row = [marker, `${dot}${s.name}`, String(inv?.resolvedPort ?? s.port), status, ownership, proxy, emulation, describePolicy(s.policy)];
         if (showGroup) row.push(s.group ?? '-');
         if (showFlags) row.push(summarizeFlags(s.chromeFlags));
         row.push(s.lastAccessedAt.slice(0, 19).replace('T', ' '));
