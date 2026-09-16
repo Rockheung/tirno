@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { TirnoError } from '../util/errors.js';
+import { endCommandFailed } from '../core/command-context.js';
 
 export interface FormatOptions {
   json?: boolean;
@@ -64,8 +65,10 @@ export function fail(e: unknown): never {
   const err = e as Error & { code?: unknown; data?: unknown };
   const code = err instanceof TirnoError ? err.code : 'error';
   const message = err?.message ?? String(e);
+  // 저널에 실패 한 줄, 봉투 모드면 가로챈 출력(경고 등)을 같이 싣는다 (#217)
+  const { output } = endCommandFailed(code, message);
   if (jsonFailures) {
-    console.log(JSON.stringify({ ok: false, code, message, ...(err instanceof TirnoError && err.data ? { data: err.data } : {}) }));
+    process.stdout.write(JSON.stringify({ ok: false, code, message, ...(err instanceof TirnoError && err.data ? { data: err.data } : {}), ...(output ? { output } : {}) }) + '\n');
   } else {
     error(message);
     console.error(chalk.dim(`  code: ${code}`));

@@ -124,6 +124,7 @@ tirno plan flow.json · apply flow.json [--group qa]   # 파일(JSON, 단계=한
 tirno snapshot --interactive · forms · links · table '#t' --json · read · explain @7 · watch --for 10s   # 목적별 관측
 tirno new x <url> --allow a.com · --read-only · --confirm destructive   # 세션 정책. 거부는 code policy_denied (click --confirm / eval --allow-eval 로 명시)
 tirno mcp [--tools core|all] [--session x]   # stdio MCP 서버 — 툴은 schema 에서 자동. .mcp.json 에 {"command":"tirno","args":["mcp"]}
+tirno journal [--since 10m] [--failed] [--as-recipe x]   # 세션의 이야기. TIRNO_JSON=1 이면 모든 명령이 {ok, cmd, data|output, delta} 한 줄
                                        # 성공 줄 아래 delta(url·focus·±줄·console). 'no change' 면 안 된 것. --no-delta 로 끔
                                        # 진짜 클릭처럼 포커스를 옮긴다 — 앞 필드가 블러돼
                                        # change 가 나오고, 누른 요소가 포커스를 받아
