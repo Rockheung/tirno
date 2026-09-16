@@ -522,6 +522,20 @@ function main() {
   }
   // 플러그인 (#216) — lighthouse 는 번들에 없다. 스모크의 audit 은 레포의 node_modules 로 돈다.
   run('plugin ls', ['plugin', 'ls'], { expectMatch: /audit.*found \((repo|plugin|global)\)/ });
+  // 저널과 JSON 봉투 (#217)
+  const jl = run('journal', ['journal', ...S]);
+  check('저널이 성공·실패를 순서대로 낸다', /✓ click button click me/.test(jl.out) && /✗ click button Nope.*code:target_not_found/.test(jl.out), jl.out.slice(0, 300));
+  run('journal --failed', ['journal', '--failed', ...S], { expectMatch: /✗/ });
+  run('journal --as-recipe', ['journal', '--as-recipe', 'from-journal', '--last', '30', ...S], { expectMatch: /saved recipe "from-journal"/ });
+  run('recipe rm from-journal', ['recipe', 'rm', 'from-journal']);
+  {
+    let out = '';
+    try { out = execFileSync('node', [TIRNO, 'click', 'button', 'click me', ...S], { env: { ...env, TIRNO_JSON: '1' }, encoding: 'utf8', stdio: 'pipe' }); } catch (e) { out = String(e.stdout); }
+    check('TIRNO_JSON=1 성공 봉투 {ok:true, cmd, output, delta}', (() => { try { const j = JSON.parse(out.trim()); return j.ok === true && j.cmd === 'click' && /Clicked/.test(j.output) && 'delta' in j; } catch { return false; } })(), out.slice(0, 160));
+    try { out = execFileSync('node', [TIRNO, 'forms', '--json', ...S], { env: { ...env, TIRNO_JSON: '1' }, encoding: 'utf8', stdio: 'pipe' }); } catch (e) { out = String(e.stdout); }
+    check('--json 출력은 봉투의 data 로 들어간다', (() => { try { const j = JSON.parse(out.trim()); return j.ok === true && Array.isArray(j.data); } catch { return false; } })(), out.slice(0, 160));
+  }
+  run('journal --clear', ['journal', '--clear', ...S], { expectMatch: /cleared/ });
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);

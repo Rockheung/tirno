@@ -722,6 +722,22 @@ tirno apply checkout.json --from 3     # 고친 뒤 그 단계부터
 `apply --group` 은 `broadcast` 의 선언형이다 — 세션마다 첫 실패에서 멈추고 매트릭스로 낸다.
 하나라도 실패하면 exit 1 (`broadcast_partial`, `data.failed` 에 세션 이름).
 
+### 저널 — `journal`
+
+명령마다 한 줄이 `~/.tirno/journal/<session>.jsonl` 에 남는다 — 무엇을 쳤고, 어떻게 끝났고
+(`code`), 무엇이 변했나(delta 요약). 세션의 이야기다.
+
+```bash
+tirno journal [-s x] [--since 10m] [--last 20] [--failed] [--json]
+22:52:37 ✓ click button click me      370ms  Clicked button "click me"      [focus moved · +1 −1]
+22:52:38 ✗ click button Nope           59ms  No button named "Nope" — …      code:target_not_found
+22:52:38 ✓ expect text clicked         59ms  expect text "clicked" — found "clicked"
+tirno journal --as-recipe login       # 성공한 행동 명령을 레시피로 (@N 이 있으면 경고 — role+이름으로 고쳐라)
+tirno journal --clear
+```
+세션과 무관한 명령(`ls` · `new` · `recipe …` 등)은 active 세션의 저널에 적지 않는다.
+`TIRNO_JOURNAL=0` 으로 끈다.
+
 ### 접근성 감사 — `a11y`
 
 ```bash
@@ -1286,7 +1302,8 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 |---|---|---|
 | `TIRNO_DIR` | `~/.tirno` | 데이터 루트 전체 |
 | `TIRNO_CHROME` | (없음) | Chrome 실행 파일. 설정 파일보다 우선 |
-| `TIRNO_JSON` | (없음) | `1` 이면 실패를 stdout 에 `{ok:false, code, message, data}` 한 줄로 낸다 — `--json` 이 없는 명령에도. 아래 "실패의 종류" |
+| `TIRNO_JSON` | (없음) | `1` 이면 **모든** 명령이 stdout 에 JSON 한 줄이다 — 성공은 `{ok:true, cmd, data|output, delta?}`(명령의 `--json` 출력은 `data` 로, 산문은 `output` 으로), 실패는 `{ok:false, code, message, data?, output?}`. 스트림 명령(`watch`·`mcp`)은 예외. 아래 "실패의 종류" |
+| `TIRNO_JOURNAL` | (없음) | `0` 이면 저널을 적지 않는다 |
 | `TIRNO_INVENTORY` | linux `proc` · 그 외 `lsof` | 리스너를 보는 백엔드. `proc` 은 `/proc` 직접 읽기(외부 바이너리 없음), `lsof` 는 `lsof -iTCP -sTCP:LISTEN` |
 | `CHROME_PATH` · `PUPPETEER_EXECUTABLE_PATH` | (없음) | 같은 용도. `TIRNO_CHROME` 다음 순서로 본다 |
 | `TIRNO_CACHE_DIR` | `<루트>/visual-cache` | visual cache |

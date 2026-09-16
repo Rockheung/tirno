@@ -15,6 +15,9 @@ import { registerObserveCommands } from './commands/observe.js';
 import { registerMcpCommand } from './commands/mcp.js';
 import { registerPluginCommands } from './commands/plugin.js';
 import { guardPolicy } from './core/policy-guard.js';
+import { beginCommand, endCommandOk } from './core/command-context.js';
+import * as store from './core/session-store.js';
+import { registerJournalCommand } from './commands/journal.js';
 import { TirnoError } from './util/errors.js';
 import { registerEvalCommand } from './commands/eval.js';
 import { registerEmulateCommand } from './commands/emulate.js';
@@ -75,6 +78,7 @@ registerScreencastCommands(program);
 registerSchemaCommand(program);
 registerMcpCommand(program, () => program);
 registerPluginCommands(program);
+registerJournalCommand(program);
 registerUpdateCommand(program);
 
 // 명령이 자기 --json 을 받았으면 실패도 JSON 으로 — 성공은 JSON 인데 실패만 산문이면
@@ -82,6 +86,10 @@ registerUpdateCommand(program);
 program.hook('preAction', (_thisCommand, actionCommand) => {
   const opts = actionCommand.opts() as { json?: boolean; session?: string; confirm?: boolean; allowEval?: boolean };
   setJsonOutput(opts.json);
+  // 명령 문맥 — 저널 한 줄과 TIRNO_JSON=1 의 성공 봉투 (#217). 세션은 -s 또는 active.
+  const cmdName = fullCommandName(actionCommand);
+  const session = opts.session ?? (SESSION_FREE_FOR_JOURNAL.has(cmdName.split(' ')[0]) ? null : store.getActive());
+  beginCommand({ session, cmd: cmdName, argv: process.argv.slice(2), jsonEnvelope: !!process.env['TIRNO_JSON'] });
   // 세션 정책 — 명령 진입 전에 argv 만 보고 거절한다 (#214). 세션이 없으면 볼 정책도 없다.
   const denial = guardPolicy(actionCommand.name(), process.argv.slice(2), opts);
   if (denial) fail(new TirnoError(denial.message, 'policy_denied', { policy: denial.policy }));
@@ -91,6 +99,16 @@ program.hook('preAction', (_thisCommand, actionCommand) => {
 // 반환했을 때만 돈다(실패는 fail() 이 exit 1 로 끝내므로 여기 안 온다) (#211)
 program.hook('postAction', (_thisCommand, actionCommand) => {
   recordIfRecording(actionCommand.name(), process.argv.slice(2), (actionCommand.opts() as { session?: string }).session);
+  endCommandOk();
 });
+
+/** `recipe run` 처럼 하위 명령은 전체 경로로 */
+function fullCommandName(c: Command): string {
+  const parts: string[] = [];
+  for (let x: Command | null = c; x && x.parent; x = x.parent) parts.unshift(x.name());
+  return parts.join(' ');
+}
+/** 세션과 무관한 명령은 active 세션의 저널에 적지 않는다 */
+const SESSION_FREE_FOR_JOURNAL = new Set(['new', 'ls', 'schema', 'setup', 'chrome', 'update', 'anchor', 'gc', 'cache', 'recipe', 'stats', 'memory', 'plugin', 'mcp', 'journal', 'kill', 'restart', 'rename', 'export', 'drift', 'broadcast', 'plan', 'apply', 'attach']);
 
 program.parseAsync(process.argv).catch(e => fail(e));

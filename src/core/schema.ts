@@ -162,6 +162,7 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'recipe run':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   'plan':         { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
   'mcp':          { effects: 'read_only', output_kind: 'stream', cardinality: 'unbounded' },
+  'journal':      { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'plugin ls':    { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
   'plugin install': { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'plugin rm':    { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
