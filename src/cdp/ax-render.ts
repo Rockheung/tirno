@@ -48,6 +48,7 @@ interface RenderNode {
   role: string;
   name: string;
   value?: string;
+  states?: string[];
   backendId?: number;
   children: RenderNode[];
 }
@@ -119,6 +120,16 @@ export function renderAXTree(
 
     const out: RenderNode = { role, name, children };
     if (hasValue) out.value = JSON.stringify(node.value!.value);
+    // 상태 — checked · expanded · disabled. 체크박스는 value 가 없어 이것 없이는 켜고 끈 것이
+    // 스냅샷에도 delta 에도 안 보였다
+    const states: string[] = [];
+    for (const p of node.properties ?? []) {
+      if (p.name === 'checked' && (p.value?.value === true || p.value?.value === 'true')) states.push('checked');
+      if (p.name === 'checked' && p.value?.value === 'mixed') states.push('mixed');
+      if (p.name === 'expanded' && p.value?.value === true) states.push('expanded');
+      if (p.name === 'disabled' && p.value?.value === true) states.push('disabled');
+    }
+    if (states.length) out.states = states;
     if (node.backendDOMNodeId !== undefined) out.backendId = node.backendDOMNodeId;
     return [out];
   }
@@ -136,7 +147,8 @@ export function renderAXTree(
     }
     const name = node.name ? ` "${node.name}"` : '';
     const value = node.value !== undefined ? ` value=${node.value}` : '';
-    lines.push(`${prefix}${'  '.repeat(depth)}${node.role}${name}${value}`);
+    const states = node.states ? ` [${node.states.join(' ')}]` : '';
+    lines.push(`${prefix}${'  '.repeat(depth)}${node.role}${name}${value}${states}`);
     for (const child of node.children) emit(child, depth + 1);
   }
 

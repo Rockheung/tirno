@@ -5,10 +5,10 @@ import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, fail } from '../output/formatter.js';
 import { TirnoError } from '../util/errors.js';
 import { actWithDelta, printDelta, DELTA_FLAG } from './delta-output.js';
-import { clickByRef, clickElement, fillByRef, fillElement, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
+import { clickByRef, fillByRef, hoverByRef, requireElement } from '../cdp/dom-actions.js';
+import { resolveTarget, takesName, findByRoleName, axRole } from '../cdp/target.js';
+import { asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
-import * as refStore from '../core/ref-store.js';
-import { checkRef } from '../cdp/ref-guard.js';
 import type { Page } from '../cdp/page.js';
 
 /**
@@ -35,22 +35,26 @@ async function elemCenter(page: Page, selector: string): Promise<[number, number
 export function registerInputCommands(program: Command): void {
   program
     .command('click')
-    .description('Click by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots. Sends a real mouse click at the element\'s centre, so focus moves the way a person\'s click moves it (a `fill` before this commits its `change`; a `type` after this lands in it). Fails with exit 1 if another element covers that point — a modal, a cookie banner, a sticky header — naming what is on top')
-    .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
+    .description('Click by role + visible name (`click button "Submit"`), CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots. Sends a real mouse click at the element\'s centre, so focus moves the way a person\'s click moves it (a `fill` before this commits its `change`; a `type` after this lands in it). Fails with exit 1 if another element covers that point — a modal, a cookie banner, a sticky header — naming what is on top. A role+name that matches several elements is refused with the candidates listed')
+    .argument('<target>', 'CSS selector, @N ref, "<x>,<y>" coordinates, or a role word (button · link · textbox · checkbox · combobox · heading · text …) followed by the visible name')
+    .argument('[name]', 'Accessible name when <target> is a role word — partial and case-insensitive by default (an exact match wins when several overlap); --exact for exact')
     .option('-s, --session <name>', 'Session name')
+    .option('--exact', 'Match the accessible name exactly (case-sensitive)')
     .option('--dbl', 'Double click')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .option('--synthetic', 'Dispatch element.click() instead of a mouse click. Ignores whatever covers the element and the viewport — for elements larger than the viewport, or hidden ones that still have handlers. No pointer/mouse events are fired')
     .option(...DELTA_FLAG)
-    .action(async (target: string, opts) => {
+    .action(async (target: string, name: string | undefined, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
+        // 대상은 행동 밖에서 푼다 — 낡은 ref 거절·모호한 이름 거절은 행동이 아니다
+        const t = await resolveTarget(page, target, name, { session: meta.name, staleOk: !!opts.staleOk, exact: !!opts.exact });
+
         // "x,y" coordinate form — dispatch raw CDP mouse events (trusted click).
-        const coords = asCoords(target);
-        if (coords) {
-          const [x, y] = coords;
+        if (t.kind === 'coords') {
+          const { x, y } = t;
           const { delta } = await actWithDelta(page, opts, async () => {
             const cdp = await page.createCDPSession();
             try {
@@ -71,15 +75,11 @@ export function registerInputCommands(program: Command): void {
           return;
         }
 
-        const clickOpts = { label: target, dbl: !!opts.dbl, synthetic: !!opts.synthetic };
-        // 대상은 행동 밖에서 푼다 — 낡은 ref 거절은 행동이 아니고, 그 전엔 캡처할 이유가 없다
-        const backendId = refStore.isRef(target) ? await refToBackendId(page, meta.name, target, !!opts.staleOk) : null;
-        const el = backendId === null ? await requireElement(page, target) : null;
-        const { delta } = await actWithDelta(page, opts, () =>
-          backendId !== null ? clickByRef(page, backendId, clickOpts) : clickElement(page, el!, clickOpts));
+        const clickOpts = { label: t.label, dbl: !!opts.dbl, synthetic: !!opts.synthetic };
+        const { delta } = await actWithDelta(page, opts, () => clickByRef(page, t.backendNodeId, clickOpts));
 
         browser.disconnect();
-        success(`Clicked ${target}${opts.synthetic ? ' (synthetic)' : ''}`);
+        success(`Clicked ${t.label}${opts.synthetic ? ' (synthetic)' : ''}`);
         printDelta(delta);
       } catch (e) {
         fail(e);
@@ -88,17 +88,23 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('fill')
-    .description('Clear and type into an input element by selector or @ref. A selector that misses in the light DOM is retried through open shadow roots')
-    .argument('[target]', 'CSS selector or @N ref from snapshot (omit when --batch)')
-    .argument('[value]', 'Value to fill (omit when --batch)')
+    .description('Clear and type into a field by role + name (`fill textbox "Email" me@x.com`), CSS selector, or @ref. A selector that misses in the light DOM is retried through open shadow roots')
+    .argument('[target]', 'Role word, CSS selector or @N ref (omit when --batch)')
+    .argument('[nameOrValue]', 'The accessible name when <target> is a role word, otherwise the value')
+    .argument('[value]', 'Value to fill when a name was given (omit when --batch or --value-stdin)')
     .option('-s, --session <name>', 'Session name')
-    .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},...]')
+    .option('--exact', 'Match the accessible name exactly (case-sensitive)')
+    .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},{"target":"textbox","name":"Email","value":"y"},...]')
     .option('--value-stdin', 'Read the value from stdin instead of the argument, e.g. `pbpaste | tirno fill \'input[type=password]\' --value-stdin`. The value is never printed.')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
     .option(...DELTA_FLAG)
     .option('--no-verify', 'Skip reading the value back after typing. By default a field that ends up holding something else (readonly, maxlength, a keydown handler, focus moved) fails with exit 1 instead of "Filled" — turn this off only for inputs whose formatter rewrites what you type')
-    .action(async (target: string | undefined, value: string | undefined, opts) => {
+    .action(async (target: string | undefined, nameOrValue: string | undefined, valueArg: string | undefined, opts) => {
       try {
+        // role 단어 뒤엔 이름이 온다 — `fill textbox "Email" me@x` 는 셋, `fill '#q' me@x` 는 둘
+        const named = target !== undefined && takesName(target);
+        const name = named ? nameOrValue : undefined;
+        let value: string | undefined = named ? valueArg : nameOrValue;
         // 값이 인자로 오면 `ps` 와 셸 히스토리에 남는다. 비밀번호를 넣는 흔한 자리라
         // 파이프 경로를 둔다 — 넣고 나서 되돌릴 수 없는 종류의 노출이다.
         let fromStdin = false;
@@ -113,7 +119,7 @@ export function registerInputCommands(program: Command): void {
         const page = await getInteractivePage(browser);
 
         if (opts.batch) {
-          let entries: Array<{ target: string; value: string }>;
+          let entries: Array<{ target: string; name?: string; value: string }>;
           try {
             const parsed = JSON.parse(opts.batch);
             if (!Array.isArray(parsed)) throw new Error('expected array');
@@ -128,13 +134,9 @@ export function registerInputCommands(program: Command): void {
           }
           const { delta } = await actWithDelta(page, opts, async () => {
             for (const entry of entries) {
-              const fillOpts = { label: entry.target, verify: opts.verify !== false };
-              if (refStore.isRef(entry.target)) {
-                const backendId = await refToBackendId(page, meta.name, entry.target, !!opts.staleOk);
-                await fillByRef(page, backendId, entry.value, fillOpts);
-              } else {
-                await fillElement(page, await requireElement(page, entry.target), entry.value, fillOpts);
-              }
+              const t = await resolveTarget(page, entry.target, entry.name, { session: meta.name, staleOk: !!opts.staleOk, exact: !!opts.exact });
+              if (t.kind === 'coords') throw new Error('fill takes an element, not coordinates');
+              await fillByRef(page, t.backendNodeId, entry.value, { label: t.label, verify: opts.verify !== false });
             }
           });
           browser.disconnect();
@@ -144,22 +146,21 @@ export function registerInputCommands(program: Command): void {
         }
 
         if (!target || value === undefined) {
-          throw new Error('Provide <target> <value> or --batch <json>');
+          throw new Error(named ? 'Provide <role> <name> <value>, or --value-stdin' : 'Provide <target> <value> or --batch <json>');
         }
 
-        const fillOpts = { label: target, verify: opts.verify !== false, hideValue: fromStdin };
-        const fillBackendId = refStore.isRef(target) ? await refToBackendId(page, meta.name, target, !!opts.staleOk) : null;
-        const fillEl = fillBackendId === null ? await requireElement(page, target) : null;
+        const t = await resolveTarget(page, target, name, { session: meta.name, staleOk: !!opts.staleOk, exact: !!opts.exact });
+        if (t.kind === 'coords') throw new Error('fill takes an element, not coordinates');
+        const fillOpts = { label: t.label, verify: opts.verify !== false, hideValue: fromStdin };
         const v = value;
-        const { delta } = await actWithDelta(page, opts, () =>
-          fillBackendId !== null ? fillByRef(page, fillBackendId, v, fillOpts) : fillElement(page, fillEl!, v, fillOpts));
+        const { delta } = await actWithDelta(page, opts, () => fillByRef(page, t.backendNodeId, v, fillOpts));
 
         browser.disconnect();
         // stdin 으로 받은 값은 찍지 않는다 — argv 를 피해 넣은 것을 터미널에
         // 도로 남기면 피한 의미가 없다.
         success(fromStdin
-          ? `Filled ${target} (${value.length} chars from stdin)`
-          : `Filled ${target} with "${value}"`);
+          ? `Filled ${t.label} (${value.length} chars from stdin)`
+          : `Filled ${t.label} with "${value}"`);
         printDelta(delta);
       } catch (e) {
         fail(e);
@@ -247,11 +248,13 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('hover')
-    .description('Hover by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots')
-    .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
+    .description('Hover by role + name (`hover link "Docs"`), CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots')
+    .argument('<target>', 'CSS selector, @N ref, "<x>,<y>" coordinates, or a role word (button · link · textbox · checkbox · combobox · heading · text …) followed by the visible name')
+    .argument('[name]', 'Accessible name when <target> is a role word — partial and case-insensitive by default (an exact match wins when several overlap); --exact for exact')
     .option('-s, --session <name>', 'Session name')
+    .option('--exact', 'Match the accessible name exactly (case-sensitive)')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
-    .action(async (target: string, opts) => {
+    .action(async (target: string, name: string | undefined, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
@@ -259,17 +262,12 @@ export function registerInputCommands(program: Command): void {
         // 좌표를 받는 이유는 click 과의 대칭만이 아니다. 닫힌 shadow root 안이나
         // 셀렉터가 없는 캔버스 위 요소에는 좌표가 유일한 길이고, 그 길이 click 에만
         // 있으면 그런 요소는 hover 시킬 방법이 아예 없다.
-        const coords = asCoords(target);
-        if (coords) {
-          await page.mouse.move(coords[0], coords[1]);
-        } else if (refStore.isRef(target)) {
-          await hoverByRef(page, await refToBackendId(page, meta.name, target, !!opts.staleOk));
-        } else {
-          await (await requireElement(page, target)).hover();
-        }
+        const t = await resolveTarget(page, target, name, { session: meta.name, staleOk: !!opts.staleOk, exact: !!opts.exact });
+        if (t.kind === 'coords') await page.mouse.move(t.x, t.y);
+        else await hoverByRef(page, t.backendNodeId);
 
         browser.disconnect();
-        success(`Hovered ${target}`);
+        success(`Hovered ${t.label}`);
       } catch (e) {
         fail(e);
       }
@@ -385,16 +383,35 @@ export function registerInputCommands(program: Command): void {
 
   program
     .command('wait-for')
-    .description('Wait for a selector, text, or network idle. A selector matches inside open shadow roots too')
-    .argument('[selector]', 'CSS selector to wait for')
+    .description('Wait for an element (role + name, or CSS selector), text, or network idle. A selector matches inside open shadow roots too')
+    .argument('[selector]', 'Role word + name (`wait-for button "Continue"`) or CSS selector')
+    .argument('[name]', 'Accessible name when the first argument is a role word')
     .option('-s, --session <name>', 'Session name')
+    .option('--exact', 'Match the accessible name exactly')
     .option('--text <text>', 'Wait until any of the given texts appears in document.body.innerText (comma-separated for any-of)')
     .option('--network-idle', 'Wait for network idle instead of a selector')
     .option('--timeout <ms>', 'Max wait time', intArg, 30000)
-    .action(async (selector: string | undefined, opts) => {
+    .action(async (selector: string | undefined, name: string | undefined, opts) => {
       try {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
+
+        // role + 이름 — 나타날 때까지 a11y 트리를 묻는다. 모호해도 "나타났다" 는 참이다.
+        if (selector && takesName(selector)) {
+          const deadline = Date.now() + opts.timeout;
+          const label = name === undefined ? selector : `${selector} "${name}"`;
+          for (;;) {
+            const cdp = await page.createCDPSession();
+            let found: number;
+            try { found = (await findByRoleName(cdp, axRole(selector), name, !!opts.exact)).length; } finally { await cdp.detach(); }
+            if (found > 0) break;
+            if (Date.now() >= deadline) throw new TirnoError(`Waiting for ${label} failed: ${opts.timeout}ms exceeded`, 'timeout', { role: selector, name });
+            await new Promise(r => setTimeout(r, 200));
+          }
+          browser.disconnect();
+          success(`Visible: ${label}`);
+          return;
+        }
 
         // The three forms are alternatives, not a priority list. Silently
         // ignoring the selector because --network-idle was also given makes the
@@ -466,30 +483,3 @@ export function registerInputCommands(program: Command): void {
 }
 
 
-/**
- * `@N` 을 backendNodeId 로 바꾸되, **그것이 아직 그때 그 요소인지 확인하고** 바꾼다.
- *
- * 예전에는 확인이 없었다. 그래서 스냅샷 뒤 페이지가 바뀌면 옛 ref 가 조용히 다른 요소를
- * 눌렀다 — 실패가 에러가 아니라 오동작으로 나왔다 (#138). `--stale-ok` 는 그 판정을
- * 알고도 진행하겠다는 선언이다(라벨이 정상적으로 바뀌는 카운터 버튼 같은 자리).
- */
-async function refToBackendId(
-  page: Page,
-  session: string,
-  target: string,
-  staleOk: boolean,
-): Promise<number> {
-  const { stored, store } = refStore.resolveStored(session, target);
-  if (staleOk) return stored.backendId;
-
-  const cdp = await page.createCDPSession();
-  try {
-    const verdict = await checkRef(cdp, target, stored, store);
-    if (!verdict.ok) {
-      throw new TirnoError(`Refusing ${target}: ${verdict.reason} (--stale-ok proceeds anyway)`, 'stale_ref', { ref: target });
-    }
-  } finally {
-    await cdp.detach();
-  }
-  return stored.backendId;
-}

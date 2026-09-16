@@ -34,10 +34,14 @@ tirno schema | jq '.commands[] | select(.destructive) | .name' # 지우는 것�
 ```bash
 tirno new s1 https://example.com --headless   # 세션 시작(+첫 URL)
 tirno snapshot                                # a11y 트리 → @ref
-tirno click @7 ; tirno fill @39 "값"          # ref 로 조작
-tirno eval "document.title" -s s1             # 검증은 페이지에서 다시 읽는다
+tirno click button "Sign in"                  # role + 보이는 이름이 1급 대상 (@7 · CSS 도 된다)
+tirno ensure textbox "Email" = me@x.com       # 상태 선언 — already / ensured / 실패
+tirno expect url matches /dash within 5s      # 관측 — 틀리면 exit 1 + code expect_failed
 tirno kill s1 --clean
 ```
+
+`ensure` 는 멱등이라 재시도가 "같은 줄을 다시 친다" 다. 이름이 여럿에 맞으면 후보를 대고
+**거절한다**(`ambiguous_target`) — `--exact` 나 `@N` 으로 좁힌다.
 
 ### 문법 함정 넷
 
