@@ -796,7 +796,7 @@ navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS �
 | 명령 | 설명 |
 |---|---|
 | `cache list [--domain <d>] [--limit <n>]` | (URL × viewport)별 캐시 entry 목록. `AGE` 열 — 거리 비교 없이도 석 달 된 캐시는 그 자체로 신호다 |
-| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>] [-s <name>] [--no-compare] [--stale-threshold <bits>] [--allow-stale]` | 캐시된 항목을 **출력**한다 — a11y(role·name)와 bbox. viewport 미지정 시 가장 최근. **세션이 있으면 지금 화면과 대본다**(아래 "낡음") — `STALE` 이면 exit 1 (`code: cache_stale`), `--allow-stale` 로 출력만 |
+| `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>] [-s <name>] [--no-compare] [--stale-threshold <bits>] [--allow-stale] [--no-resolve] [--require-all]` | 캐시된 항목을 출력하고, **세션이 그 URL 에 있으면** 지금 화면과 대보고(아래 "낡음") ref 를 되찾아 store 를 채운다(아래 "되찾기") — 그 뒤 바로 `click @N`. `STALE` 이면 exit 1 (`code: cache_stale`); 못 찾은 ref 는 `UNRESOLVED` 로 이름을 대고 `--require-all` 이면 exit 1 |
 | `cache prune (--older-than <days> \| --all) [--domain <d>]` | 정리. **나이나 `--all` 중 하나를 반드시 준다** — 무인자로 전량을 지우지 않는다 |
 
 저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
@@ -805,11 +805,31 @@ navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS �
 페이지가 다시 뜨면 무효라, 세션을 넘겨 재사용할 수 있는 것은 bbox 하나다. `dom.selector` 는
 `record`/`trail` 경로에서만 저장된다.
 
-`cache load` 는 **출력만 하고 ref store 를 채우지 않는다.** 꺼낸 `@N` 으로 바로 `click` 하면
-`Unknown ref` 로 실패하므로, 조작하려면 `snapshot` 을 다시 찍어야 한다.
+#### 되찾기 — `cache load` 가 ref store 를 채운다
 
-둘 다 목표에 못 미친 상태고, [README 의 drift 절](../README.md#아직-구현이-아닌-것-drift)에
-같이 적어뒀다.
+세션이 그 URL 에 있으면 `cache load` 는 항목의 waypoint 를 **지금 페이지에서 되찾아**
+ref store 를 채운다. 그래서 새 세션에서 `cache load` 뒤 바로 `click @7` 이 된다. 채널은
+안정적인 것부터 — `dom.selector` → `a11y(role+name)`(`Accessibility.queryAXTree`, Chrome 자신의
+이름 계산) → `bbox`(기록된 상자 중심의 요소와 그 조상 중 IoU 최대, ≥0.5). ref 줄마다 어느
+채널로 찾았는지 붙고, 못 찾은 것은 **`UNRESOLVED` 와 시도한 이유**가 붙는다:
+
+```
+@7    link "Learn more" (384,240 82x18)  ← resolved (a11y)
+@36   LayoutTableRow (151,32 1618x10)   ← UNRESOLVED — LayoutTableRow has no name to match; nothing overlapping (151,32 1618x10) by ≥0.5
+→ loaded 971 refs, 930 resolved (dom 32 · a11y 770 · bbox 128), 41 unresolved — ref store filled
+```
+
+못 찾은 것이 있으면 `⚠` 로 번호를 댄다. 기본은 exit 0 이다 — 실측(HN 971개)에서 41개가
+5px 스페이서 행이었고, 닫힌 `<select>` 의 팝업처럼 이름도 상자도 없는 노드는 어느 페이지에나
+있다. 매번 exit 1 이면 신호가 소음이 된다. 전부 되찾아야 하는 자리는 `--require-all`
+(`code: cache_unresolved`, `data.unresolved` 에 번호). `--no-resolve` 는 출력만. 되찾은 ref 도 세대를
+올려 저장하므로 #138 의 낡은 ref 규율을 그대로 받는다. 세션이 없거나 다른 URL 이면 되찾지
+않고 **그렇다고 적는다**.
+
+selector 채널은 `id`·`data-testid`·`aria-label`·`name` 이 있을 때만 적힌다(안정적인 것만,
+`cdp/element-info.ts` `chooseSelector`). 나머지는 a11y 와 bbox 가 맡는다 — 실측(HN 971개)
+dom 32 · a11y 770 · bbox 128 · 미해결 41(5px 스페이서 행). 남은 것은
+[README 의 drift 절](../README.md#아직-구현이-아닌-것-drift).
 
 #### 낡음 — `cache load` 가 지금 화면과 대본다
 

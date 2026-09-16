@@ -580,6 +580,18 @@ function main() {
   run('cache load (모달 덮임 → STALE, exit≠0)', ['cache', 'load', PAGE, ...S], { expectFail: true, expectMatch: /STALE/ });
   run('cache load --allow-stale', ['cache', 'load', PAGE, '--allow-stale', ...S], { expectMatch: /STALE/ });
   q("document.getElementById('smoke-modal').remove()");
+  // 되찾기 (#187) — 문서를 다시 띄운 뒤에도 캐시의 @N 으로 바로 눌린다. 그 전엔 Unknown ref 였다.
+  run('reload (backendId 무효화)', ['reload', ...S]);
+  const rs = run('cache load (되찾아 ref store 채움)', ['cache', 'load', PAGE, ...S]);
+  check('못 찾은 것(닫힌 select 의 팝업)은 UNRESOLVED 로 이름을 댄다', /MenuListPopup.*UNRESOLVED/.test(rs.out), rs.out.split('\n').find(l => /UNRESOLVED/.test(l)) ?? '(없음)');
+  run('cache load --require-all (→ exit≠0)', ['cache', 'load', PAGE, '--require-all', ...S], { expectFail: true, expectMatch: /could not be found/ });
+  const btnLine = rs.out.split('\n').find(l => /button "click me"/.test(l)) ?? '';
+  check('버튼 ref 가 되찾아졌다', /← resolved/.test(btnLine), btnLine.slice(0, 100));
+  check('요약 줄이 채널별 개수를 센다', /loaded \d+ refs, \d+ resolved \(/.test(rs.out), rs.out.split('\n').at(-2));
+  const cachedBtn = (/^@(\d+)\s.*button "click me"/m.exec(rs.out) ?? [])[1];
+  q("document.getElementById('status').textContent='idle'");
+  run('click @N (캐시에서 되찾은 ref)', ['click', `@${cachedBtn ?? 0}`, ...S], { expectMatch: /Clicked/ });
+  check('되찾은 ref 로 누른 것이 실제로 눌렸다', q("document.getElementById('status').textContent") === 'clicked');
   const nc = run('cache load --no-compare', ['cache', 'load', PAGE, '--no-compare', ...S]);
   check('비교 안 했으면 그렇다고 적는다', /not compared — --no-compare/.test(nc.out), nc.out.split('\n')[2]);
   run('cache prune (무인자 → exit≠0)', ['cache', 'prune'],
