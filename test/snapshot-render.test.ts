@@ -146,3 +146,27 @@ test('ignored nodes still hand their children up, as before', () => {
   const out = render(tree(root, skipped, link));
   assert.deepEqual(out.lines.map(l => l.slice(4)), ['RootWebArea', '  link "deep"']);
 });
+
+// 부분 트리 — 상한을 올리는 것보다 좁히는 것이 답이고, 그 길이 있어야 잘림 안내가 거짓이
+// 아니다 (#190). 번호는 그 부분 트리 안에서 @1 부터 다시 매긴다.
+test('rootBackendId 를 주면 그 아래만 내고 번호를 @1 부터 다시 매긴다', () => {
+  const inner = node('button', { name: 'Go', backendDOMNodeId: 900 });
+  const form = node('form', { name: 'search', backendDOMNodeId: 800, children: [inner] });
+  const other = node('link', { name: 'Home', backendDOMNodeId: 700 });
+  const root = node('RootWebArea', { name: 'Page', children: [other, form] });
+
+  const whole = renderAXTree(tree(root, other, form, inner) as never, true, true);
+  assert.equal(whole.lines.length, 4);
+
+  const sub = renderAXTree(tree(root, other, form, inner) as never, true, true, 800);
+  assert.deepEqual(sub.lines, ['@1  form "search"', '@2    button "Go"']);
+  assert.equal(sub.refs['1'].backendId, 800);
+  assert.equal(sub.refs['2'].backendId, 900);
+  assert.equal(sub.refs['3'], undefined, '부분 트리 밖의 link 는 번호를 받지 않는다');
+});
+
+test('없는 rootBackendId 는 전체 트리로 돌아간다 — 호출자가 그 전에 걸러야 한다', () => {
+  const root = node('RootWebArea', { name: 'Page' });
+  const r = renderAXTree(tree(root) as never, true, true, 12345);
+  assert.equal(r.lines.length, 1);
+});

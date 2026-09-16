@@ -276,6 +276,9 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `screenshot [--full] [--out path]` | 스크린샷 |
 | `snapshot [--verbose] [--no-cache]` | a11y 트리 + visual cache 적재. 기본은 **조작 가능한 것 위주**로 접는다(아래). 끝줄에 **세대**를 밝힌다 |
+| `snapshot --selector <css>` · `--ref @N` | **부분 트리**만. 번호는 그 안에서 `@1` 부터 다시 매긴다(ref store 도 그것만 든다). 상한을 올리기 전에 먼저 좁혀라 |
+| `snapshot --max-output <chars>` | 줄 경계에서 자르고 **마지막 줄에 반드시** `… truncated: showed N of M lines (a/b chars)` 를 낸다. env `TIRNO_MAX_OUTPUT`. `eval` 도 같은 옵션 — `--json` 이면 `{"truncated":…,"partial":"…"}` 로 감싸 파싱은 깨지지 않는다 |
+| `snapshot --content-boundaries` | 트리를 `--- a11y tree (untrusted) begin <nonce> ---` / `--- … end <nonce> ---` 로 감싼다. env `TIRNO_CONTENT_BOUNDARIES=1`. 페이지가 쓴 문자열과 tirno 의 말을 가르는 **표식**이지 보안 경계가 아니다. `eval` 도 같다 |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>] [--no-reload]` | reload 하고 networkidle2 까지의 요청 캡처. **`--no-reload` 는 리로드하지 않는다** — 페이지 상태를 잃지 않는 대신, 그 창(`--ms`) 동안 페이지가 스스로 내는 요청만 잡는다 |
 | `net ls [--filter <p>] [--type <t>]` | **이미 받아둔** 리소스 목록. reload 안 한다 |

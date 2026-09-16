@@ -6,6 +6,7 @@ import { bootUrlOf } from '../core/session-store.js';
 import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
 import { notFocusedHint } from '../core/os-focus.js';
 import { info, warn, error } from '../output/formatter.js';
+import { emitPageLines, truncateLines, resolveMaxOutput, boundariesEnabled } from '../output/page-content.js';
 
 /**
  * 어디서 JS 를 읽어오나.
@@ -76,6 +77,8 @@ export function registerEvalCommand(program: Command): void {
     .option('--file <path>', 'Read the JavaScript from a file instead of the argument — no shell quoting')
     .option('--json', 'Output as JSON')
     .option('--timeout <ms>', 'Give up when the expression has not settled. 0 waits as long as the CDP connection allows (~3 min).', intArg, 30000)
+    .option('--max-output <chars>', 'Cut the printed result at this many characters (whole lines) and say how much was cut. Also TIRNO_MAX_OUTPUT. With --json the cut result is wrapped as {"truncated":…,"partial":"…"} so it still parses')
+    .option('--content-boundaries', 'Wrap the result in begin/end markers with a per-run nonce — the result is page-authored text. Also TIRNO_CONTENT_BOUNDARIES=1')
     .action(async (expressionArg: string | undefined, opts) => {
       try {
         const expression = await resolveExpression(
@@ -150,13 +153,24 @@ export function registerEvalCommand(program: Command): void {
         }
 
         const result = outcome.value;
-        if (opts.json) {
-          console.log(JSON.stringify(result, null, 2));
-        } else if (typeof result === 'object' && result !== null) {
-          console.log(JSON.stringify(result, null, 2));
-        } else {
-          console.log(result);
+        const text = (opts.json || (typeof result === 'object' && result !== null))
+          ? JSON.stringify(result, null, 2)
+          : String(result);
+        const maxOutput = resolveMaxOutput(opts.maxOutput);
+        if (opts.json && maxOutput !== undefined) {
+          // JSON 은 줄에서 자르면 파싱이 깨진다. 잘렸으면 감싸서 여전히 파싱되게 한다.
+          const { lines: shown, truncation } = truncateLines(text.split('\n'), maxOutput);
+          if (truncation) {
+            console.log(JSON.stringify({ truncated: truncation, partial: shown.join('\n') }));
+            return;
+          }
         }
+        emitPageLines(text.split('\n'), {
+          maxOutput,
+          boundaries: boundariesEnabled(opts.contentBoundaries),
+          narrowHint: 'Return less from the expression (e.g. .slice(), a count, or specific fields)',
+          label: 'eval result',
+        });
       } catch (e) {
         const message = (e as Error).message;
         error(message);

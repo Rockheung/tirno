@@ -4,6 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
 import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { emitPageLines, resolveMaxOutput, boundariesEnabled } from '../output/page-content.js';
 import { captureRequests, type CapturedRequest } from '../cdp/network-capture.js';
 import * as refStore from '../core/ref-store.js';
 import { bootUrlOf } from '../core/session-store.js';
@@ -11,6 +12,7 @@ import type { RefStore } from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
+import { requireElement } from '../cdp/dom-actions.js';
 import type { Bbox } from '../cdp/iou.js';
 import type { ScreenshotOptions, ConsoleMessage } from '../cdp/page.js';
 
@@ -57,6 +59,10 @@ export function registerInspectCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .option('--verbose', 'Include everything: ignored nodes, InlineTextBox duplicates, bare layout containers')
     .option('--no-cache', 'Skip visual-cache write')
+    .option('--selector <css>', 'Only the subtree under this element (light DOM, then open shadow roots). Refs are renumbered from @1 for that subtree')
+    .option('--ref <@N>', 'Only the subtree under a ref from the previous snapshot. Refs are renumbered from @1')
+    .option('--max-output <chars>', 'Cut the tree at this many characters (whole lines) and say how much was cut. Also TIRNO_MAX_OUTPUT. Narrow with --selector/--ref before raising this', intArg)
+    .option('--content-boundaries', 'Wrap the tree in begin/end markers with a per-run nonce so a reader can tell page-authored text from tirno output. Also TIRNO_CONTENT_BOUNDARIES=1. A marker, not a security boundary')
     .action(async (opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -78,6 +84,21 @@ export function registerInspectCommands(program: Command): void {
 
         const tree = await cdp.send('Accessibility.getFullAXTree') as { nodes: AXNode[] };
 
+        // 부분 트리 — 상한을 올리는 것보다 좁히는 것이 답인 경우가 많고, 그 길이 있어야
+        // 잘림 안내의 "좁혀라" 가 거짓이 아니다 (#190). 이전 스냅샷의 ref 는 아래에서
+        // 저장소를 덮어쓰기 전에 지금 푼다.
+        let rootBackendId: number | undefined;
+        if (opts.selector && opts.ref) throw new Error('--selector and --ref are exclusive — one subtree at a time');
+        if (opts.selector) {
+          // objectId 는 세션에 묶인다 — 여기 cdp 세션에서는 남의 id 다. backendNodeId 는 아니다.
+          rootBackendId = await (await requireElement(page, opts.selector)).backendNodeId();
+        } else if (opts.ref) {
+          rootBackendId = refStore.resolveRef(meta.name, opts.ref);
+        }
+        if (rootBackendId !== undefined && !tree.nodes.some(n => n.backendDOMNodeId === rootBackendId)) {
+          throw new Error(`${opts.selector ?? opts.ref} has no node in the accessibility tree — it is ignored (display:none, aria-hidden, or a bare container). Try its parent`);
+        }
+
         // 이 스냅샷이 어느 문서의 것인지. loaderId 는 문서가 다시 로드되면 바뀌므로,
         // 나중에 nav/reload 를 지난 ref 를 구별하는 근거가 된다.
         const pageUrl = page.url();
@@ -92,7 +113,7 @@ export function registerInspectCommands(program: Command): void {
           return;
         }
 
-        const { lines, refs: detailed, folded } = renderAXTree(tree.nodes, !opts.verbose, !opts.verbose);
+        const { lines, refs: detailed, folded } = renderAXTree(tree.nodes, !opts.verbose, !opts.verbose, rootBackendId);
 
         // collect cache data and (optional) vision augment while CDP is attached
         let cachePayload: visualCache.CacheEntry | null = null;
@@ -166,7 +187,17 @@ export function registerInspectCommands(program: Command): void {
           try { visualCache.save(cachePayload); } catch { /* non-fatal */ }
         }
 
-        for (const line of lines) console.log(line);
+        // 부분 트리가 비면 그렇다고 말한다 — 빈 출력은 "그 아래 아무것도 없다" 와
+        // "다 접혔다" 를 구별해 주지 않는다
+        if (rootBackendId !== undefined && lines.length === 0) {
+          warn(`${opts.selector ?? opts.ref}: nothing to show under it — every node folded (bare containers, InlineTextBox). --verbose shows them; pick a parent for something clickable`);
+        }
+        emitPageLines(lines, {
+          maxOutput: resolveMaxOutput(opts.maxOutput),
+          boundaries: boundariesEnabled(opts.contentBoundaries),
+          narrowHint: 'Narrow with --selector <css> or --ref @N',
+          label: 'a11y tree',
+        });
 
         // 접었다는 사실은 말해준다 — 안 그러면 "이 페이지에 이것뿐" 과 구별되지 않고,
         // --verbose 가 있다는 것도 알 길이 없다.
@@ -427,10 +458,12 @@ function renderAXTree(
   nodes: AXNode[],
   skipIgnored: boolean,
   fold = true,
+  rootBackendId?: number,
 ): { lines: string[]; refs: { [k: string]: DetailedRef }; folded: FoldStats } {
   const byId = new Map<string, AXNode>();
   for (const n of nodes) byId.set(n.nodeId, n);
-  const root = nodes.find(n => !n.parentId) ?? nodes[0];
+  const root = (rootBackendId !== undefined ? nodes.find(n => n.backendDOMNodeId === rootBackendId) : undefined)
+    ?? nodes.find(n => !n.parentId) ?? nodes[0];
   const folded: FoldStats = { inlineTextBox: 0, bareGeneric: 0 };
 
   /** 한 AXNode 가 0개(접힘)·1개·여러 개(접히며 자식 승격)의 RenderNode 가 된다. */
