@@ -232,6 +232,17 @@ function main() {
   const full = pngSize(`${OUT}/full.png`);
   check('screenshot --full 이 뷰포트보다 길다', (full?.h ?? 0) > 1080, `실측 높이: ${full?.h}`);
   const snap = run('snapshot', ['snapshot', ...S]);
+  // 출력 상한·경계·부분 트리 (#190). 잘림 표시 없는 잘림은 없다.
+  const cut = run('snapshot --max-output 60', ['snapshot', '--max-output', '60', ...S]);
+  check('잘렸으면 몇 줄 중 몇 줄인지 말한다', /truncated: showed \d+ of \d+ lines/.test(cut.out), cut.out.split('\n').slice(-3).join(' | ').slice(0, 120));
+  const bounded = run('snapshot --content-boundaries', ['snapshot', '--content-boundaries', ...S]);
+  check('경계 표식이 nonce 로 열고 닫힌다', (() => {
+    const m = /begin ([0-9a-f]{6}) ---/.exec(bounded.out);
+    return !!m && bounded.out.includes(`end ${m[1]} ---`);
+  })(), bounded.out.slice(0, 80));
+  const sub = run('snapshot --selector form', ['snapshot', '--selector', 'form', ...S]);
+  check('부분 트리는 @1 부터 다시 매기고 밖은 안 낸다', /^@1  form/m.test(sub.out) && !/heading/.test(sub.out), sub.out.slice(0, 80));
+  run('snapshot (전체로 복귀)', ['snapshot', ...S]);
   // a11y 트리에 픽스처의 버튼이 보여야 스냅샷이 "내용을 본" 것이다.
   check('snapshot 에 버튼이 보인다', snap.out.includes('click me'), snap.out.slice(0, 80));
   const snapVerbose = run('snapshot --verbose', ['snapshot', '--verbose', ...S]);
