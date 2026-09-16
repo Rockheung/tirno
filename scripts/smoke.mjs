@@ -379,6 +379,15 @@ function main() {
   run('fill (빈 값)', ['fill', '#text', '', ...S]);
   check('fill "" 가 실제로 지웠다', q("document.getElementById('text').value") === '',
     `실측: ${q("document.getElementById('text').value")}`);
+  // "Filled" 는 요소가 그 값을 들고 있을 때만이다 — readonly 는 키를 버리고 maxlength 는
+  // 뒤를 자르는데, 둘 다 keyboard.type 을 예외 없이 끝낸다 (#184).
+  const ro = run('fill readonly (→ exit≠0)', ['fill', '#ro', 'x', ...S], { expectFail: true });
+  check('readonly 거절이 이유를 말한다', /readonly/.test(ro.out + ro.err), (ro.out + ro.err).slice(0, 100));
+  check('readonly 값이 그대로다', q("document.getElementById('ro').value") === 'locked');
+  const cut = run('fill maxlength (→ exit≠0)', ['fill', '#short', 'hello', ...S], { expectFail: true });
+  check('maxlength 불일치가 expected/actual 을 말한다', /expected "hello" but element reads "hel"/.test(cut.out + cut.err),
+    (cut.out + cut.err).slice(0, 120));
+  run('fill maxlength --no-verify (알고도 진행)', ['fill', '#short', 'hello', '--no-verify', ...S], { expectMatch: /Filled/ });
   run('fill --batch', ['fill', '--batch', '[{"target":"#text","value":"a"},{"target":"#area","value":"b"}]', ...S]);
   check('fill --batch 가 두 필드 모두 채웠다',
     q("document.getElementById('text').value") === 'a' && q("document.getElementById('area').value") === 'b');

@@ -440,7 +440,7 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | 명령 | 설명 |
 |---|---|
 | `click <selector\|@N\|@vG:N> [--stale-ok]` | 클릭. 셀렉터는 shadow root 를 관통한다(아래). **낡은 ref 는 거부한다**(아래). **진짜 클릭처럼 포커스를 옮긴다**(아래) |
-| `fill <selector\|@N> <value>` | input clear + type |
+| `fill <selector\|@N> <value> [--no-verify]` | input clear + type. **타이핑 뒤 값을 되읽어 다르면 exit 1** — readonly·disabled 는 치기 전에 거절하고, maxlength 잘림·`preventDefault` 한 핸들러·타이핑 중 포커스 이동은 `expected … but element reads …` 에 원인을 붙여 낸다. 포맷터가 값을 고쳐 쓰는 입력(마스크·자동 하이픈)만 `--no-verify` |
 | `fill <selector\|@N> --value-stdin` | 값을 stdin 에서 읽는다. **인자로 준 값은 `ps` 와 셸 히스토리에 남으므로**, 비밀번호는 `pbpaste \| tirno fill 'input[type=password]' --value-stdin` 으로 넣는다. 끝 개행 하나는 뗀다(`echo` 대비). 성공 메시지에 값을 찍지 않는다 |
 | `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
 | `press <modifier>+<key>` | `Meta+v` · `Ctrl+a` · `Shift+Tab`. 수식키는 Alt·Ctrl·Meta·Shift(별칭 cmd/command/option 도 받는다) |
