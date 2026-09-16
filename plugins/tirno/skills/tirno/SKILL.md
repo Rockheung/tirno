@@ -113,7 +113,7 @@ tirno network --show <id>          # 그 요청의 헤더·본문
 ### 입력
 
 ```bash
-tirno click <selector|@N> [--dbl]      # selector 또는 @N ref (snapshot에서 부여된 번호)
+tirno click <selector|@N> [--dbl]      # 실제 마우스. 가려져 있으면 exit 1 + 가린 요소 이름. 뚫어야 하면 --synthetic
                                        # 진짜 클릭처럼 포커스를 옮긴다 — 앞 필드가 블러돼
                                        # change 가 나오고, 누른 요소가 포커스를 받아
                                        # 뒤따르는 type 이 거기로 들어간다

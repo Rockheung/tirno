@@ -3,7 +3,7 @@ import { intArg, stripTrailingNewline } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
-import { clickByRef, fillByRef, fillElement, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
+import { clickByRef, clickElement, fillByRef, fillElement, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
 import { checkRef } from '../cdp/ref-guard.js';
@@ -33,11 +33,12 @@ async function elemCenter(page: Page, selector: string): Promise<[number, number
 export function registerInputCommands(program: Command): void {
   program
     .command('click')
-    .description('Click by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots. Moves focus the way a real click does — the previously focused element is blurred (so a `fill` before this commits its `change`) and the clicked element takes focus (so a `type` after this lands in it)')
+    .description('Click by CSS selector, @ref, or "x,y" coordinates. A selector that misses in the light DOM is retried through open shadow roots. Sends a real mouse click at the element\'s centre, so focus moves the way a person\'s click moves it (a `fill` before this commits its `change`; a `type` after this lands in it). Fails with exit 1 if another element covers that point — a modal, a cookie banner, a sticky header — naming what is on top')
     .argument('<target>', 'CSS selector, @N ref, or "<x>,<y>" coordinates')
     .option('-s, --session <name>', 'Session name')
     .option('--dbl', 'Double click')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
+    .option('--synthetic', 'Dispatch element.click() instead of a mouse click. Ignores whatever covers the element and the viewport — for elements larger than the viewport, or hidden ones that still have handlers. No pointer/mouse events are fired')
     .action(async (target: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
@@ -64,15 +65,16 @@ export function registerInputCommands(program: Command): void {
           return;
         }
 
+        const clickOpts = { label: target, dbl: !!opts.dbl, synthetic: !!opts.synthetic };
         if (refStore.isRef(target)) {
           const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
-          await clickByRef(page, backendId, opts.dbl);
+          await clickByRef(page, backendId, clickOpts);
         } else {
-          await (await requireElement(page, target)).click(opts.dbl ? { count: 2 } : {});
+          await clickElement(page, await requireElement(page, target), clickOpts);
         }
 
         browser.disconnect();
-        success(`Clicked ${target}`);
+        success(`Clicked ${target}${opts.synthetic ? ' (synthetic)' : ''}`);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
