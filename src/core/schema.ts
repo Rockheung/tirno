@@ -162,6 +162,13 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'recipe run':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   'plan':         { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
   'apply':        { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
+  // ---- 목적별 관측
+  'forms':        { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'links':        { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'table':        { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'read':         { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'explain':      { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
+  'watch':        { effects: 'read_only', output_kind: 'stream', cardinality: 'unbounded' },
   'upload':       { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
 
   // ---- execution
