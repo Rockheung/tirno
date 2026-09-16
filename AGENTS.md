@@ -40,7 +40,8 @@ tirno expect url matches /dash within 5s      # 관측 — 틀리면 exit 1 + co
 tirno kill s1 --clean
 ```
 
-`ensure` 는 멱등이라 재시도가 "같은 줄을 다시 친다" 다. 이름이 여럿에 맞으면 후보를 대고
+`recipe begin <name>` 뒤의 행동 명령은 기록되고 `recipe run <name>` 이 그대로 다시 친다 — 같은
+사이트의 두 번째 방문은 판단 없이 레시피다. `ensure` 는 멱등이라 재시도가 "같은 줄을 다시 친다" 다. 이름이 여럿에 맞으면 후보를 대고
 **거절한다**(`ambiguous_target`) — `--exact` 나 `@N` 으로 좁힌다.
 
 ### 문법 함정 넷

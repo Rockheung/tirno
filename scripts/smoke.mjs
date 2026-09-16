@@ -411,6 +411,31 @@ function main() {
   run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });
   check('hover @ref 가 mouseover 를 쐈다', q("document.getElementById('status').textContent") === 'hovered',
     `실측: ${q("document.getElementById('status').textContent")} (ref @${linkRef})`);
+  // 레시피 (#211) — 기록 · 가림 · @N → role+이름 · 재생 · 실패 지점.
+  run('recipe begin', ['recipe', 'begin', 'smoke-flow', '--var', 'TIRNO_SMOKE_SECRET', ...S], { expectMatch: /recording recipe/ });
+  const secretEnv = { ...env, TIRNO_SMOKE_SECRET: 'sm0ke-secret' };
+  execFileSync('node', [TIRNO, 'ensure', 'textbox', 'type here', '=', 'sm0ke-secret', ...S], { env: secretEnv, encoding: 'utf8', stdio: 'pipe' });
+  const snapR = run('snapshot (recipe 용)', ['snapshot', ...S]);
+  const btnR = (/@(\d+)[^\n]*button "click me"/.exec(snapR.out) ?? [])[1];
+  run('click @N (기록 중)', ['click', `@${btnR ?? 0}`, ...S]);
+  run('expect text clicked (기록 중)', ['expect', 'text', 'clicked', ...S]);
+  run('click button "Nope" (실패 — 기록 안 됨)', ['click', 'button', 'Nope', ...S], { expectFail: true });
+  run('recipe end', ['recipe', 'end', ...S], { expectMatch: /saved recipe "smoke-flow" \(3 steps\)/ });
+  const shown = run('recipe show', ['recipe', 'show', 'smoke-flow']);
+  check('@N 이 role+이름으로 적혔다', /click button click me/.test(shown.out) && /\(was @\d+\)/.test(shown.out), shown.out.slice(0, 200));
+  check('비밀은 $VAR 로 적히고 값은 파일에 없다', /\$TIRNO_SMOKE_SECRET/.test(shown.out) && !/sm0ke-secret/.test(fs.readFileSync(path.join(ROOT, 'recipes', 'local', 'smoke-flow.json'), 'utf8')), shown.out.slice(0, 200));
+  q("document.getElementById('text').value=''; document.getElementById('status').textContent='idle'");
+  run('recipe run (변수 없이 → exit≠0)', ['recipe', 'run', 'smoke-flow', ...S], { expectFail: true, expectMatch: /recipe needs TIRNO_SMOKE_SECRET/ });
+  const ran = run('recipe run', ['recipe', 'run', 'smoke-flow', 'TIRNO_SMOKE_SECRET=sm0ke-secret', ...S], { expectMatch: /3 steps ok/ });
+  check('재생이 실제로 눌렀다', q("document.getElementById('status').textContent") === 'clicked');
+  check('재생 출력에도 비밀이 없다', !/sm0ke-secret/.test(ran.out), ran.out.slice(0, 200));
+  q("document.getElementById('btn').textContent='renamed'");
+  run('recipe run --no-start-url (바뀐 페이지 → 단계 2 실패)', ['recipe', 'run', 'smoke-flow', 'TIRNO_SMOKE_SECRET=x', '--no-start-url', ...S], { expectFail: true, expectMatch: /step 2 failed[\s\S]*--from 2/ });
+  q("document.getElementById('btn').textContent='click me'");
+  run('recipe run --from 2', ['recipe', 'run', 'smoke-flow', 'TIRNO_SMOKE_SECRET=x', '--from', '2', '--no-start-url', ...S], { expectMatch: /2 steps ok/ });
+  run('recipe ls', ['recipe', 'ls'], { expectMatch: /smoke-flow/ });
+  run('recipe rm', ['recipe', 'rm', 'smoke-flow'], { expectMatch: /removed/ });
+  q("document.getElementById('text').value=''; document.getElementById('status').textContent='idle'");
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);

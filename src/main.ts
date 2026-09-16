@@ -9,6 +9,7 @@ import { registerNetCommands } from './commands/net.js';
 import { registerInputCommands } from './commands/input.js';
 import { registerDeclareCommands } from './commands/declare.js';
 import { registerA11yCommands } from './commands/a11y.js';
+import { registerRecipeCommands, recordIfRecording } from './commands/recipe.js';
 import { registerEvalCommand } from './commands/eval.js';
 import { registerEmulateCommand } from './commands/emulate.js';
 import { registerPermissionCommands } from './commands/permissions.js';
@@ -46,6 +47,7 @@ registerNetCommands(program);
 registerInputCommands(program);
 registerDeclareCommands(program);
 registerA11yCommands(program);
+registerRecipeCommands(program);
 registerEvalCommand(program);
 registerEmulateCommand(program);
 registerPermissionCommands(program);
@@ -69,6 +71,12 @@ registerUpdateCommand(program);
 // 파서가 두 벌 필요하다 (#185)
 program.hook('preAction', (_thisCommand, actionCommand) => {
   setJsonOutput((actionCommand.opts() as { json?: boolean }).json);
+});
+
+// 세션이 레시피를 기록 중이면 **성공한** 행동 명령을 적는다 — postAction 은 액션이 정상
+// 반환했을 때만 돈다(실패는 fail() 이 exit 1 로 끝내므로 여기 안 온다) (#211)
+program.hook('postAction', (_thisCommand, actionCommand) => {
+  recordIfRecording(actionCommand.name(), process.argv.slice(2), (actionCommand.opts() as { session?: string }).session);
 });
 
 program.parseAsync(process.argv).catch(e => fail(e));
