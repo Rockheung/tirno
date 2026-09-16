@@ -487,6 +487,13 @@ function main() {
   run('click 파괴적 이름 (restart 뒤에도 거부)', ['click', 'button', 'Delete account', '-s', 'cd'], { expectFail: true, expectMatch: /looks destructive/ });
   run('kill cd', ['kill', 'cd', '--clean']);
   run('new --allow example.com', ['new', 'al', 'https://example.com', '--ephemeral', '--allow', 'example.com', ...LAUNCH]);
+  const dxo = run('drift (확장 축 ok)', ['drift', 'al']);
+  check('drift 가 확장 축을 낸다', /extensions\s+✓/.test(dxo.out), dxo.out.slice(0, 120));
+  // 확장을 손으로 내리면 규칙은 대장에 있는데 브라우저엔 없다 — drift 가 그것을 잡는다 (#192)
+  const targets = run('cdp Target.getTargets', ['cdp', '--browser', 'Target.getTargets', '-s', 'al']);
+  const extId = (/chrome-extension:\/\/([a-z]+)\//.exec(targets.out) ?? [])[1];
+  if (extId) run('cdp Extensions.uninstall', ['cdp', '--browser', 'Extensions.uninstall', JSON.stringify({ id: extId }), '-s', 'al']);
+  run('drift (확장 축 DRIFT → exit≠0)', ['drift', 'al'], { expectFail: true, expectMatch: /extensions\s+✗ DRIFT/ });
   run('nav 밖 (CLI 층 → policy_denied)', ['nav', 'https://www.iana.org/', '-s', 'al'], { expectFail: true, expectMatch: /outside --allow/ });
   check('fetch 밖 (브라우저 층, dNR)', /blocked/.test(q('fetch("https://www.iana.org/").then(r=>"ok "+r.status).catch(e=>"blocked: "+e.message)', 'al') ?? ''), '');
   check('fetch 안 (허용)', /ok 200/.test(q('fetch("https://example.com/").then(r=>"ok "+r.status).catch(e=>"blocked")', 'al') ?? ''), '');
