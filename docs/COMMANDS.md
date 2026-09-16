@@ -168,7 +168,7 @@ tirno drift d1 -- --host-resolver-rules="…"   # 지금 원하는 flags vs 실�
 사실상 0 이다 — 포트 경합 없고, 프로필이 영속이라 로그인이 유지되고, MCP 는 다음 툴
 호출에서 알아서 새 Chrome 에 붙는다.
 
-puppeteer·Chrome 이 자기 기본 인자를 수십 개 붙이므로 **"선언에 없는데 실행 중"은 보고하지
+tirno 의 기준 인자(`cdp/launch.ts` `BASELINE_ARGS`)와 Chrome 자신이 수십 개를 더 붙이므로 **"선언에 없는데 실행 중"은 보고하지
 않는다** — 정상 상태를 defect 로 올리면 의미 있는 신호가 묻힌다. 전체 커맨드라인은 `--all`.
 
 `gc` 는 이 판정 위에서만 움직인다. **프로필 삭제는 로그인 세션 소실**이므로 `--older-than`
@@ -180,7 +180,7 @@ puppeteer·Chrome 이 자기 기본 인자를 수십 개 붙이므로 **"선언�
 
 세션을 만들 때 프로필의 `Default/Preferences` 에 `translate.enabled = false` 를 심는다.
 
-`--disable-features=Translate` 로는 부족하다 — puppeteer 가 이미 그것을 넣고 있는데도 번역
+`--disable-features=Translate` 로는 부족하다 — 기준 인자에 그것이 있는데도 번역
 UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 있었다(실측). 번역 버블은
 페이지 위에 겹쳐 뜨고 레이아웃을 밀어내므로, 좌표로 클릭하고 스크린샷을 비교하는 도구에서는
 관측 대상이 아니라 잡음이다 — 뷰포트를 1920x1080 으로 고정하는 것과 같은 이유다.
@@ -188,7 +188,7 @@ UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 �
 **이미 값이 있으면 건드리지 않는다.** 그 프로필에서 켰다면 그쪽이 나중 의사다.
 #### 확장 — `--extensions` 없이는 방법이 없다
 
-puppeteer 가 `--disable-extensions` 를 기본으로 넣고, **그것은 뒤에서 되돌릴 수 없다.**
+기준 인자에 `--disable-extensions` 가 있고, **그것은 뒤에서 되돌릴 수 없다.**
 `--load-extension` 을 뒤에 붙여도 상쇄되지 않고, `Extensions.loadUnpacked` 는 확장 id 를
 돌려주면서 실제로는 아무것도 활성화하지 않는다 — 확장 타깃이 안 생기고 content script 도
 안 돈다. **성공한 것처럼 보이는 응답이 돌아오는 것**이 이 실패의 고약한 점이라, 기동 때

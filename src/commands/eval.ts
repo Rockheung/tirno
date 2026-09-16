@@ -93,7 +93,7 @@ export function registerEvalCommand(program: Command): void {
         // returned. A bare `{ __error }` sentinel cannot be — a page is free to
         // return that shape — and it left the caller reading exit 0 either way.
         //
-        // The callback is async and the expression is awaited: puppeteer only
+        // The callback is async and the expression is awaited: Runtime.evaluate only
         // awaits a promise it gets at the top level, so `{ value: <promise> }`
         // would serialize to `{}` and every async expression would lose its
         // result. Rejections land in the same catch as synchronous throws.

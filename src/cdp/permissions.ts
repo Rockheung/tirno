@@ -1,4 +1,4 @@
-import type { Browser, Permission } from 'puppeteer-core';
+import type { Browser } from './browser.js';
 
 /**
  * A CDP permission grant lives on the *connection*, not the profile. Chrome
@@ -10,7 +10,7 @@ import type { Browser, Permission } from 'puppeteer-core';
  * session ledger and re-apply it on each connect (see chrome-connector).
  */
 
-/** What Chrome accepts, in puppeteer's spelling. */
+/** Web-facing permission names; cdp/browser.ts maps them to Chrome's protocol spelling. */
 export const PERMISSION_NAMES = [
   'accelerometer', 'ambient-light-sensor', 'background-sync', 'camera',
   'clipboard-read', 'clipboard-sanitized-write', 'clipboard-write',
@@ -45,14 +45,14 @@ export function normalizeOrigin(input: string): string {
  * over origins: a name Chrome rejects halfway through would leave some origins
  * granted and the rest not, with the ledger claiming all of them.
  */
-export function validatePermissions(names: string[]): Permission[] {
+export function validatePermissions(names: string[]): string[] {
   if (names.length === 0) throw new Error('No permissions given');
   const known = new Set<string>(PERMISSION_NAMES);
   const unknown = names.filter(n => !known.has(n));
   if (unknown.length > 0) {
     throw new Error(`Unknown permission(s): ${unknown.join(', ')}\nKnown: ${PERMISSION_NAMES.join(', ')}`);
   }
-  return [...new Set(names)] as Permission[];
+  return [...new Set(names)] as string[];
 }
 
 /**
@@ -64,6 +64,6 @@ export async function applyPermissions(browser: Browser, map: PermissionMap): Pr
   const ctx = browser.defaultBrowserContext();
   await ctx.clearPermissionOverrides();
   for (const [origin, perms] of Object.entries(map)) {
-    await ctx.overridePermissions(origin, perms as Permission[]);
+    await ctx.overridePermissions(origin, perms as string[]);
   }
 }

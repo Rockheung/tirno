@@ -66,7 +66,7 @@ tirno kill s1 --clean
 - `src/commands/` — 파일명은 **카테고리이지 명령 이름이 아니다.** `inspect.ts` 가
   screenshot/snapshot/console/network 를 등록한다
 - `src/core/` — 세션 저장, chrome 실행/연결, 소유권 판정, 앵커, 경로 루트(`paths.ts`)
-- `src/cdp/` — 페이지 리졸버, emulation, dom-actions
+- `src/cdp/` — CDP 클라이언트 자체(`client`·`launch`·`browser`·`page`·`input`), 그 위에 페이지 리졸버, emulation, dom-actions
 - `src/core/schema.ts` — 새 명령을 `SEMANTICS` 에 분류 없이 추가하면 `test/schema.test.ts`
   가 깨진다. 그게 이 표가 안 낡는 이유다
 - `.claude/skills/` — 스킬 원본. `plugins/tirno/skills/<이름>/SKILL.md` 는 사본이고,

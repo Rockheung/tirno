@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Browser, Page } from 'puppeteer-core';
+import type { Browser } from '../src/cdp/browser.js';
+import type { Page } from '../src/cdp/page.js';
 import { waitForBootPage, blankAnchorHint } from '../src/cdp/page-resolver.js';
 import { bootUrlOf } from '../src/core/session-store.js';
 import type { SessionMetadata } from '../src/core/session-store.js';

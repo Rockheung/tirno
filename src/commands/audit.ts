@@ -36,7 +36,7 @@ export function registerAuditCommand(program: Command): void {
           url = urlArg;
         } else {
           // Hit the chrome /json endpoint to read current URL — avoids opening
-          // a puppeteer connection just to read href.
+          // a CDP connection just to read href.
           //
           // Pick the same page the rest of the CLI acts on: the LAST content
           // target, skipping about:blank. Taking the first one audited a blank

@@ -47,7 +47,7 @@ export function registerNavCommands(program: Command): void {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
         if (opts.hard) {
-          // puppeteer's reload has no cache switch, so the CDP call goes direct.
+          // Page.reload with ignoreCache, straight through the session.
           // Navigation is awaited separately because Page.reload resolves on
           // dispatch, not on load.
           const cdp = await page.createCDPSession();

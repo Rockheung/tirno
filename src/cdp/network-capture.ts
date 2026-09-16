@@ -1,4 +1,5 @@
-import type { CDPSession, Page } from 'puppeteer-core';
+import type { Page } from './page.js';
+import type { CdpSession } from './client.js';
 
 /**
  * 한 창(window) 동안의 네트워크 요청.
@@ -43,7 +44,7 @@ interface RawTiming {
  * 페이지가 스스로 내는 요청만 잡힌다 — 이미 받아둔 것은 `net ls` 쪽이다.
  */
 export async function captureRequests(
-  cdp: CDPSession,
+  cdp: CdpSession,
   page: Page,
   opts: { reload: boolean; ms: number },
 ): Promise<CapturedRequest[]> {

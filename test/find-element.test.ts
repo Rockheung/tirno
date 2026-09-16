@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Page } from 'puppeteer-core';
+import type { Page } from '../src/cdp/page.js';
 import { findElement, requireElement, asCoords } from '../src/cdp/dom-actions.js';
 
 // shadow root 안의 요소는 `document.querySelector` 로 안 잡힌다. puppeteer 의

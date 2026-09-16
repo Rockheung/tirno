@@ -1,4 +1,5 @@
-import type { Browser, Page } from 'puppeteer-core';
+import type { Page } from './page.js';
+import type { Browser } from './browser.js';
 
 export async function getActivePage(browser: Browser): Promise<Page> {
   const pages = await browser.pages();
@@ -17,10 +18,11 @@ export async function getActivePage(browser: Browser): Promise<Page> {
 /**
  * The same page as getActivePage, brought to the front first.
  *
- * puppeteer's mouse-driven actions (`page.click`, `page.hover`) wait for the
- * element to be visible and settled, and a backgrounded tab never gets there —
- * the command hangs forever with no error at all. Opening a second tab is
- * enough to trigger it, because the new tab takes the foreground.
+ * A real mouse event lands in the tab that is in front. Under puppeteer, mouse
+ * actions also waited for the element to be visible and settled, and a
+ * backgrounded tab never got there — the command hung forever with no error at
+ * all. Our Mouse does not wait, but the events still have to reach the tab the
+ * caller means, so the tab comes forward first.
  *
  * Only the commands that drive the mouse need this. The ones that go straight
  * through CDP — eval, screenshot, snapshot, type, scroll, upload — work on a

@@ -4,7 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import puppeteer from 'puppeteer-core';
+import { Browser } from '../cdp/browser.js';
 
 interface FrameEntry { n: number; ts: string; file: string }
 
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', finalize);
   process.on('SIGINT', finalize);
 
-  const browser = await puppeteer.connect({ browserWSEndpoint: args.ws });
+  const browser = await Browser.connect(args.ws);
   const pages = await browser.pages();
   const page = pages.find(p => !p.url().startsWith('about:')) ?? pages[0];
   if (!page) {

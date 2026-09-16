@@ -4,7 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as recStore from '../core/record-store.js';
 import { success, info, error } from '../output/formatter.js';
-import type { Page } from 'puppeteer-core';
+import type { Page } from '../cdp/page.js';
 
 interface DispatchMouseParams {
   type: 'mousePressed' | 'mouseReleased' | 'mouseMoved';

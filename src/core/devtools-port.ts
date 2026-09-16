@@ -26,7 +26,7 @@ export interface ActivePort {
   port: number;
   /** ws path including the browser UUID, e.g. `/devtools/browser/<uuid>` */
   wsPath: string;
-  /** the endpoint MCP/puppeteer connects to */
+  /** the endpoint MCP/tirno connects to */
   wsEndpoint: string;
 }
 
@@ -60,7 +60,7 @@ export function readActivePort(userDataDir: string): ActivePort | null {
 
 /**
  * Chrome creates the file while starting its devtools http server, so it is
- * normally there by the time puppeteer resolves. Poll anyway: the write is not
+ * normally there within a few hundred ms of spawn. Poll anyway: the write is not
  * ordered against anything we control.
  */
 export async function waitForActivePort(

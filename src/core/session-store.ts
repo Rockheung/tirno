@@ -70,7 +70,7 @@ export interface SessionMetadata {
    */
   headerRules?: import('./header-ext.js').HeaderRule[];
   /**
-   * 이 세션이 `--extensions` 로 떴는가. puppeteer 의 `--disable-extensions` 는
+   * 이 세션이 `--extensions` 로 떴는가. 기준 인자의 `--disable-extensions` 는
    * 기동 이후에 취소할 수 없어서(chrome-launcher 참조), 확장이 필요한 명령은
    * 붙어 보기 전에 이 값으로 판정하고 재기동을 안내해야 한다.
    */

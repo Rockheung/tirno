@@ -4,7 +4,9 @@
 
 tirno — Multi-session browser automation CLI on raw CDP.
 여러 Chrome 인스턴스를 세션으로 관리하고, CDP 명령을 CLI로 실행한다.
-puppeteer-core 기반.
+**puppeteer 가 없다** (2026-09-16, #182). 기동(`cdp/launch.ts`) · 전송(`cdp/client.ts`) ·
+브라우저/페이지(`cdp/browser.ts` · `cdp/page.ts`) · 입력(`cdp/input.ts`) 전부 tirno 것이고,
+런타임 의존은 WebSocket 도 포함해 0 이다. 프로토콜 타입은 `devtools-protocol`(타입 전용).
 
 ## tirno 가치 흐름 (불변)
 
@@ -72,7 +74,9 @@ node bin/tirno.js kill test --clean
   그것이 곧 새 전제조건이다)
 - `src/commands/` — CLI 명령. 파일명은 카테고리이지 명령 이름이 아니다 (`inspect.ts` 는
   screenshot/snapshot/console/network 를 등록한다 — `tirno inspect` 라는 명령은 없다)
-- `src/cdp/` — 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash,
+- `src/cdp/` — **CDP 클라이언트 자체**: `client`(WebSocket 전송·세션 다중화) · `launch`(기동, 기준
+  인자) · `browser` · `page`(evaluate·네비게이션 대기·스크린샷·에뮬레이션) · `input`(Keyboard/
+  Mouse, `us-keyboard-layout` 표) · `known-devices`. 그 위에 페이지 리졸버, emulation, dom-actions, element-info, iou, screenshot-hash,
   `resources`(렌더러가 들고 있는 응답), `network-capture`(한 창의 요청 — `network` 와
   `net export` 가 공유), `ref-guard`(`@N` 이 아직 그때 그것인가)
 - `src/storage/` — visual cache / trail 저장소 (file · lance 백엔드)
@@ -84,7 +88,8 @@ node bin/tirno.js kill test --clean
 
 ## 의존성
 
-- puppeteer-core: Chrome CDP 클라이언트
+- (없음) puppeteer-core — 2026-09-16 에 걷어냈다(#182). `tirno audit` 이 쓰는 lighthouse 가 자기 의존으로 여전히 들고 있으므로 `node_modules` 에는 남아 있지만 tirno 코드가 import 하는 자리는 0 이다
+- devtools-protocol (devDependency, 타입 전용): `cdp.send('Page.navigate', …)` 의 파라미터·응답 타입
 - commander: CLI 프레임워크
 - chalk: 터미널 컬러
 - pixelmatch + pngjs: 스크린샷 비교

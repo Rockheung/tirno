@@ -7,7 +7,7 @@ import { clickByRef, fillByRef, hoverByRef, requireElement, asCoords } from '../
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
 import { checkRef } from '../cdp/ref-guard.js';
-import type { Page } from 'puppeteer-core';
+import type { Page } from '../cdp/page.js';
 
 /**
  * 파이프로 들어온 값 전부.
@@ -190,7 +190,7 @@ export function registerInputCommands(program: Command): void {
         const page = await getActivePage(browser);
 
         if (combo.modifiers.length === 0) {
-          await page.keyboard.press(key as import('puppeteer-core').KeyInput);
+          await page.keyboard.press(key as string);
         } else {
           const command = editingCommandFor(combo);
           if (command) {
@@ -212,12 +212,12 @@ export function registerInputCommands(program: Command): void {
               await cdp.detach();
             }
           } else {
-            // 편집 명령이 아닌 조합은 puppeteer 가 자기 키보드 표로 눌러 준다 —
+            // 편집 명령이 아닌 조합은 Keyboard 가 us-keyboard-layout 표로 눌러 준다 —
             // 여기서 전체 표를 다시 들 이유가 없다.
-            const mods = combo.modifiers as import('puppeteer-core').KeyInput[];
+            const mods = combo.modifiers as string[];
             for (const m of mods) await page.keyboard.down(m);
             try {
-              await page.keyboard.press(combo.key as import('puppeteer-core').KeyInput);
+              await page.keyboard.press(combo.key as string);
             } finally {
               for (const m of [...mods].reverse()) await page.keyboard.up(m);
             }
@@ -445,7 +445,7 @@ export function registerInputCommands(program: Command): void {
         const input = await page.$(selector);
         if (!input) throw new Error(`Element not found: ${selector}`);
 
-        await (input as import('puppeteer-core').ElementHandle<HTMLInputElement>).uploadFile(...files);
+        await input.uploadFile(...files);
 
         browser.disconnect();
         success(`Uploaded ${files.length} file(s) to ${selector}`);
@@ -465,7 +465,7 @@ export function registerInputCommands(program: Command): void {
  * 알고도 진행하겠다는 선언이다(라벨이 정상적으로 바뀌는 카운터 버튼 같은 자리).
  */
 async function refToBackendId(
-  page: import('puppeteer-core').Page,
+  page: Page,
   session: string,
   target: string,
   staleOk: boolean,

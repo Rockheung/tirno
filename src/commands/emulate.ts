@@ -3,7 +3,7 @@ import { floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
-import { KnownDevices } from 'puppeteer-core';
+import { KNOWN_DEVICES } from '../cdp/known-devices.js';
 import * as store from '../core/session-store.js';
 import type { EmulationState } from '../core/session-store.js';
 import { applyEmulation, clearEmulation, getDevice, getNetworkPreset, networkPresetNames } from '../cdp/emulation.js';
@@ -26,7 +26,7 @@ export function registerEmulateCommand(program: Command): void {
     .option('--list-devices', 'List available device presets')
     .action(async (opts) => {
       if (opts.listDevices) {
-        const names = Object.keys(KnownDevices);
+        const names = Object.keys(KNOWN_DEVICES);
         names.forEach(n => console.log(n));
         return;
       }

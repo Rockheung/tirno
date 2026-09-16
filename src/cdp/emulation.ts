@@ -1,5 +1,5 @@
-import type { Page } from 'puppeteer-core';
-import { KnownDevices } from 'puppeteer-core';
+import type { Page } from './page.js';
+import { KNOWN_DEVICES } from './known-devices.js';
 import type { EmulationState } from '../core/session-store.js';
 
 const NETWORK_PRESETS: Record<string, { download: number; upload: number; latency: number }> = {
@@ -18,7 +18,7 @@ export function networkPresetNames(): string[] {
 }
 
 export function getDevice(name: string) {
-  return KnownDevices[name as keyof typeof KnownDevices];
+  return KNOWN_DEVICES[name as keyof typeof KNOWN_DEVICES];
 }
 
 export async function applyEmulation(page: Page, emu: EmulationState): Promise<void> {
@@ -38,7 +38,7 @@ export async function applyEmulation(page: Page, emu: EmulationState): Promise<v
     const device = getDevice(emu.device);
     if (device) {
       // page.emulate writes setDeviceMetrics + setUserAgent + setTouchEmulation
-      // through puppeteer's main CDP session, so the overrides persist for the
+      // through the page's main CDP session, so the overrides persist for the
       // page wrapper's lifetime instead of being torn down with a temporary session.
       await page.emulate(device);
       const targetDsf = emu.viewport?.deviceScaleFactor;
@@ -67,7 +67,7 @@ export async function applyEmulation(page: Page, emu: EmulationState): Promise<v
     });
   }
 
-  // UA / color-scheme / geolocation must go through puppeteer's main page session
+  // UA / color-scheme / geolocation must go through the page's main session
   // — page.createCDPSession() overrides are released on detach, so they don't
   // persist after `tirno emulate` exits.
   if (emu.userAgent !== undefined) {
@@ -126,7 +126,7 @@ export async function clearEmulation(page: Page): Promise<void> {
   await page.emulateNetworkConditions(null);
   await page.emulateCPUThrottling(null);
 
-  // Geolocation is the one override with no page-level clear in puppeteer, so
+  // Geolocation is the one override with no page-level clear method, so
   // it still needs a raw send.
   const cdp = await page.createCDPSession();
   try {

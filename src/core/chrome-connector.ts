@@ -1,4 +1,5 @@
-import puppeteer, { type Browser } from 'puppeteer-core';
+import { Browser } from '../cdp/browser.js';
+import type { Page } from '../cdp/page.js';
 import * as store from './session-store.js';
 import { inspectSession } from './inventory.js';
 import { ChromeNotRunning, NoActiveSession, SessionNotOwned } from '../util/errors.js';
@@ -69,10 +70,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // inspectSession already resolved DevToolsActivePort (live) over
   // meta.wsEndpoint (a launch-time snapshot that goes stale on restart);
   // legacy fixed-port sessions write no such file and fall back to meta.
-  const browser = await puppeteer.connect({
-    browserWSEndpoint: inv.wsEndpoint,
-    defaultViewport: null,
-  });
+  const browser = await Browser.connect(inv.wsEndpoint);
 
   // Auto-dismiss any JS dialog (alert/confirm/prompt) and neutralize
   // beforeunload handlers on every page so navigation/clicks don't silently
@@ -220,7 +218,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
     }
   `;
 
-  const attachToPage = async (p: import('puppeteer-core').Page): Promise<void> => {
+  const attachToPage = async (p: Page): Promise<void> => {
     try {
       p.removeAllListeners('dialog');
       p.on('dialog', (d) => { d.accept().catch(() => {}); });
@@ -264,7 +262,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // 페이지별이라 열린 페이지 전부에 건다.
   if (prepare && meta.extraHeaders && Object.keys(meta.extraHeaders).length > 0) {
     try {
-      // puppeteer page API 로 건다 — 직접 만든 CDP 세션에 걸고 detach 하면
+      // 페이지의 메인 세션에 건다 — 직접 만든 CDP 세션에 걸고 detach 하면
       // 오버라이드가 그 세션과 함께 사라진다(실측). page.setExtraHTTPHeaders 는
       // 페이지의 메인 세션에 걸어 이 연결 동안 유지된다.
       for (const p of await browser.pages()) await p.setExtraHTTPHeaders(meta.extraHeaders);

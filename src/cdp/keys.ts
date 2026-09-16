@@ -81,7 +81,7 @@ export function editingCommandFor(combo: KeyCombo): string | null {
  * 편집 명령에 쓰이는 키의 `windowsVirtualKeyCode`.
  *
  * 전체 키보드 표를 들지 않는 이유는 여기 오는 키가 여섯 개뿐이기 때문이다.
- * 나머지 조합은 puppeteer 가 자기 표로 눌러 준다.
+ * 나머지 조합은 `cdp/input.ts` 의 Keyboard 가 `us-keyboard-layout` 표로 눌러 준다.
  */
 export function virtualKeyCode(key: string): number {
   return key.toUpperCase().charCodeAt(0);

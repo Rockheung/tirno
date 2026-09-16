@@ -1,4 +1,4 @@
-import type { CDPSession } from 'puppeteer-core';
+import type { CdpSession } from './client.js';
 
 export interface ElementInfo {
   selector?: string;
@@ -48,7 +48,7 @@ export function chooseSelector(attrs: ElementAttrs | null): string | null {
   return null;
 }
 
-export async function getElementInfo(cdp: CDPSession, backendNodeId: number): Promise<ElementInfo> {
+export async function getElementInfo(cdp: CdpSession, backendNodeId: number): Promise<ElementInfo> {
   const info: ElementInfo = {};
 
   // bbox via DOM.getBoxModel
