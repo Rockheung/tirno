@@ -11,7 +11,8 @@ import { judgeFreshness, describeFreshness, formatAge, DEFAULT_STALE_THRESHOLD, 
 import { resolveWaypoints, summarize, type Resolution } from '../cdp/cache-resolve.js';
 import * as refStore from '../core/ref-store.js';
 import type { RefStore } from '../core/ref-store.js';
-import type { Browser, Page } from 'puppeteer-core';
+import type { Browser } from '../cdp/browser.js';
+import type { Page } from '../cdp/page.js';
 
 /** 세션이 그 페이지에 붙어 있을 때만 있는 것 — 비교도 재해결도 이 위에서 한다 */
 interface LivePage { browser: Browser; page: Page; sessionName: string }

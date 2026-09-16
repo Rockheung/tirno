@@ -9,7 +9,7 @@
  * 하나라도 못 찾으면 **못 찾았다고 적는다.** 절반만 채우고 조용히 넘어가면 호출자는 나중에
  * `Unknown ref` 로 안다 — 지금 아는 것이 낫다.
  */
-import type { CDPSession } from 'puppeteer-core';
+import type { CdpSession } from './client.js';
 import type { Waypoint } from '../core/visual-cache.js';
 import type { Bbox } from './iou.js';
 
@@ -29,7 +29,7 @@ const BBOX_MIN_IOU = 0.5;
 
 interface AXHit { backendDOMNodeId?: number; ignored?: boolean; role?: { value?: string } }
 
-async function byDom(cdp: CDPSession, rootNodeId: number, selector: string): Promise<number | null> {
+async function byDom(cdp: CdpSession, rootNodeId: number, selector: string): Promise<number | null> {
   try {
     const { nodeId } = await cdp.send('DOM.querySelector', { nodeId: rootNodeId, selector }) as { nodeId: number };
     if (!nodeId) return null;
@@ -44,7 +44,7 @@ async function byDom(cdp: CDPSession, rootNodeId: number, selector: string): Pro
  * Chrome 자신의 이름 계산으로 찾는다 — 캐시가 저장한 role·name 이 바로 그 계산의 결과라
  * 손으로 흉내 낸 매칭(replay 의 것)보다 잘 맞는다. 여러 개면 첫 것을 쓰고 몇 개였는지 적는다.
  */
-async function byA11y(cdp: CDPSession, rootBackendId: number, role: string, name: string): Promise<{ id: number; note: string } | null> {
+async function byA11y(cdp: CdpSession, rootBackendId: number, role: string, name: string): Promise<{ id: number; note: string } | null> {
   if (!name) return null;                       // 이름 없는 role 은 페이지에 수십 개다
   try {
     const { nodes } = await cdp.send('Accessibility.queryAXTree', {
@@ -81,7 +81,7 @@ const BEST_ANCESTOR_AT = `function(x, y, sx, sy, sw, sh){
   return best && bestIou > 0 ? { el: best, iou: bestIou } : null;
 }`;
 
-async function byBbox(cdp: CDPSession, stored: Bbox): Promise<{ id: number; note: string } | null> {
+async function byBbox(cdp: CdpSession, stored: Bbox): Promise<{ id: number; note: string } | null> {
   try {
     const { result } = await cdp.send('Runtime.evaluate', {
       expression: `(${BEST_ANCESTOR_AT})(${Math.round(stored.x + stored.w / 2)}, ${Math.round(stored.y + stored.h / 2)}, ${stored.x}, ${stored.y}, ${stored.w}, ${stored.h})`,
@@ -100,7 +100,7 @@ async function byBbox(cdp: CDPSession, stored: Bbox): Promise<{ id: number; note
   }
 }
 
-export async function resolveWaypoints(cdp: CDPSession, waypoints: Waypoint[]): Promise<Resolution[]> {
+export async function resolveWaypoints(cdp: CdpSession, waypoints: Waypoint[]): Promise<Resolution[]> {
   const { root } = await cdp.send('DOM.getDocument', { depth: 0 }) as { root: { nodeId: number; backendNodeId: number } };
   const out: Resolution[] = [];
   for (const w of waypoints) {

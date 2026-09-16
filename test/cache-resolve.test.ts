@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { CDPSession } from 'puppeteer-core';
+import type { CdpSession } from '../src/cdp/client.js';
 import { resolveWaypoints, summarize } from '../src/cdp/cache-resolve.js';
 import type { Waypoint } from '../src/core/visual-cache.js';
 
@@ -14,7 +14,7 @@ interface Script {
   bboxHit?: { backendId: number; iou: number } | null;
 }
 
-function fakeCdp(script: Script): { cdp: CDPSession; calls: string[] } {
+function fakeCdp(script: Script): { cdp: CdpSession; calls: string[] } {
   const calls: string[] = [];
   const cdp = {
     send: async (method: string, params: Record<string, unknown> = {}) => {
@@ -36,7 +36,7 @@ function fakeCdp(script: Script): { cdp: CDPSession; calls: string[] } {
         default: throw new Error(`unexpected ${method}`);
       }
     },
-  } as unknown as CDPSession;
+  } as unknown as CdpSession;
   return { cdp, calls };
 }
 
