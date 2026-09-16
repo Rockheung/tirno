@@ -1,5 +1,6 @@
 import type { Page, ElementHandle } from './page.js';
 import type { CdpSession } from './client.js';
+import { READ_FIELD_STATE, refuseBeforeTyping, describeMismatch, type FieldState } from './fill-verify.js';
 
 export interface ResolvedRef {
   objectId: string;
@@ -64,25 +65,82 @@ export async function clickByRef(page: Page, backendNodeId: number, dbl = false)
   }
 }
 
-export async function fillByRef(page: Page, backendNodeId: number, value: string): Promise<void> {
+export interface FillOptions {
+  /** 출력에 쓸 대상 표기 — `@39` 또는 셀렉터 */
+  label: string;
+  /** 타이핑 뒤 값을 되읽어 다르면 던진다. 기본 켬 (#184) */
+  verify?: boolean;
+  /** `--value-stdin` — 불일치 메시지에 값 대신 길이만 싣는다 */
+  hideValue?: boolean;
+}
+
+/** 요소의 현재 상태를 읽는다. `objectId` 는 같은 세션에서 얻은 것이어야 한다. */
+async function readFieldState(cdp: CdpSession, objectId: string): Promise<FieldState> {
+  const res = await cdp.send('Runtime.callFunctionOn', {
+    objectId, functionDeclaration: READ_FIELD_STATE, returnByValue: true,
+  }) as { result: { value: FieldState } };
+  return res.result.value;
+}
+
+/**
+ * 채우기 전후로 요소를 읽는다 — 전에는 키가 버려질 요소(disabled·readonly)를 거절하고,
+ * 후에는 값이 실제로 들어갔는지 본다. 어느 쪽이든 어긋나면 던진다: `keyboard.type` 은
+ * 그 넷(readonly · preventDefault · maxlength · 포커스 이동) 전부를 예외 없이 끝내므로,
+ * 여기서 안 보면 "Filled" 가 거짓이 된다 (#184).
+ */
+export async function fillByRef(
+  page: Page, backendNodeId: number, value: string, opts: FillOptions = { label: '@ref' },
+): Promise<void> {
+  const verify = opts.verify !== false;
   const { objectId, cdp } = await resolveBackendNode(page, backendNodeId);
   try {
+    if (verify) {
+      const refusal = refuseBeforeTyping(opts.label, await readFieldState(cdp, objectId));
+      if (refusal) throw new Error(refusal);
+    }
     await cdp.send('Runtime.callFunctionOn', {
       objectId,
       functionDeclaration: 'function(){ this.scrollIntoView({block:"center"}); this.focus(); if (typeof this.select==="function") this.select(); else this.value=""; }',
       awaitPromise: false,
     });
+    // type via the page keyboard so we generate trusted input events
+    if (value === '') {
+      // Nothing to type, so the selection would just sit there and the old text
+      // would survive a command that reported "Filled".
+      await page.keyboard.press('Backspace');
+    } else {
+      await page.keyboard.type(value);
+    }
+    if (verify) {
+      const mismatch = describeMismatch(opts.label, value, await readFieldState(cdp, objectId), opts.hideValue);
+      if (mismatch) throw new Error(mismatch);
+    }
   } finally {
     await cdp.detach();
   }
-  // type via the page keyboard so we generate trusted input events
-  if (value === '') {
-    // Nothing to type, so the selection would just sit there and the old text
-    // would survive a command that reported "Filled".
-    await page.keyboard.press('Backspace');
-    return;
+}
+
+/**
+ * 셀렉터 경로의 fill. ref 경로와 같은 계약 — 전에 거절, 후에 되읽기. 타이핑은 트리플
+ * 클릭으로 전체 선택한 뒤 `type` 한다 (진짜 마우스·키보드).
+ */
+export async function fillElement(
+  page: Page, el: ElementHandle, value: string, opts: FillOptions,
+): Promise<void> {
+  const verify = opts.verify !== false;
+  // puppeteer 는 요소를 첫 인자로 넘긴다 — `this` 가 아니다.
+  const read = () => el.evaluate(new Function('el', `return (${READ_FIELD_STATE}).call(el)`) as never) as Promise<FieldState>;
+  if (verify) {
+    const refusal = refuseBeforeTyping(opts.label, await read());
+    if (refusal) throw new Error(refusal);
   }
-  await page.keyboard.type(value);
+  await el.click({ count: 3 });
+  if (value === '') await page.keyboard.press('Backspace');
+  else await el.type(value);
+  if (verify) {
+    const mismatch = describeMismatch(opts.label, value, await read(), opts.hideValue);
+    if (mismatch) throw new Error(mismatch);
+  }
 }
 
 /** Hover by ref — moves the real pointer to the node's centre, so :hover and

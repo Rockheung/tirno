@@ -118,7 +118,7 @@ tirno click <selector|@N> [--dbl]      # selector 또는 @N ref (snapshot에서 
                                        # change 가 나오고, 누른 요소가 포커스를 받아
                                        # 뒤따르는 type 이 거기로 들어간다
                                         # selector 는 열린 shadow root 를 관통한다
-tirno fill <selector|@N> <value>
+tirno fill <selector|@N> <value>   # 되읽어서 값이 다르면 exit 1 (readonly·maxlength·preventDefault·포커스 이동). 포맷터 입력만 --no-verify
 tirno fill <selector|@N> --value-stdin  # 값을 stdin 에서. 인자로 준 값은 ps 에 남는다
 tirno type <text> [--delay ms]
 tirno press <key>                       # Enter, Tab, Escape, ArrowDown...

@@ -3,7 +3,7 @@ import { intArg, stripTrailingNewline } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
 import { success, error } from '../output/formatter.js';
-import { clickByRef, fillByRef, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
+import { clickByRef, fillByRef, fillElement, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
 import { checkRef } from '../cdp/ref-guard.js';
@@ -88,6 +88,7 @@ export function registerInputCommands(program: Command): void {
     .option('--batch <json>', 'Fill multiple fields in one call. JSON array: [{"target":"#a","value":"x"},...]')
     .option('--value-stdin', 'Read the value from stdin instead of the argument, e.g. `pbpaste | tirno fill \'input[type=password]\' --value-stdin`. The value is never printed.')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
+    .option('--no-verify', 'Skip reading the value back after typing. By default a field that ends up holding something else (readonly, maxlength, a keydown handler, focus moved) fails with exit 1 instead of "Filled" — turn this off only for inputs whose formatter rewrites what you type')
     .action(async (target: string | undefined, value: string | undefined, opts) => {
       try {
         // 값이 인자로 오면 `ps` 와 셸 히스토리에 남는다. 비밀번호를 넣는 흔한 자리라
@@ -116,13 +117,12 @@ export function registerInputCommands(program: Command): void {
             if (!entry.target || typeof entry.value !== 'string') {
               throw new Error(`--batch entries need {target, value}`);
             }
+            const fillOpts = { label: entry.target, verify: opts.verify !== false };
             if (refStore.isRef(entry.target)) {
               const backendId = await refToBackendId(page, meta.name, entry.target, !!opts.staleOk);
-              await fillByRef(page, backendId, entry.value);
+              await fillByRef(page, backendId, entry.value, fillOpts);
             } else {
-              const el = await requireElement(page, entry.target);
-              await el.click({ count: 3 });
-              await el.type(entry.value);
+              await fillElement(page, await requireElement(page, entry.target), entry.value, fillOpts);
             }
           }
           browser.disconnect();
@@ -134,15 +134,12 @@ export function registerInputCommands(program: Command): void {
           throw new Error('Provide <target> <value> or --batch <json>');
         }
 
+        const fillOpts = { label: target, verify: opts.verify !== false, hideValue: fromStdin };
         if (refStore.isRef(target)) {
           const backendId = await refToBackendId(page, meta.name, target, !!opts.staleOk);
-          await fillByRef(page, backendId, value);
+          await fillByRef(page, backendId, value, fillOpts);
         } else {
-          // triple-click to select all, then type to replace
-          const el = await requireElement(page, target);
-          await el.click({ count: 3 });
-          if (value === '') await page.keyboard.press('Backspace');
-          else await el.type(value);
+          await fillElement(page, await requireElement(page, target), value, fillOpts);
         }
 
         browser.disconnect();
