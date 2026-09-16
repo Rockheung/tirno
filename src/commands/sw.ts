@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
-import { formatTable, info, error } from '../output/formatter.js';
+import { formatTable, info, fail } from '../output/formatter.js';
 
 /**
  * What a service worker is actually proxying, read from the browser rather than
@@ -342,8 +342,7 @@ export function registerSwCommands(program: Command): void {
         }
         render(report, !!opts.paths);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

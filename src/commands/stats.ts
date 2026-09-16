@@ -2,7 +2,7 @@
 
 import { Command } from 'commander';
 import { readAll, aggregate } from '../core/metrics.js';
-import { formatTable, info, error } from '../output/formatter.js';
+import { formatTable, info, fail } from '../output/formatter.js';
 
 export function registerStatsCommand(program: Command): void {
   program
@@ -51,8 +51,7 @@ export function registerStatsCommand(program: Command): void {
           .map(([k, n]) => [k, String(n), agg.avgLatencyMs[k] ? `${agg.avgLatencyMs[k]}ms avg` : '-']);
         console.log(formatTable(['EVENT', 'COUNT', 'LATENCY'], totalRows));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

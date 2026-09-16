@@ -5,7 +5,8 @@ import { connect } from '../core/chrome-connector.js';
 import { bootUrlOf } from '../core/session-store.js';
 import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
 import { notFocusedHint } from '../core/os-focus.js';
-import { info, warn, error } from '../output/formatter.js';
+import { info, warn, fail } from '../output/formatter.js';
+import { TirnoError } from '../util/errors.js';
 
 /**
  * 어디서 JS 를 읽어오나.
@@ -134,14 +135,15 @@ export function registerEvalCommand(program: Command): void {
           ? await Promise.race([
               evaluation,
               new Promise<never>((_, reject) => setTimeout(
-                () => reject(new Error(`Expression has not settled after ${opts.timeout}ms — it is still pending in the page. Raise --timeout, or pass --timeout 0 to wait.`)),
+                () => reject(new TirnoError(`Expression has not settled after ${opts.timeout}ms — it is still pending in the page. Raise --timeout, or pass --timeout 0 to wait.`, 'timeout')),
                 opts.timeout).unref()),
             ])
           : await evaluation;
 
         browser.disconnect();
 
-        if (outcome.threw) throw new Error(outcome.message ?? 'Expression threw');
+        // 페이지가 던진 것은 tirno 의 실패가 아니다 — 코드로 가른다
+        if (outcome.threw) throw new TirnoError(outcome.message ?? 'Expression threw', 'page_threw');
 
         if (outcome.fnArity !== undefined) {
           throw new Error(outcome.afterCall
@@ -158,13 +160,11 @@ export function registerEvalCommand(program: Command): void {
           console.log(result);
         }
       } catch (e) {
-        const message = (e as Error).message;
-        error(message);
         // "Document is not focused" 는 `document.hasFocus()` 결과와 어긋나 보여서
         // 다음으로 의심하는 것이 권한이 된다. 실제로는 OS 층 이야기다 (#174).
-        const focusHint = notFocusedHint(message, opts.session);
+        const focusHint = notFocusedHint((e as Error).message, opts.session);
         if (focusHint) info(focusHint);
-        process.exit(1);
+        fail(e);
       }
     });
 }

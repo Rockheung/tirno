@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
-import { success, error } from '../output/formatter.js';
+import { success, fail } from '../output/formatter.js';
 import { KnownDevices } from 'puppeteer-core';
 import * as store from '../core/session-store.js';
 import type { EmulationState } from '../core/session-store.js';
@@ -143,8 +143,7 @@ export function registerEmulateCommand(program: Command): void {
         store.update(meta.name, { emulation: nextEmu });
         success(`Emulation: ${applied.join(', ')}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

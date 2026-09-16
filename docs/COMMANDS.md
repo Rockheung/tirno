@@ -892,6 +892,7 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 |---|---|---|
 | `TIRNO_DIR` | `~/.tirno` | 데이터 루트 전체 |
 | `TIRNO_CHROME` | (없음) | Chrome 실행 파일. 설정 파일보다 우선 |
+| `TIRNO_JSON` | (없음) | `1` 이면 실패를 stdout 에 `{ok:false, code, message, data}` 한 줄로 낸다 — `--json` 이 없는 명령에도. 아래 "실패의 종류" |
 | `CHROME_PATH` · `PUPPETEER_EXECUTABLE_PATH` | (없음) | 같은 용도. `TIRNO_CHROME` 다음 순서로 본다 |
 | `TIRNO_CACHE_DIR` | `<루트>/visual-cache` | visual cache |
 | `TIRNO_RECORDINGS_DIR` | `<루트>/recordings` | 기록 |
@@ -906,3 +907,36 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 `test/paths.test.ts` 와 스모크의 격리 검사가 이 약속을 지킨다 — 저장소 하나라도 루트 밖으로
 새면 실패한다. 예전에는 새는 저장소가 있었고, 그래서 스모크의 `cache prune` 이 매 실행마다
 사용자의 실제 캐시를 비웠다.
+## 실패의 종류 (`code:`)
+
+종료 코드는 둘뿐이다 — 0 과 1. 종류는 **stderr 마지막 줄** `code: <snake_case>` 로 가른다.
+산문은 그대로 위에 있고, 사람용 출력은 바뀌지 않았다:
+
+```
+✗ Refusing to connect to session 'bank' (port 9222): pid 68429 is gone; port 9222 now belongs to OtherApp (pid 812)
+  code: session_not_owned
+```
+
+명령이 `--json` 을 받았거나 `TIRNO_JSON=1` 이면 stdout 에 한 줄이고 stderr 에는 아무것도 없다:
+
+```json
+{"ok":false,"code":"session_not_owned","message":"Refusing to connect …","data":{"session":"bank","port":9222,"ownership":"foreign"}}
+```
+
+| code | 뜻 | 다음 |
+|---|---|---|
+| `session_not_found` | 그 이름의 세션이 없다 | `tirno new <name>` |
+| `session_exists` | 이미 있다 | 다른 이름, 또는 `restart` |
+| `session_ghost` | 대장에만 있고 프로세스가 없다 | `tirno restart` 또는 `tirno gc` |
+| `session_not_owned` | 포트가 남의 것(foreign/ambiguous)이거나 관측 불가(unknown). `data.ownership` 에 어느 쪽인지 | **손대지 마라.** unknown 이면 사유대로 lsof/`TIRNO_INVENTORY` |
+| `no_active_session` | `-s` 도 attach 도 없다 | `-s <name>` |
+| `port_unavailable` | `--port` 가 잡혀 있다 | 다른 포트, 또는 빼서 OS 할당 |
+| `not_a_ref` · `unknown_ref` | `@N` 꼴이 아니거나 이 세션에 없는 번호 | `tirno snapshot` |
+| `stale_ref` | 스냅샷 뒤 페이지가 바뀌었다 | `tirno snapshot` 다시. 알고도 강행은 `--stale-ok` |
+| `page_threw` | `eval` 한 식이 페이지에서 예외를 냈다 | tirno 문제가 아니다 — 식을 고쳐라 |
+| `timeout` | 기다리다 끝났다 | `--timeout` |
+| `broadcast_partial` | 일부 세션만 실패. `data.failed` 에 이름 | 그 세션만 다시 |
+| `error` | 분류되지 않은 실패 — 산문이 전부다 | 산문을 읽어라. 자주 보이면 이슈로 — 코드를 받을 자리다 |
+
+정본은 `tirno schema | jq '.errors[] | select(.kind=="failure") | .codes'` 다. 종료 코드로
+종류를 나누지 않는 이유: 셸 스크립트와 `broadcast` 집계가 복잡해지고, 어차피 JSON 이 더 담는다.

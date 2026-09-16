@@ -3,7 +3,8 @@ import { floatArg } from '../util/parsers.js';
 import fs from 'node:fs';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
-import { success, info, error } from '../output/formatter.js';
+import { success, info, error, fail } from '../output/formatter.js';
+import { TirnoError } from '../util/errors.js';
 import * as store from '../core/session-store.js';
 
 export function registerMultiCommands(program: Command): void {
@@ -47,8 +48,7 @@ export function registerMultiCommands(program: Command): void {
         success(`Diff: ${mismatch} pixels (${pct}%) — ${outPath}`);
         if (mismatch === 0) info('Identical screenshots');
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -108,8 +108,7 @@ export function registerMultiCommands(program: Command): void {
       // would have to parse the printed output to learn what it already knows.
       const failed = results.filter(r => r.failure).map(r => r.name);
       if (failed.length > 0) {
-        error(`${failed.length}/${results.length} failed: ${failed.join(', ')}`);
-        process.exit(1);
+        fail(new TirnoError(`${failed.length}/${results.length} failed: ${failed.join(', ')}`, 'broadcast_partial', { failed, total: results.length }));
       }
     });
 }

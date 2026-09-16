@@ -1,4 +1,5 @@
 import type { Command } from 'commander';
+import { ERROR_CODES } from '../util/errors.js';
 
 /**
  * Machine-readable description of the whole command tree — `tirno schema`.
@@ -67,7 +68,7 @@ export interface CliSchema {
   summary: string;
   global_args: SchemaOption[];
   commands: SchemaCommand[];
-  errors: Array<{ kind: string; exit_code: number; description: string }>;
+  errors: Array<{ kind: string; exit_code: number; description: string; codes?: Array<{ code: string; description: string }> }>;
 }
 
 /**
@@ -205,8 +206,15 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
 const PASSTHROUGH_MARKER = '-- <chrome-flags>';
 
 /** Exit codes are uniform: every command exits 1 on failure. */
+// 종료 코드는 둘뿐이다. 종류는 stderr 마지막 줄 `code: <snake_case>` (또는 --json 의
+// `code` 필드) 로 가른다 — 목록은 util/errors.ts 의 ERROR_CODES 가 정본이고 여기는 그것을
+// 읽는다 (#185).
 const ERRORS = [
-  { kind: 'failure', exit_code: 1, description: 'Any error — a failed navigation, an unknown session, a refused kill. tirno does not use distinct codes per class.' },
+  {
+    kind: 'failure', exit_code: 1,
+    description: 'Any error. The last stderr line is `code: <code>` (with --json: `{"ok":false,"code","message","data"}` on stdout); see `codes` for what each one means and what to do next.',
+    codes: Object.entries(ERROR_CODES).map(([code, description]) => ({ code, description })),
+  },
   { kind: 'ok', exit_code: 0, description: 'Success. For `drift`, also means declared and running flags agree.' },
 ];
 

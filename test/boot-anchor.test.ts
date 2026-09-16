@@ -23,6 +23,8 @@ test('커밋된 앵커에는 할 말이 없다', () => {
   assert.equal(blankAnchorHint('https://example.com', 'https://example.com'), null);
   // URL 없이 띄운 세션에서 about:blank 는 정상이다 — 경고하면 늑대 소년이 된다.
   assert.equal(blankAnchorHint('about:blank', undefined), null);
+  // about:blank 로 띄웠으면 about:blank 가 맞는 자리다 — "about:blank, not about:blank" 는 헛경고였다
+  assert.equal(blankAnchorHint('about:blank', 'about:blank'), null);
 });
 
 test('안 열린 앵커는 그 사실과 다음 수를 말한다', () => {

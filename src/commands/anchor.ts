@@ -4,7 +4,7 @@ import * as anchors from '../core/anchor-store.js';
 import { collectListeners, inspectSession } from '../core/inventory.js';
 import { killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, error, fail } from '../output/formatter.js';
 
 export function registerAnchorCommands(program: Command): void {
   const anchor = program
@@ -80,8 +80,7 @@ export function registerAnchorCommands(program: Command): void {
           info(`Previous target '${movedFrom.session}' is still running — an already-connected MCP will keep using it. Re-run with --evict to switch it over.`);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -94,8 +93,7 @@ export function registerAnchorCommands(program: Command): void {
         anchors.remove(anchorName);
         success(`Removed anchor '${anchorName}' (profile untouched)`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

@@ -8,7 +8,7 @@ import {
   resolveChrome,
   setConfiguredChrome,
 } from '../core/chrome-finder.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, error, fail } from '../output/formatter.js';
 
 /**
  * "어느 Chrome 을 쓰나" 를 물어볼 자리.
@@ -66,8 +66,7 @@ export function registerChromeCommands(program: Command): void {
         success(`chrome = ${saved}`);
         info(`saved to ${configPath()} — env ($TIRNO_CHROME) and --executable-path still win over it`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 

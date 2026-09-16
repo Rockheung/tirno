@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { underRoot } from './paths.js';
+import { TirnoError } from '../util/errors.js';
 
 function refsDir(): string {
   return underRoot('refs');
@@ -126,17 +127,18 @@ export function isRef(s: string): boolean {
 /** 못 박은 세대가 저장된 세대와 다르면 그 자리에서 끝낸다 — CDP 를 붙일 필요도 없다. */
 export function resolveStored(session: string, expr: string): { stored: StoredRef; store: RefStore; ref: string } {
   const parsed = parseRef(expr);
-  if (!parsed) throw new Error(`Not a ref: ${expr}`);
+  if (!parsed) throw new TirnoError(`Not a ref: ${expr}`, 'not_a_ref', { expr });
   const store = load(session);
   if (parsed.generation !== undefined && parsed.generation !== store.generation) {
-    throw new Error(
+    throw new TirnoError(
       `${expr} is from snapshot generation ${parsed.generation}; this session is on generation ${store.generation}. ` +
-      `Run "tirno snapshot" and use the refs it prints.`
+      `Run "tirno snapshot" and use the refs it prints.`,
+      'stale_ref', { ref: expr, generation: parsed.generation, current: store.generation },
     );
   }
   const stored = store.refs[parsed.ref];
   if (stored === undefined) {
-    throw new Error(`Unknown ref @${parsed.ref}. Run "tirno snapshot" first.`);
+    throw new TirnoError(`Unknown ref @${parsed.ref}. Run "tirno snapshot" first.`, 'unknown_ref', { ref: `@${parsed.ref}` });
   }
   return { stored, store, ref: parsed.ref };
 }

@@ -13,7 +13,7 @@ import { Command } from 'commander';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { resolveExpression } from './eval.js';
-import { info, error } from '../output/formatter.js';
+import { info, error, fail } from '../output/formatter.js';
 
 export interface ScriptStep {
   method: string;
@@ -177,8 +177,7 @@ export function registerCdpCommands(program: Command): void {
           console.log(JSON.stringify(result, null, 2));
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

@@ -8,7 +8,7 @@
 import { Command } from 'commander';
 import fs from 'node:fs';
 import * as store from '../core/session-store.js';
-import { success, info, error } from '../output/formatter.js';
+import { success, info, fail } from '../output/formatter.js';
 
 export function registerAuditCommand(program: Command): void {
   program
@@ -107,8 +107,7 @@ export function registerAuditCommand(program: Command): void {
           }
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

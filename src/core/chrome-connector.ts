@@ -64,7 +64,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // to whatever answers on that port.
   const inv = await inspectSession(meta);
   if (inv.ownership === 'ghost') throw new ChromeNotRunning(name, meta.pid);
-  if (inv.ownership !== 'ours') throw new SessionNotOwned(name, inv.resolvedPort, inv.reason);
+  if (inv.ownership !== 'ours') throw new SessionNotOwned(name, inv.resolvedPort, inv.reason, inv.ownership);
 
   // inspectSession already resolved DevToolsActivePort (live) over
   // meta.wsEndpoint (a launch-time snapshot that goes stale on restart);

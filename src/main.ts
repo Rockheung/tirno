@@ -25,7 +25,7 @@ import { registerAuditCommand } from './commands/audit.js';
 import { registerScreencastCommands } from './commands/screencast.js';
 import { registerSchemaCommand } from './commands/schema.js';
 import { registerUpdateCommand } from './commands/update.js';
-import { error } from './output/formatter.js';
+import { fail, setJsonOutput } from './output/formatter.js';
 
 const program = new Command();
 
@@ -61,7 +61,10 @@ registerScreencastCommands(program);
 registerSchemaCommand(program);
 registerUpdateCommand(program);
 
-program.parseAsync(process.argv).catch(e => {
-  error((e as Error).message);
-  process.exit(1);
+// 명령이 자기 --json 을 받았으면 실패도 JSON 으로 — 성공은 JSON 인데 실패만 산문이면
+// 파서가 두 벌 필요하다 (#185)
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  setJsonOutput((actionCommand.opts() as { json?: boolean }).json);
 });
+
+program.parseAsync(process.argv).catch(e => fail(e));

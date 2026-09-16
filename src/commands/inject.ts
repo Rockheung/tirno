@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import * as store from '../core/session-store.js';
 import { connect } from '../core/chrome-connector.js';
 import { resolveExpression } from './eval.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, fail } from '../output/formatter.js';
 
 // document-start 훅. `eval` 이 페이지 로드 **뒤**에 도는 것과 갈리는 지점이다 —
 // 부팅 중에 이미 나간 요청을 잡거나, 페이지가 리스너를 걸기 전에 가드를 심으려면
@@ -63,7 +63,7 @@ export function registerInjectCommands(program: Command): void {
         store.update(name, { injects: [...cur, { id, source: js, addedAt: new Date().toISOString() }] });
         await reapply(name);
         success(`Injected ${id} — runs at document-start from the next navigation (\`tirno reload\` to see it now)`);
-      } catch (e) { error((e as Error).message); process.exit(1); }
+      } catch (e) { fail(e); }
     });
 
   cmd
@@ -80,7 +80,7 @@ export function registerInjectCommands(program: Command): void {
         // 이미 걸린 등록은 이 연결에서만 살아 있었다. 다음 connect 가 남은 것만 건다.
         await reapply(name);
         success(id ? `Removed ${id} — gone from the next navigation` : 'Cleared all injected scripts');
-      } catch (e) { error((e as Error).message); process.exit(1); }
+      } catch (e) { fail(e); }
     });
 
   cmd
@@ -98,7 +98,7 @@ export function registerInjectCommands(program: Command): void {
           ['ID', 'BYTES', 'ADDED', 'FIRST LINE'],
           injects.map(i => [i.id, String(Buffer.byteLength(i.source)), i.addedAt.slice(0, 19).replace('T', ' '), firstLine(i.source)]),
         ));
-      } catch (e) { error((e as Error).message); process.exit(1); }
+      } catch (e) { fail(e); }
     });
 }
 
