@@ -8,8 +8,6 @@
  * code)를 낸다. 에이전트는 그 지점만 다시 판단한다.
  */
 import { Command } from 'commander';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import chalk from 'chalk';
 import * as store from '../core/session-store.js';
 import * as recipes from '../core/recipe-store.js';
@@ -19,8 +17,7 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { success, info, warn, fail, formatTable } from '../output/formatter.js';
 import { TirnoError } from '../util/errors.js';
 import { NoActiveSession } from '../util/errors.js';
-
-const run = promisify(execFile);
+import { runStep, masker } from '../core/step-runner.js';
 
 /** 기록되는 명령 — 페이지를 움직이거나 상태를 선언하는 것들 */
 export const RECORDABLE = new Set([
@@ -230,8 +227,7 @@ export function registerRecipeCommands(program: Command): void {
         const steps = r.steps.map(s => recipes.expandVars(s.argv, values));   // 빠진 변수는 여기서 먼저 걸린다
         const from = Math.max(1, opts.from ?? 1);
         // 비밀은 출력에도 없다 — 단계 표기와 결과 요약 양쪽에서 가린다
-        const secrets = r.vars.map(v => values[v] ?? process.env[v]).filter((v): v is string => !!v && v.length >= 2);
-        const mask = (s: string) => secrets.reduce((acc, v) => acc.split(v).join('••••'), s);
+        const mask = masker(r.vars.map(v => values[v] ?? process.env[v]).filter((v): v is string => !!v));
 
         if (opts.dryRun) {
           info(`${r.domain} / ${r.name} — ${steps.length} steps (dry run)`);
@@ -240,14 +236,14 @@ export function registerRecipeCommands(program: Command): void {
         }
 
         if (opts.startUrl !== false && r.startUrl && from === 1) {
-          const nav = await step(['nav', r.startUrl], session);
+          const nav = await runStep(['nav', r.startUrl], session);
           if (!nav.ok) throw new TirnoError(`could not open ${r.startUrl}: ${nav.summary}`, 'recipe_step_failed', { step: 0, argv: ['nav', r.startUrl], code: nav.code });
           console.log(`  0  tirno nav ${r.startUrl}   ${chalk.dim(mask(nav.summary))}`);
         }
         for (let i = from - 1; i < steps.length; i++) {
           const argv = steps[i];
           const shown = mask(argv.join(' '));
-          const res = await step(argv, session);
+          const res = await runStep(argv, session);
           res.summary = mask(res.summary);
           if (!res.ok) {
             recipes.save({ ...r, runs: { ...r.runs, failed: r.runs.failed + 1, lastRunAt: new Date().toISOString(), lastFailedStep: i + 1 } });
@@ -265,29 +261,4 @@ export function registerRecipeCommands(program: Command): void {
         fail(e);
       }
     });
-}
-
-interface StepResult { ok: boolean; summary: string; code?: string }
-
-/** 한 단계 — tirno 자신을 자식으로. 사용자가 쳤던 argv 그대로, 세션만 지금 것. */
-async function step(argv: string[], session: string): Promise<StepResult> {
-  const args = [process.argv[1], ...argv, '-s', session, '--no-delta'].filter(Boolean);
-  // --no-delta 를 모르는 명령은 거절하므로, 행동 명령에만 붙인다
-  const withDelta = new Set(['click', 'fill', 'type', 'press', 'upload', 'ensure']);
-  const finalArgs = withDelta.has(argv[0]) ? args : args.filter(a => a !== '--no-delta');
-  try {
-    const { stdout, stderr } = await run(process.execPath, finalArgs, { env: { ...process.env, TIRNO_JSON: '' }, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 120_000 });
-    return { ok: true, summary: firstLine(stdout + stderr) };
-  } catch (e) {
-    const err = e as { stdout?: string; stderr?: string; killed?: boolean };
-    const text = `${err.stdout ?? ''}${err.stderr ?? ''}`;
-    const code = /code: ([a-z_]+)/.exec(text)?.[1];
-    return { ok: false, summary: err.killed ? 'timed out after 120s' : firstLine(text.replace(/\n\s*code: [a-z_]+\s*$/, '')), code };
-  }
-}
-
-function firstLine(s: string): string {
-  const lines = s.split('\n').map(l => l.trim()).filter(Boolean);
-  // ✓/✗ 줄이 있으면 그것, 아니면 첫 줄
-  return (lines.find(l => /^[✓✗]/.test(l)) ?? lines[0] ?? '').replace(/^[✓✗]\s*/, '').slice(0, 140);
 }

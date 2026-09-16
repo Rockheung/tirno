@@ -160,6 +160,8 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'recipe show':  { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
   'recipe rm':    { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
   'recipe run':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
+  'plan':         { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },
+  'apply':        { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   'upload':       { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
 
   // ---- execution

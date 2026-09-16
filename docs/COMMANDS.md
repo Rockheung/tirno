@@ -568,6 +568,48 @@ tirno recipe ls · show login · rm login · cancel
   `runs` 에 성공/실패 횟수와 마지막 실패 단계가 남는다.
 - 파일은 JSON 이다(의존 0 — YAML 파서를 들이지 않는다). 손으로 고쳐도 된다.
 
+### 계획과 적용 — `plan` / `apply`
+
+레시피의 일반형이다. 파일에 상태를 선언하고, **실행 전에** 될지 판정하고, 적용한다.
+
+```json
+{ "session": "shop", "vars": ["CARD"], "startUrl": "https://shop/cart",
+  "steps": [
+    "ensure url https://shop/cart",
+    "expect count tr.item ge 1",
+    "click button \"Checkout\"",
+    ["ensure", "textbox", "Card", "=", "$CARD"],
+    "expect text \"Order confirmed\" within 15s"
+  ] }
+```
+단계는 argv 배열이거나 한 줄 문자열이다(따옴표를 셸처럼 존중). JSON 이다 — 의존 0.
+레시피 이름을 파일 대신 줘도 된다(`tirno plan login`).
+
+```bash
+tirno plan checkout.json CARD=…        # 판정만. 지금 페이지·캐시 기준
+tirno apply checkout.json CARD=…       # 실행. 단계별 did·saw, 실패 지점에서 멈춤 (code recipe_step_failed)
+tirno apply checkout.json --group qa   # 세션마다 동시에, 세션 × 단계 매트릭스
+tirno apply checkout.json --from 3     # 고친 뒤 그 단계부터
+```
+
+`plan` 의 판정:
+```
+ 1 ensure url https://shop/cart          already at https://shop/cart
+ 2 expect count tr.item ge 1             holds now — 3
+ 3 click button "Checkout"               found on the page (a11y) · 1 candidate
+ 4 ensure textbox "Card" = $CARD         unknown until step 3         ← 3 이 페이지를 바꾸는지는 모른다
+ 5 click button "Nope"                   NOT on the page now
+ 7 nav https://x                          will navigate (now: …)
+ 8 click link "Learn more"               in cache (a11y) · 1 candidate  ← 그 URL 의 캐시로 판정
+```
+`nav`/`ensure url` 뒤의 단계는 그 URL 의 **캐시**로만 판정한다(없으면 `unknown until step N`).
+클릭이 페이지를 바꾸는지는 실행 전에 알 수 없으므로 클릭 뒤 단계는 지금 페이지로 판정한다 —
+그 가정을 출력 끝에 적는다. 모호(`ambiguous`)·없음(`missing`)·`@N` 을 쓴 단계(`ref` — 재생에서
+뜻이 없다)는 "지금 틀린 단계" 로 센다.
+
+`apply --group` 은 `broadcast` 의 선언형이다 — 세션마다 첫 실패에서 멈추고 매트릭스로 낸다.
+하나라도 실패하면 exit 1 (`broadcast_partial`, `data.failed` 에 세션 이름).
+
 ### 접근성 감사 — `a11y`
 
 ```bash

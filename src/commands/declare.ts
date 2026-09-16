@@ -193,7 +193,7 @@ async function checkedState(page: Page, backendNodeId: number): Promise<boolean 
 }
 
 /** 한 번 관측한다. 대상이 없는 것도 관측이다(`actual: (not found)`). */
-async function observe(page: Page, c: Clause, session: string, exact: boolean): Promise<Observation> {
+export async function observe(page: Page, c: Clause, session: string, exact: boolean): Promise<Observation> {
   const expected = c.value ?? (c.what === 'checked' ? 'checked' : c.what === 'unchecked' ? 'unchecked' : c.what);
   const target = async () => resolveTarget(page, c.role!, c.name, { session, exact });
   switch (c.what) {
