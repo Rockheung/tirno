@@ -7,7 +7,7 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { fetchBody, fileNameFor, listResources, matchesFilter, type PageResource } from '../cdp/resources.js';
 import { captureRequests } from '../cdp/network-capture.js';
 import { toHar, type HarBody } from '../output/har.js';
-import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, fail } from '../output/formatter.js';
 
 /**
  * 이 세션이 **이미 받은** 리소스.
@@ -62,8 +62,7 @@ export function registerNetCommands(program: Command): void {
         ])));
         info(`${hits.length} of ${all.length} resource(s)${hits.length > opts.limit ? ` — showing ${opts.limit}, raise --limit` : ''}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -142,8 +141,7 @@ export function registerNetCommands(program: Command): void {
           process.exit(1);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -211,8 +209,7 @@ export function registerNetCommands(program: Command): void {
             : 'Nothing was requested in that window. --reload captures a full page load (it discards page state), and already-received resources are in `tirno net ls`.');
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

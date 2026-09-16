@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as store from '../core/session-store.js';
 import { connect } from '../core/chrome-connector.js';
 import { writeHeaderExt, loadHeaderExt, type HeaderRule } from '../core/header-ext.js';
-import { formatTable, success, info, error } from '../output/formatter.js';
+import { formatTable, success, info, fail } from '../output/formatter.js';
 
 // 두 경로가 있고, 어느 쪽인지는 `--once` 하나로 갈린다.
 //
@@ -77,7 +77,7 @@ export function registerHeaderCommands(program: Command): void {
         store.update(name, { headerRules: next });
         await loadHeaderExt(name);
         success(`${hName}: ${hValue}${hosts.length ? ` (hosts: ${hosts.join(', ')})` : ' (every host)'}`);
-      } catch (e) { error((e as Error).message); process.exit(1); }
+      } catch (e) { fail(e); }
     });
 
   cmd
@@ -110,7 +110,7 @@ export function registerHeaderCommands(program: Command): void {
         if (meta.extensions) await loadHeaderExt(name);
         else writeHeaderExt(meta.userDataDir, store.get(name).headerRules ?? []);
         success(hName ? `Removed ${hName}` : 'Cleared all headers');
-      } catch (e) { error((e as Error).message); process.exit(1); }
+      } catch (e) { fail(e); }
     });
 
   cmd
@@ -141,7 +141,7 @@ export function registerHeaderCommands(program: Command): void {
         if (Object.keys(once).length) {
           info('once: no in-browser view — these live in the CDP connection, so they are only on requests made while a tirno command runs. This list is the only place they show.');
         }
-      } catch (e) { error((e as Error).message); process.exit(1); }
+      } catch (e) { fail(e); }
     });
 }
 

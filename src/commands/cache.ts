@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import * as visualCache from '../core/visual-cache.js';
-import { formatTable, info, success, error } from '../output/formatter.js';
+import { formatTable, info, success, fail } from '../output/formatter.js';
 
 export function registerCacheCommands(program: Command): void {
   const cache = program
@@ -30,8 +30,7 @@ export function registerCacheCommands(program: Command): void {
         ]);
         console.log(formatTable(['DOMAIN', 'PATH', 'VIEWPORT', 'REFS', 'FP', 'CAPTURED'], rows));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -85,8 +84,7 @@ export function registerCacheCommands(program: Command): void {
           console.log(`${id} ${role}${name}${sel}${bbox}`);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -110,8 +108,7 @@ export function registerCacheCommands(program: Command): void {
         });
         success(`Removed ${removed} entries`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

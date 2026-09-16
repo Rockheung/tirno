@@ -2,7 +2,8 @@ import { Command } from 'commander';
 import { intArg, stripTrailingNewline } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage } from '../cdp/page-resolver.js';
-import { success, error } from '../output/formatter.js';
+import { success, fail } from '../output/formatter.js';
+import { TirnoError } from '../util/errors.js';
 import { clickByRef, clickElement, fillByRef, fillElement, hoverByRef, requireElement, asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import * as refStore from '../core/ref-store.js';
@@ -76,8 +77,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Clicked ${target}${opts.synthetic ? ' (synthetic)' : ''}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -151,8 +151,7 @@ export function registerInputCommands(program: Command): void {
           ? `Filled ${target} (${value.length} chars from stdin)`
           : `Filled ${target} with "${value}"`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -172,8 +171,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Typed "${text.slice(0, 40)}${text.length > 40 ? '...' : ''}"`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -226,8 +224,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Pressed ${key}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -257,8 +254,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Hovered ${target}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -323,8 +319,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Dragged (${fx},${fy}) → (${tx},${ty}) (mouse only)`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -353,8 +348,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Scrolled ${dy > 0 ? '+' : ''}${dy}px`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -368,8 +362,7 @@ export function registerInputCommands(program: Command): void {
         await new Promise(r => setTimeout(r, ms));
         success(`Waited ${ms}ms`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -425,8 +418,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Selector visible: ${selector}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -449,8 +441,7 @@ export function registerInputCommands(program: Command): void {
         browser.disconnect();
         success(`Uploaded ${files.length} file(s) to ${selector}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }
@@ -476,7 +467,7 @@ async function refToBackendId(
   try {
     const verdict = await checkRef(cdp, target, stored, store);
     if (!verdict.ok) {
-      throw new Error(`Refusing ${target}: ${verdict.reason} (--stale-ok proceeds anyway)`);
+      throw new TirnoError(`Refusing ${target}: ${verdict.reason} (--stale-ok proceeds anyway)`, 'stale_ref', { ref: target });
     }
   } finally {
     await cdp.detach();

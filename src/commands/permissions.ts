@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import * as store from '../core/session-store.js';
 import { connect } from '../core/chrome-connector.js';
 import { applyPermissions, normalizeOrigin, validatePermissions, PERMISSION_NAMES, type PermissionMap } from '../cdp/permissions.js';
-import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, fail } from '../output/formatter.js';
 import { NoActiveSession } from '../util/errors.js';
 
 function targetSession(opts: { session?: string }): string {
@@ -55,8 +55,7 @@ export function registerPermissionCommands(program: Command): void {
         }
         console.log(formatTable(['ORIGIN', 'PERMISSIONS'], origins.map(o => [o, map[o].join(', ')])));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -77,8 +76,7 @@ export function registerPermissionCommands(program: Command): void {
         await saveAndApply(name, next);
         success(`${origin} → ${granted.join(', ')}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -109,8 +107,7 @@ export function registerPermissionCommands(program: Command): void {
         await saveAndApply(name, next);
         success(originArg ? `Revoked ${normalizeOrigin(originArg)}` : `Revoked every grant in session '${name}'`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

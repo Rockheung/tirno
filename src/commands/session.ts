@@ -11,7 +11,7 @@ import { clearActivePort } from '../core/devtools-port.js';
 import { scanListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
 import * as gc from '../core/gc.js';
 import * as drift from '../core/drift.js';
-import { formatTable, success, info, warn, error } from '../output/formatter.js';
+import { formatTable, success, info, warn, error, fail } from '../output/formatter.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -205,8 +205,7 @@ export function registerSessionCommands(program: Command): void {
         info(`--port ${opts.port} pins a fixed port; chrome writes no DevToolsActivePort, so this session cannot be a browser-MCP anchor target. Omit --port for that.`);
       }
     } catch (e) {
-      error((e as Error).message);
-      process.exit(1);
+      fail(e);
     }
   });
 
@@ -330,8 +329,7 @@ export function registerSessionCommands(program: Command): void {
 
         success(`Session '${name}' restarted (port ${meta.port}, PID ${meta.pid}${group ? `, group: ${group}` : ''}${bootUrl ? `, url: ${bootUrl}` : ''}${saved.length ? `, ${saved.length} cookie(s) carried` : ''})`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -420,8 +418,7 @@ export function registerSessionCommands(program: Command): void {
         store.setActive(name);
         success(`Active session: ${name}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -490,8 +487,7 @@ export function registerSessionCommands(program: Command): void {
         // one thing it must not believe here.
         if (failures > 0) process.exit(1);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -534,8 +530,7 @@ export function registerSessionCommands(program: Command): void {
           if (result.failed.length > 0) process.exit(1);
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -608,8 +603,7 @@ export function registerSessionCommands(program: Command): void {
       info(`  ${parts.join(' ')}`);
       process.exit(1);
     } catch (e) {
-      error((e as Error).message);
-      process.exit(1);
+      fail(e);
     }
   });
 
@@ -623,8 +617,7 @@ export function registerSessionCommands(program: Command): void {
         store.rename(oldName, newName);
         success(`Renamed '${oldName}' → '${newName}'`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -637,8 +630,7 @@ export function registerSessionCommands(program: Command): void {
         const meta = store.get(name);
         console.log(JSON.stringify(meta, null, 2));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 

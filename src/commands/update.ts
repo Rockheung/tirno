@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
-import { success, info, warn, error } from '../output/formatter.js';
+import { success, info, warn, fail } from '../output/formatter.js';
 import {
   REPO, assetNameFor, compareVersions, installedPluginFrom, installedPluginsPath,
   parseChecksums, replaceBinary, selfReplaceTarget, sha256,
@@ -138,8 +138,7 @@ export function registerUpdateCommand(program: Command): void {
           info('Skill plugin is not installed — `claude plugin marketplace add Rockheung/tirno && claude plugin install tirno@tirno`.');
         }
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

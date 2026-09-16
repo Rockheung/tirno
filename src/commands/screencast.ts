@@ -18,7 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import * as store from '../core/session-store.js';
-import { success, info, error } from '../output/formatter.js';
+import { success, info, fail } from '../output/formatter.js';
 
 const DEFAULT_OUT_BASE = path.join(os.tmpdir(), 'tirno-screencast');
 
@@ -77,8 +77,7 @@ export function registerScreencastCommands(program: Command): void {
         success(`Screencast started (PID ${child.pid}) — frames → ${outDir}`);
         info(`Stop with: tirno screencast stop --out ${outDir}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -119,8 +118,7 @@ export function registerScreencastCommands(program: Command): void {
         success(`Screencast stopped (${frameCount} frames in ${outDir})`);
         info(`To stitch: ffmpeg -framerate 30 -i ${outDir}/frame-%06d.png -pix_fmt yuv420p ${outDir}/out.mp4`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

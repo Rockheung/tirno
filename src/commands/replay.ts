@@ -3,7 +3,7 @@ import { intArg, floatArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as recStore from '../core/record-store.js';
-import { success, info, error } from '../output/formatter.js';
+import { success, info, fail } from '../output/formatter.js';
 import type { Page } from '../cdp/page.js';
 
 interface DispatchMouseParams {
@@ -167,8 +167,7 @@ export function registerReplayCommand(program: Command): void {
           .map(([k, v]) => `${k}:${v}`).join(' ');
         success(`Replayed "${name}" — ${count}/${rec.events.length} events at ${speed}x${channelSummary ? ` [${channelSummary}]` : ''}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }

@@ -3,7 +3,7 @@ import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { activateWindow } from '../core/os-focus.js';
 import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
-import { formatTable, success, warn, error } from '../output/formatter.js';
+import { formatTable, success, warn, error, fail } from '../output/formatter.js';
 import { judgeNavigation } from '../cdp/nav-verdict.js';
 
 export function registerNavCommands(program: Command): void {
@@ -38,8 +38,7 @@ export function registerNavCommands(program: Command): void {
         success(verdict.line);
         if (verdict.level === 'warn') warn(verdict.note!);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -68,8 +67,7 @@ export function registerNavCommands(program: Command): void {
         browser.disconnect();
         success(`Reloaded ${page.url()}${opts.hard ? ' (cache bypassed)' : ''}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -85,8 +83,7 @@ export function registerNavCommands(program: Command): void {
         browser.disconnect();
         success(`Back → ${page.url()}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -102,8 +99,7 @@ export function registerNavCommands(program: Command): void {
         browser.disconnect();
         success(`Forward → ${page.url()}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -130,8 +126,7 @@ export function registerNavCommands(program: Command): void {
         ]);
         console.log(formatTable(['ID', 'TITLE', 'URL'], rows));
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -171,8 +166,7 @@ export function registerNavCommands(program: Command): void {
         warn(reason ?? 'The window was raised but the document still reports no focus. Click the browser window once.');
         process.exitCode = 1;
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -189,8 +183,7 @@ export function registerNavCommands(program: Command): void {
         browser.disconnect();
         success(`Selected page ${pageId}: ${page.url()}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -209,8 +202,7 @@ export function registerNavCommands(program: Command): void {
         browser.disconnect();
         success(`New tab: ${url}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 
@@ -228,8 +220,7 @@ export function registerNavCommands(program: Command): void {
         browser.disconnect();
         success(`Closed tab ${pageId}: ${url}`);
       } catch (e) {
-        error((e as Error).message);
-        process.exit(1);
+        fail(e);
       }
     });
 }
