@@ -210,6 +210,11 @@ function main() {
   }
   // back/forward 를 태우려면 히스토리 항목이 둘 이상이어야 한다. 같은 URL 로 nav 하면
   // 항목이 안 늘어나므로(실측: history.length 가 1로 고정) 다른 출처를 한 번 거친다.
+  // 404 도 문서는 커밋된다 — exit 0 은 두되 조용하지는 않다. 상태 0 과 chrome-error 는 실패 (#189).
+  const nf = run('nav 404 (exit 0 + 경고)', ['nav', 'https://example.com/tirno-smoke-404', ...S]);
+  check('404 가 ⚠ non-2xx 경고를 낸다', /non-2xx/.test(nf.out) && /server said 404/.test(nf.out), nf.out.slice(0, 100));
+  run('nav 404 --strict (→ exit≠0)', ['nav', 'https://example.com/tirno-smoke-404', '--strict', ...S],
+    { expectFail: true, expectMatch: /strict: non-2xx/ });
   run('nav (다른 URL)', ['nav', 'https://example.com', ...S]);
   run('nav (back to page)', ['nav', PAGE, ...S]);
   run('back', ['back', ...S]);

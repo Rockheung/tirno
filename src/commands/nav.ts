@@ -4,6 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { activateWindow } from '../core/os-focus.js';
 import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
 import { formatTable, success, warn, error } from '../output/formatter.js';
+import { judgeNavigation } from '../cdp/nav-verdict.js';
 
 export function registerNavCommands(program: Command): void {
   program
@@ -12,7 +13,7 @@ export function registerNavCommands(program: Command): void {
     .argument('<url>', 'Target URL')
     .option('-s, --session <name>', 'Session name')
     .option('--timeout <ms>', 'Navigation timeout', intArg, 30000)
-    .option('--strict', 'Exit non-zero unless response is 2xx')
+    .option('--strict', 'Exit non-zero unless response is 2xx. Without it a 4xx/5xx still exits 0 but prints a warning; no response at all (status 0 on http(s)) and chrome-error:// pages always exit 1')
     .action(async (url: string, opts) => {
       try {
         const { browser } = await connect(opts.session);
@@ -23,14 +24,19 @@ export function registerNavCommands(program: Command): void {
           timeout: opts.timeout,
         });
         const elapsed = Date.now() - start;
-        const status = response?.status() ?? 0;
+        const verdict = judgeNavigation({
+          url, status: response?.status() ?? 0, finalUrl: page.url(), elapsed, strict: !!opts.strict,
+        });
         browser.disconnect();
 
-        if (opts.strict && (status < 200 || status >= 300)) {
-          error(`${url} (${status}, ${elapsed}ms) — strict: non-2xx`);
+        // 4xx/5xx 는 기본으로 exit 0 이지만 조용하지는 않다 — 호출자가 다음에 찍을 것이
+        // 에러 페이지라는 사실을 ⚠ 로 남긴다. 상태 0 과 chrome-error 는 실패다 (#189).
+        if (verdict.level === 'fail') {
+          error(`${verdict.line} — ${verdict.note}`);
           process.exit(1);
         }
-        success(`${url} (${status}, ${elapsed}ms)`);
+        success(verdict.line);
+        if (verdict.level === 'warn') warn(verdict.note!);
       } catch (e) {
         error((e as Error).message);
         process.exit(1);
