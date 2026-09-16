@@ -450,6 +450,25 @@ function main() {
   fs.writeFileSync(PLAN, JSON.stringify({ steps: ['expect text clicked'] }));
   run('apply (전부 ok)', ['apply', PLAN, ...S], { expectMatch: /1 step ok/ });
   q("document.getElementById('text').value=''; document.getElementById('status').textContent='idle'");
+  // 목적별 관측 (#213)
+  const si = run('snapshot --interactive', ['snapshot', '--interactive', ...S]);
+  const siLines = si.out.split('\n').filter(l => /^@/.test(l));
+  check('--interactive 는 조작 가능한 것만, 번호는 전체와 같다', siLines.some(l => /^@\d+ +button "click me"/.test(l)) && !siLines.some(l => /StaticText|heading|paragraph/.test(l)), si.out.slice(0, 160));
+  const fo = run('forms', ['forms', ...S]);
+  check('forms 가 라벨·값·플래그를 낸다', /type here\s+│\s+textbox/.test(fo.out) && /readonly/.test(fo.out) && /combobox\s+│\s+A ⟨A \| B⟩/.test(fo.out), fo.out.slice(0, 300));
+  run('forms --json', ['forms', '--json', ...S], { expectMatch: /"label": "type here"/ });
+  run('links', ['links', ...S], { expectMatch: /go to anchor/ });
+  const tb = run('table --json', ['table', '#orders', '--json', ...S]);
+  check('table 이 th 를 키로 행을 낸다', (() => { try { const r = JSON.parse(tb.out); return r[0].Item === 'Apple' && r[1].Qty === '1'; } catch { return false; } })(), tb.out.slice(0, 100));
+  run('table --csv', ['table', '#orders', '--csv', ...S], { expectMatch: /Item,Qty\nApple,3/ });
+  run('read', ['read', ...S], { expectMatch: /A paragraph of body text/ });
+  const ex = run('explain button "click me"', ['explain', 'button', 'click me', ...S]);
+  check('explain 이 selector·click 판정·cache 를 낸다', /selector\s+#btn/.test(ex.out) && /would land/.test(ex.out) && /cache\s+seen as @\d+/.test(ex.out), ex.out.slice(0, 300));
+  q("document.getElementById('cover').classList.add('on')");
+  run('explain (가려진 요소)', ['explain', '#under', ...S], { expectMatch: /covered by div#cover/ });
+  q("document.getElementById('cover').classList.remove('on')");
+  const wt = run('watch --for 1s --console', ['watch', '--for', '1s', '--console', ...S]);
+  check('watch 가 NDJSON 으로 시작·끝을 낸다', /"type":"watch"/.test(wt.out) && /"type":"end"/.test(wt.out), wt.out.slice(0, 200));
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);

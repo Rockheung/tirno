@@ -170,3 +170,16 @@ test('없는 rootBackendId 는 전체 트리로 돌아간다 — 호출자가 �
   const r = renderAXTree(tree(root) as never, true, true, 12345);
   assert.equal(r.lines.length, 1);
 });
+
+// --interactive 는 줄만 거른다 — 번호는 전체 트리와 같아야 `snapshot` 의 @N 과 맞는다 (#213).
+test('interactiveOnly 는 조작 가능한 줄만 내되 번호는 전체와 같다', () => {
+  const btn = node('button', { name: 'Go', backendDOMNodeId: 900 });
+  const text = node('StaticText', { name: 'hello', backendDOMNodeId: 800 });
+  const focusableDiv = node('generic', { backendDOMNodeId: 700, properties: [{ name: 'focusable', value: { value: true } }] });
+  const root = node('RootWebArea', { name: 'Page', children: [text, btn, focusableDiv] });
+  const full = renderAXTree(tree(root, text, btn, focusableDiv) as never, true, true);
+  const only = renderAXTree(tree(root, text, btn, focusableDiv) as never, true, true, undefined, { interactiveOnly: true });
+  assert.equal(full.lines.length, 4);
+  assert.deepEqual(only.lines, ['@3  button "Go"', '@4  generic']);
+  assert.deepEqual(Object.keys(only.refs), Object.keys(full.refs), 'ref store 는 전체와 같다');
+});

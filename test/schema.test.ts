@@ -20,7 +20,7 @@ async function realProgram(): Promise<Command> {
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
-    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'], ['plan', 'registerPlanCommands'],
+    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'], ['plan', 'registerPlanCommands'], ['observe', 'registerObserveCommands'],
     ['net', 'registerNetCommands'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
     ['headers', 'registerHeaderCommands'],

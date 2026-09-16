@@ -49,6 +49,7 @@ interface RenderNode {
   name: string;
   value?: string;
   states?: string[];
+  interactive?: boolean;
   backendId?: number;
   children: RenderNode[];
 }
@@ -83,11 +84,18 @@ function foldsAway(node: AXNode, role: string, name: string, hasValue: boolean, 
   return childCount <= 1;
 }
 
+/** 사람이 조작할 수 있는 role — `snapshot --interactive` 가 남기는 것 */
+export const INTERACTIVE_ROLES = new Set([
+  'button', 'link', 'textbox', 'searchbox', 'checkbox', 'radio', 'combobox', 'listbox', 'option',
+  'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'switch', 'slider', 'spinbutton', 'treeitem',
+]);
+
 export function renderAXTree(
   nodes: AXNode[],
   skipIgnored: boolean,
   fold = true,
   rootBackendId?: number,
+  opts: { interactiveOnly?: boolean } = {},
 ): { lines: string[]; refs: { [k: string]: DetailedRef }; folded: FoldStats } {
   const byId = new Map<string, AXNode>();
   for (const n of nodes) byId.set(n.nodeId, n);
@@ -119,6 +127,8 @@ export function renderAXTree(
     }
 
     const out: RenderNode = { role, name, children };
+    // 조작 가능 — role 로, 또는 이름 없는 div 라도 focusable 이면
+    if (INTERACTIVE_ROLES.has(role) || (isFocusable(node) && GENERIC_ROLES.has(role))) out.interactive = true;
     if (hasValue) out.value = JSON.stringify(node.value!.value);
     // 상태 — checked · expanded · disabled. 체크박스는 value 가 없어 이것 없이는 켜고 끈 것이
     // 스냅샷에도 delta 에도 안 보였다
@@ -148,7 +158,10 @@ export function renderAXTree(
     const name = node.name ? ` "${node.name}"` : '';
     const value = node.value !== undefined ? ` value=${node.value}` : '';
     const states = node.states ? ` [${node.states.join(' ')}]` : '';
-    lines.push(`${prefix}${'  '.repeat(depth)}${node.role}${name}${value}${states}`);
+    // --interactive 는 줄만 거른다 — 번호는 전체 트리와 같게 매겨 `snapshot` 의 @N 과 일치한다
+    if (!opts.interactiveOnly || node.interactive) {
+      lines.push(`${prefix}${opts.interactiveOnly ? '' : '  '.repeat(depth)}${node.role}${name}${value}${states}`);
+    }
     for (const child of node.children) emit(child, depth + 1);
   }
 

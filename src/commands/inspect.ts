@@ -61,6 +61,7 @@ export function registerInspectCommands(program: Command): void {
     .option('--no-cache', 'Skip visual-cache write')
     .option('--selector <css>', 'Only the subtree under this element (light DOM, then open shadow roots). Refs are renumbered from @1 for that subtree')
     .option('--ref <@N>', 'Only the subtree under a ref from the previous snapshot. Refs are renumbered from @1')
+    .option('--interactive', 'Only what can be acted on — buttons, links, fields, checkboxes, tabs, focusable containers. Numbers match the full snapshot')
     .option('--max-output <chars>', 'Cut the tree at this many characters (whole lines) and say how much was cut. Also TIRNO_MAX_OUTPUT. Narrow with --selector/--ref before raising this', intArg)
     .option('--content-boundaries', 'Wrap the tree in begin/end markers with a per-run nonce so a reader can tell page-authored text from tirno output. Also TIRNO_CONTENT_BOUNDARIES=1. A marker, not a security boundary')
     .action(async (opts) => {
@@ -113,7 +114,7 @@ export function registerInspectCommands(program: Command): void {
           return;
         }
 
-        const { lines, refs: detailed, folded } = renderAXTree(tree.nodes, !opts.verbose, !opts.verbose, rootBackendId);
+        const { lines, refs: detailed, folded } = renderAXTree(tree.nodes, !opts.verbose, !opts.verbose, rootBackendId, { interactiveOnly: !!opts.interactive });
 
         // collect cache data and (optional) vision augment while CDP is attached
         let cachePayload: visualCache.CacheEntry | null = null;

@@ -568,6 +568,38 @@ tirno recipe ls · show login · rm login · cancel
   `runs` 에 성공/실패 횟수와 마지막 실패 단계가 남는다.
 - 파일은 JSON 이다(의존 0 — YAML 파서를 들이지 않는다). 손으로 고쳐도 된다.
 
+### 목적별 관측 — `forms` · `links` · `table` · `read` · `explain` · `watch`
+
+`snapshot` 하나가 모든 것을 낸다. 목적을 말하면 토큰이 준다:
+
+```bash
+tirno snapshot --interactive          # 누를 수 있는 것만 — 번호는 전체 스냅샷과 같다
+tirno forms [--selector css] [--json] # 폼 필드 표: LABEL · ROLE · VALUE(select 는 ⟨옵션⟩) · FLAGS(required·disabled·readonly·invalid) · SELECTOR. 비밀번호는 가린다
+tirno links [--external] [--json]     # NAME · HREF · external/target
+tirno table '#orders' [--json|--csv]  # th 를 키로 행 배열
+tirno read [--max-output N]           # 본문만 — article/main 또는 <p> 밀도가 가장 높은 블록. nav·header·footer·aside 제외
+tirno explain @7 · explain button "Save" · explain '#btn'
+tirno watch [--console] [--network] [--dom] [--for 10s]   # NDJSON 스트림, Ctrl-C 까지
+```
+
+`explain` 은 "왜 안 눌리나" 를 한 화면에 답한다:
+```
+✓ button "click me" — button "click me"  (@15, generation 1)
+  element     <button id="btn" type="button">
+  selector    #btn
+  box         64×21 at (685,122)
+  visible     yes
+  click       would land (self)          ← 가려졌으면 covered by div#cover.modal-backdrop
+  enabled     yes
+  focusable   yes
+  field       value "locked" · readonly  ← 폼 컨트롤이면
+  cache       seen as @15 in the entry captured 2026-09-16 22:09
+```
+
+`watch` 는 stateless 모델의 예외다 — 프로세스가 붙어 있는 동안 페이지 이벤트(console ·
+pageerror · request/response/failed · navigation · dialog(자동 수락) · DOM 변경 개수/500ms)를
+한 줄 JSON 으로 낸다. 비동기 동작을 지켜볼 때.
+
 ### 계획과 적용 — `plan` / `apply`
 
 레시피의 일반형이다. 파일에 상태를 선언하고, **실행 전에** 될지 판정하고, 적용한다.
