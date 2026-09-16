@@ -497,14 +497,20 @@ export class Page {
       const size = m.cssContentSize ?? m.contentSize;
       clip = { x: 0, y: 0, width: Math.ceil(size.width), height: Math.ceil(size.height), scale: 1 };
     }
-    const { data } = await this.session.send('Page.captureScreenshot', {
-      format: opts.type ?? 'png',
-      ...(opts.quality !== undefined && (opts.type ?? 'png') !== 'png' ? { quality: opts.quality } : {}),
-      ...(clip ? { clip } : {}),
-      captureBeyondViewport: !!opts.fullPage,
-      optimizeForSpeed: opts.optimizeForSpeed ?? false,
-    });
-    return Buffer.from(data, 'base64');
+    // 세션 뱃지(cdp/badge)는 사람용이다 — 스크린샷과 지문에는 안 들어간다
+    await this.evaluate('window.__tirno_badge && window.__tirno_badge.hide()').catch(() => {});
+    try {
+      const { data } = await this.session.send('Page.captureScreenshot', {
+        format: opts.type ?? 'png',
+        ...(opts.quality !== undefined && (opts.type ?? 'png') !== 'png' ? { quality: opts.quality } : {}),
+        ...(clip ? { clip } : {}),
+        captureBeyondViewport: !!opts.fullPage,
+        optimizeForSpeed: opts.optimizeForSpeed ?? false,
+      });
+      return Buffer.from(data, 'base64');
+    } finally {
+      await this.evaluate('window.__tirno_badge && window.__tirno_badge.show()').catch(() => {});
+    }
   }
 
   // ---------------------------------------------------------- emulation

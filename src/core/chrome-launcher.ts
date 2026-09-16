@@ -7,6 +7,7 @@ import { clearActivePort } from './devtools-port.js';
 import { resolveChrome } from './chrome-finder.js';
 import { sandboxHint } from './launch-hint.js';
 import { buildChromeArgs, spawnChrome, waitForDevTools, releaseChrome, type DevToolsEndpoint } from '../cdp/launch.js';
+import { randomBadgeColor } from '../cdp/badge.js';
 
 export interface LaunchOptions {
   name: string;
@@ -23,6 +24,8 @@ export interface LaunchOptions {
    * the page does and this tool exists to observe pages as they are.
    */
   extensions?: boolean;
+  /** 세션 뱃지. 생략하면 headful 일 때 켠다. */
+  badge?: boolean;
 }
 
 /**
@@ -153,6 +156,9 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     spawnAndWait,
   );
 
+  const headless = opts.headless ?? false;
+  // 뱃지는 화면이 있을 때만 뜻이 있다. 색은 여기서 한 번 — connect 마다 바뀌면 뱃지가 아니다.
+  const badge = opts.badge ?? !headless;
   const now = new Date().toISOString();
   const meta: store.SessionMetadata = {
     name: opts.name,
@@ -163,6 +169,9 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     chromeFlags: args,
     ...(opts.executablePath ? { executablePath: opts.executablePath } : {}),
     ...(opts.extensions ? { extensions: true } : {}),
+    ...(headless ? { headless: true } : {}),
+    badge,
+    ...(badge ? { badgeColor: randomBadgeColor() } : {}),
     createdAt: now,
     lastAccessedAt: now,
     // Pin JS-side viewport to 1920x1080 via setDeviceMetricsOverride. Chrome

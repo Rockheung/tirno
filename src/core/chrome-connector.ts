@@ -6,6 +6,7 @@ import { ChromeNotRunning, NoActiveSession, SessionNotOwned } from '../util/erro
 import { getActivePage } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
 import { applyPermissions } from '../cdp/permissions.js';
+import { badgeInstallScript } from '../cdp/badge.js';
 
 // 블록과 가드는 둘 다 필요하다. 이 스크립트는 realm 마다 들어가는데, 한 realm 에
 // 두 번 들어가는 일이 실제로 있다 — iframe realm 을 위젯 수만큼 만드는 페이지가
@@ -218,12 +219,18 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
     }
   `;
 
+  // 세션 뱃지 — headful 이고 끄지 않았으면. 옛 대장(badge 필드 없음)은 headless 표시도 없으므로
+  // 켠다 — 그때는 headless 여부를 모르지만, headless 에서 붙어도 해가 없다(보는 사람이 없을 뿐).
+  const badgeScript = (meta.badge ?? !meta.headless) && meta.badgeColor
+    ? badgeInstallScript(meta.name, meta.badgeColor) : null;
+
   const attachToPage = async (p: Page): Promise<void> => {
     try {
       p.removeAllListeners('dialog');
       p.on('dialog', (d) => { d.accept().catch(() => {}); });
       await p.evaluateOnNewDocument(NEUTRALIZE_UNLOAD);
       await p.evaluateOnNewDocument(RECORD_INSTALL);
+      if (badgeScript) await p.evaluateOnNewDocument(badgeScript);
       // 사용자가 `inject add` 로 등록한 훅. tirno 자신의 두 스텁 **뒤**에 건다 —
       // 앞에 두면 사용자 스크립트가 beforeunload 무력화보다 먼저 돌아, 자기가 건
       // 리스너가 걸러지는지 여부가 순서에 따라 달라진다.
@@ -235,6 +242,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
       // effect on next navigation; current page may have already attached
       await p.evaluate(NEUTRALIZE_UNLOAD).catch(() => {});
       await p.evaluate(RECORD_INSTALL).catch(() => {});
+      if (badgeScript) await p.evaluate(badgeScript).catch(() => {});
     } catch { /* page may be detached; best-effort */ }
   };
   const attachAll = async (): Promise<void> => {
