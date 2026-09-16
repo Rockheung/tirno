@@ -135,7 +135,10 @@ export async function resolveWaypoints(cdp: CdpSession, waypoints: Waypoint[]): 
 export function summarize(rs: Resolution[]): { line: string; resolved: number; unresolved: number } {
   const by = { dom: 0, a11y: 0, bbox: 0 };
   let unresolved = 0;
-  for (const r of rs) r.channel ? by[r.channel]++ : unresolved++;
+  for (const r of rs) {
+    if (r.channel) by[r.channel]++;
+    else unresolved++;
+  }
   const resolved = rs.length - unresolved;
   const parts = (['dom', 'a11y', 'bbox'] as const).filter(c => by[c] > 0).map(c => `${c} ${by[c]}`).join(' · ');
   return { line: `loaded ${rs.length} refs, ${resolved} resolved${parts ? ` (${parts})` : ''}, ${unresolved} unresolved`, resolved, unresolved };
