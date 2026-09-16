@@ -125,11 +125,21 @@ export class ElementHandle {
     return r.result.value;
   }
 
+  /**
+   * 누를 점 — 상자를 **뷰포트로 잘라낸** 뒤의 중심. 뷰포트보다 큰 요소는 상자 중심이
+   * 화면 밖이고, 거기로 보낸 마우스 이벤트는 아무 데도 닿지 않으면서 "Clicked" 가 됐다
+   * (실측: 3000px 버튼). puppeteer 는 getContentQuads 를 뷰포트로 클립했다 — 같은 뜻이다.
+   */
   private async centre(): Promise<{ x: number; y: number }> {
     await this.page.session.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: this.backendId }).catch(() => {});
     const box = await this.boundingBox();
     if (!box) throw new Error('Node is either not clickable or not an Element');
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const m = await this.page.session.send('Page.getLayoutMetrics');
+    const vw = m.cssLayoutViewport.clientWidth, vh = m.cssLayoutViewport.clientHeight;
+    const x0 = Math.max(box.x, 0), y0 = Math.max(box.y, 0);
+    const x1 = Math.min(box.x + box.width, vw), y1 = Math.min(box.y + box.height, vh);
+    if (x1 <= x0 || y1 <= y0) throw new Error('Node is outside of the viewport even after scrolling into view');
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
   }
 
   /** 실제 마우스 — 스크롤해서 보이게 한 뒤 중심을 누른다 (puppeteer ElementHandle.click) */
@@ -490,11 +500,21 @@ export class Page {
 
   // ---------------------------------------------------------- emulation
 
-  /** null 이면 오버라이드 해제 */
+  /**
+   * null 이면 오버라이드 해제.
+   *
+   * `mobile`/`hasTouch` 가 바뀌면 문서를 **다시 연다** — `'ontouchstart' in window` 같은
+   * 것은 문서가 만들어질 때 정해져서, 오버라이드만으로는 다음 이동까지 데스크톱 문서인
+   * 채다(실측: iPhone 14 에뮬레이션 뒤 ontouchstart false, reload 뒤 true). puppeteer 의
+   * setViewport 가 같은 조건에서 reload 했고, 그 동작에 기대던 `emulate --device` 를 지킨다.
+   */
   async setViewport(vp: Viewport | null): Promise<void> {
+    const before = this.viewportState;
     if (!vp) {
       await this.session.send('Emulation.clearDeviceMetricsOverride');
       await this.session.send('Emulation.setTouchEmulationEnabled', { enabled: false });
+      this.viewportState = { mobile: false, hasTouch: false };
+      if (before && (before.mobile || before.hasTouch)) await this.reloadIfDocument();
       return;
     }
     await this.session.send('Emulation.setDeviceMetricsOverride', {
@@ -505,6 +525,18 @@ export class Page {
       screenOrientation: vp.isLandscape ? { angle: 90, type: 'landscapePrimary' } : { angle: 0, type: 'portraitPrimary' },
     });
     await this.session.send('Emulation.setTouchEmulationEnabled', { enabled: vp.hasTouch ?? false });
+    this.viewportState = { mobile: vp.isMobile ?? false, hasTouch: vp.hasTouch ?? false };
+    if (before && (before.mobile !== this.viewportState.mobile || before.hasTouch !== this.viewportState.hasTouch)) {
+      await this.reloadIfDocument();
+    }
+  }
+
+  /** 세션이 아는 마지막 뷰포트 성격. 세션 첫 호출(before 없음)에는 reload 하지 않는다 — connect 마다 재적용되는 경로다 */
+  private viewportState: { mobile: boolean; hasTouch: boolean } | null = null;
+
+  private async reloadIfDocument(): Promise<void> {
+    if (!/^https?:|^file:/.test(this.currentUrl)) return;
+    await this.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
   }
 
   /** 빈 문자열이면 해제 */
