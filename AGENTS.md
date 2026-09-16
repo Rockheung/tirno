@@ -27,7 +27,7 @@ node scripts/smoke.mjs   # 전 명령 190건 (~55s, 진짜 Chrome + 네트워크
 안 보이고, 긁으면 없는 플래그가 나온다. schema 는 commander 트리에서 실행 시점에 뽑는다.
 
 ```bash
-tirno schema | jq '.commands[].name'                          # 66개
+tirno schema | jq '.commands[].name'                          # 전체 명령 — 개수도 여기서 센다
 tirno schema | jq '.commands[] | select(.destructive) | .name' # 지우는 것부터 확인
 ```
 
