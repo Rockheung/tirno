@@ -99,6 +99,8 @@ export interface SessionMetadata {
    * begin" once the flow navigates. The CLI keeps that here instead.
    */
   recording?: { startUrl: string; startedAt: string };
+  /** `recipe begin` 이 켠 진행 중 기록 — `recipe end` 가 파일로 굳히고 지운다 (#211) */
+  recipeRecording?: import('./recipe-store.js').RecipeRecording;
 }
 
 function sessionsRoot(): string {

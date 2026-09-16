@@ -20,7 +20,7 @@ async function realProgram(): Promise<Command> {
     ['anchor', 'registerAnchorCommands'],
     ['nav', 'registerNavCommands'], ['inspect', 'registerInspectCommands'],
     ['input', 'registerInputCommands'], ['eval', 'registerEvalCommand'],
-    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'],
+    ['declare', 'registerDeclareCommands'], ['a11y', 'registerA11yCommands'], ['recipe', 'registerRecipeCommands'],
     ['net', 'registerNetCommands'],
     ['emulate', 'registerEmulateCommand'], ['permissions', 'registerPermissionCommands'],
     ['headers', 'registerHeaderCommands'],
@@ -60,7 +60,7 @@ test('destructive commands are flagged', async () => {
   const destructive = schema.commands.filter(c => c.destructive).map(c => c.name).sort();
   assert.deepEqual(destructive, [
     'cache prune', 'close-tab', 'gc', 'kill',
-    'record rm', 'restart', 'trail rm',
+    'recipe rm', 'record rm', 'restart', 'trail rm',
   ]);
 });
 

@@ -536,6 +536,38 @@ tirno ensure focused textbox "Search"
 출력은 셋 중 하나 — `already` / `ensured — <실측>` (+ delta) / `✗ … acted, but page says …`.
 `count` · `title` · `text` 는 만들 수 없으므로 `ensure` 가 거절한다 — `expect` 로.
 
+### 레시피 — 절차를 기억한다
+
+cache 는 요소를 기억하지만 "이 사이트에 로그인하는 법" 은 매번 다시 판단해야 했다. 레시피는
+그 절차다 — 두 번째 방문부터 판단 없이 돈다.
+
+```bash
+tirno recipe begin login --var EMAIL --var PASSWORD   # 이후 이 세션의 행동 명령이 기록된다
+tirno ensure textbox "Email" = "$EMAIL"               # 셸이 푼 값이 들어가지만, 기록엔 $EMAIL
+tirno fill textbox "Password" "$PASSWORD"
+tirno click button "Sign in"
+tirno expect url matches /dash within 10s
+tirno recipe end                                      # → ~/.tirno/recipes/app.example.com/login.json
+
+tirno recipe run login EMAIL=me@x PASSWORD=…          # 재생. NAME=value 가 없으면 환경변수
+tirno recipe run login --from 3                       # 고친 뒤 그 단계부터
+tirno recipe run login --dry-run                      # 무엇을 칠지만
+tirno recipe ls · show login · rm login · cancel
+```
+
+- **기록되는 것**: 성공한 행동·선언 명령만(`click` `fill` `type` `press` `hover` `scroll` `upload`
+  `drag` `select` `nav` `back` `forward` `reload` `wait` `wait-for` `ensure` `expect`). 실패한 명령은
+  안 적힌다. 세션 옵션(`-s`)은 뺀다.
+- **`@N` 은 role+이름으로 바뀌어 적힌다** — `click @7` 은 다음 실행에서 뜻이 없다.
+  `click button "Sign in"` 으로 적히고 `(was @7)` 을 남긴다. 이름 없는 요소는 바꿀 수 없어 그대로
+  두고 경고한다 — 셀렉터를 쓰라는 뜻이다.
+- **비밀은 파일에 없다.** `--var NAME` 으로 이름을 주면 그 환경변수의 **값과 같은 인자**가
+  `$NAME` 으로 적힌다 — 값은 비교에만 쓰고 쓰지 않는다. 재생 출력에서도 `••••` 다.
+- **재생은 tirno 자신을 자식으로** 단계마다 친다 — 사용자가 쳤던 그 argv 다. 실패하면 그
+  단계에서 멈추고 그 명령의 실패 문구와 `code` 를 실어 `recipe_step_failed` 로 낸다.
+  `runs` 에 성공/실패 횟수와 마지막 실패 단계가 남는다.
+- 파일은 JSON 이다(의존 0 — YAML 파서를 들이지 않는다). 손으로 고쳐도 된다.
+
 ### 접근성 감사 — `a11y`
 
 ```bash

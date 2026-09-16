@@ -152,6 +152,14 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'expect':       { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
   'ensure':       { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'a11y':         { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  // ---- 레시피
+  'recipe begin': { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'recipe end':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
+  'recipe cancel': { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
+  'recipe ls':    { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
+  'recipe show':  { effects: 'read_only', output_kind: 'data', cardinality: 'single' },
+  'recipe rm':    { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
+  'recipe run':   { effects: 'non_idempotent', output_kind: 'data', cardinality: 'bounded' },
   'upload':       { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single' },
 
   // ---- execution
