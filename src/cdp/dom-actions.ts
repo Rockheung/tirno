@@ -1,6 +1,7 @@
 import type { Page, ElementHandle } from './page.js';
 import type { CdpSession } from './client.js';
 import { READ_FIELD_STATE, refuseBeforeTyping, describeMismatch, type FieldState } from './fill-verify.js';
+import { HIT_TEST, refuseClick, type HitTest } from './click-target.js';
 
 export interface ResolvedRef {
   objectId: string;
@@ -42,27 +43,81 @@ const MOVE_FOCUS = `
   if (typeof this.focus === "function") this.focus();
 `;
 
-export async function clickByRef(page: Page, backendNodeId: number, dbl = false): Promise<void> {
+export interface ClickOptions {
+  /** 출력에 쓸 대상 표기 */
+  label: string;
+  dbl?: boolean;
+  /**
+   * 좌표 대신 `this.click()`. 가림·뷰포트를 무시한다 — 뷰포트보다 큰 요소, 보이지 않지만
+   * 핸들러는 있는 요소용. 기본은 사람과 같은 쪽(실제 마우스 + 가림 판정) (#183).
+   */
+  synthetic?: boolean;
+}
+
+/**
+ * 실제 마우스로 누른다. 진짜 더블클릭처럼 clickCount 1 → 2 두 쌍을 보낸다.
+ * mousedown 이 포커스를 옮기므로 MOVE_FOCUS 가 필요 없다 — 그것은 합성 경로의 보정이다.
+ */
+async function mouseClickAt(page: Page, x: number, y: number, dbl?: boolean): Promise<void> {
+  await page.mouse.click(x, y, { count: 1 });
+  if (dbl) await page.mouse.click(x, y, { count: 2 });
+}
+
+/**
+ * 합성 클릭. 포커스는 직접 옮긴다 — `this.click()` 은 안 옮기고, 그 어긋남이 #166 이었다.
+ * 순서는 블러 → 포커스 → 클릭이어야 한다(MOVE_FOCUS 주석).
+ */
+async function syntheticClick(cdp: CdpSession, objectId: string, dbl?: boolean): Promise<void> {
+  // 텍스트 노드(StaticText ref)에는 click() 이 없다 — 부모 요소로 올라간다
+  const asElement = 'const el = this.nodeType === 1 ? this : this.parentElement; if (!el) throw new Error("not an element");';
+  await callOrThrow(cdp, objectId, `function(){ ${asElement} el.scrollIntoView({block:"center", inline:"center"}); (function(){${MOVE_FOCUS}}).call(el); }`);
+  await callOrThrow(cdp, objectId, `function(){ ${asElement} el.click(); ${dbl ? 'el.click();' : ''} }`, true);
+}
+
+/**
+ * `Runtime.callFunctionOn` 은 페이지가 던진 예외를 **돌려준다** — `exceptionDetails` 로.
+ * 안 보면 `this.click is not a function` 이 성공으로 지나간다.
+ */
+async function callOrThrow(cdp: CdpSession, objectId: string, functionDeclaration: string, awaitPromise = false): Promise<unknown> {
+  const res = await cdp.send('Runtime.callFunctionOn', {
+    objectId, functionDeclaration, awaitPromise, returnByValue: true,
+  }) as { result: { value?: unknown }; exceptionDetails?: { exception?: { description?: string }; text?: string } };
+  if (res.exceptionDetails) {
+    const d = res.exceptionDetails;
+    throw new Error(`page threw during click: ${d.exception?.description?.split('\n')[0] ?? d.text ?? 'unknown error'}`);
+  }
+  return res.result.value;
+}
+
+export async function clickByRef(
+  page: Page, backendNodeId: number, opts: ClickOptions = { label: '@ref' },
+): Promise<void> {
   const { objectId, cdp } = await resolveBackendNode(page, backendNodeId);
   try {
-    // scroll into view first to make the click reliable, and move focus the way
-    // a real click would — see MOVE_FOCUS.
-    await cdp.send('Runtime.callFunctionOn', {
-      objectId,
-      functionDeclaration: `function(){ this.scrollIntoView({block:"center", inline:"center"});${MOVE_FOCUS}}`,
-      awaitPromise: false,
-    });
-    const fn = dbl
-      ? 'function(){ this.click(); this.click(); }'
-      : 'function(){ this.click(); }';
-    await cdp.send('Runtime.callFunctionOn', {
-      objectId,
-      functionDeclaration: fn,
-      awaitPromise: true,
-    });
+    if (opts.synthetic) {
+      await syntheticClick(cdp, objectId, opts.dbl);
+      return;
+    }
+    const h = await callOrThrow(cdp, objectId, HIT_TEST) as HitTest;
+    const refusal = refuseClick(opts.label, h);
+    if (refusal) throw new Error(refusal);
+    await mouseClickAt(page, h.x, h.y, opts.dbl);
   } finally {
     await cdp.detach();
   }
+}
+
+/** 셀렉터 경로. ref 경로와 같은 계약 — 가림 판정 뒤 실제 마우스. */
+export async function clickElement(page: Page, el: ElementHandle, opts: ClickOptions): Promise<void> {
+  if (opts.synthetic) {
+    await el.evaluate(new Function('el', `el.scrollIntoView({block:"center", inline:"center"}); (function(){${MOVE_FOCUS}}).call(el); el.click(); ${opts.dbl ? 'el.click();' : ''}`) as never);
+    return;
+  }
+  // ElementHandle.evaluate 는 요소를 첫 인자로 넘긴다 — `this` 가 아니다.
+  const h = await el.evaluate(new Function('el', `return (${HIT_TEST}).call(el)`) as never) as HitTest;
+  const refusal = refuseClick(opts.label, h);
+  if (refusal) throw new Error(refusal);
+  await mouseClickAt(page, h.x, h.y, opts.dbl);
 }
 
 export interface FillOptions {
@@ -128,7 +183,7 @@ export async function fillElement(
   page: Page, el: ElementHandle, value: string, opts: FillOptions,
 ): Promise<void> {
   const verify = opts.verify !== false;
-  // puppeteer 는 요소를 첫 인자로 넘긴다 — `this` 가 아니다.
+  // ElementHandle.evaluate 는 요소를 첫 인자로 넘긴다 — `this` 가 아니다.
   const read = () => el.evaluate(new Function('el', `return (${READ_FIELD_STATE}).call(el)`) as never) as Promise<FieldState>;
   if (verify) {
     const refusal = refuseBeforeTyping(opts.label, await read());

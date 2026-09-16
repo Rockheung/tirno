@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>tirno smoke</title>
-<style>body{font:16px system-ui;margin:24px} #box{width:200px;height:120px;background:#eee;margin:12px 0} .tall{height:2000px}</style>
+<style>body{font:16px system-ui;margin:24px} #box{width:200px;height:120px;background:#eee;margin:12px 0} .tall{height:2000px} #cover{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4)} #cover.on{display:block}</style>
 <h1 id="head">tirno smoke page</h1>
 <a id="link" href="#gone">go to anchor</a>
 <form>
@@ -16,12 +16,17 @@
 </form>
 <div id="box">drag target</div>
 <p id="status">idle</p>
+<div id="cover" class="modal-backdrop"></div>
+<button id="under" type="button">under</button>
 <img id="dot" src="dot.png" alt="" width="1" height="1">
 <div class="tall"></div>
 <p id="bottom">bottom marker</p>
 <script>
   document.getElementById('btn').addEventListener('click', () => {
     document.getElementById('status').textContent = 'clicked';
+  });
+  document.getElementById('under').addEventListener('click', () => {
+    document.getElementById('status').textContent = 'under-clicked';
   });
   document.getElementById('link').addEventListener('mouseover', () => {
     document.getElementById('status').textContent = 'hovered';

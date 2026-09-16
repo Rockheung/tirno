@@ -361,7 +361,11 @@ function main() {
   const stale = run('click @N (교체된 DOM → exit≠0)', ['click', `@${btnRef}`, ...S], { expectFail: true });
   check('거부 메시지가 무엇이 무엇으로 바뀌었는지 말한다',
     /was button "click me"/.test(stale.out + stale.err), (stale.out + stale.err).slice(0, 110));
-  run('click --stale-ok (알고도 진행)', ['click', `@${btnRef}`, '--stale-ok', ...S], { expectMatch: /Clicked/ });
+  // --stale-ok 는 세대 검사만 건너뛴다. 교체된 노드는 문서에 없으므로 실제 마우스가 갈 곳이
+  // 없다 — 예전 합성 click() 은 떨어진 노드의 핸들러를 돌리고 "Clicked" 를 찍었다 (#183).
+  run('click --stale-ok (교체된 노드 → detached 로 exit≠0)', ['click', `@${btnRef}`, '--stale-ok', ...S],
+    { expectFail: true, expectMatch: /no longer in the document/ });
+  run('click --stale-ok --synthetic (알고도 진행)', ['click', `@${btnRef}`, '--stale-ok', '--synthetic', ...S], { expectMatch: /Clicked/ });
   run('reload (세대 무효화)', ['reload', ...S]);
   run('snapshot (새 세대)', ['snapshot', ...S]);
 
@@ -370,6 +374,20 @@ function main() {
   run('hover @ref', ['hover', `@${linkRef ?? 0}`, ...S], { expectMatch: /Hovered/ });
   check('hover @ref 가 mouseover 를 쐈다', q("document.getElementById('status').textContent") === 'hovered',
     `실측: ${q("document.getElementById('status').textContent")} (ref @${linkRef})`);
+  // 가려진 요소는 사람이 못 누른다. 합성 click() 은 뚫고 들어가 "Clicked" 를 찍었다 (#183).
+  q("document.getElementById('cover').classList.add('on')");
+  const cov = run('click 가려진 셀렉터 (→ exit≠0)', ['click', '#under', ...S], { expectFail: true });
+  check('거절이 가린 요소를 이름으로 말한다', /covered at .* by div#cover\.modal-backdrop/.test(cov.out + cov.err),
+    (cov.out + cov.err).slice(0, 120));
+  check('가려진 버튼의 핸들러가 돌지 않았다', q("document.getElementById('status').textContent") !== 'under-clicked');
+  const snapCov = run('snapshot (가려진 @ref 용)', ['snapshot', ...S]);
+  const underRef = (/@(\d+)[^\n]*button "under"/.exec(snapCov.out) ?? [])[1];
+  run('click 가려진 @ref (→ exit≠0)', ['click', `@${underRef ?? 0}`, ...S], { expectFail: true, expectMatch: /covered/ });
+  run('click --synthetic (알고도 뚫는다)', ['click', `@${underRef ?? 0}`, '--synthetic', ...S], { expectMatch: /Clicked .*synthetic/ });
+  check('--synthetic 은 핸들러를 돌린다', q("document.getElementById('status').textContent") === 'under-clicked');
+  q("document.getElementById('cover').classList.remove('on'); document.getElementById('status').textContent='idle'");
+  run('click 걷힌 뒤 (실제 마우스)', ['click', '#under', ...S], { expectMatch: /Clicked/ });
+  check('실제 마우스 클릭이 핸들러를 돌렸다', q("document.getElementById('status').textContent") === 'under-clicked');
   // 값에 공백·괄호·따옴표·유니코드가 들어간다 — fill 이 셸이나 이스케이프를 거치면 깨진다.
   const FILL = '안녕 world ("quoted") + 50%';
   run('fill', ['fill', '#text', FILL, ...S]);
