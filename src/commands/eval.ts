@@ -79,6 +79,7 @@ export function registerEvalCommand(program: Command): void {
     .option('--json', 'Output as JSON')
     .option('--timeout <ms>', 'Give up when the expression has not settled. 0 waits as long as the CDP connection allows (~3 min).', intArg, 30000)
     .option('--max-output <chars>', 'Cut the printed result at this many characters (whole lines) and say how much was cut. Also TIRNO_MAX_OUTPUT. With --json the cut result is wrapped as {"truncated":…,"partial":"…"} so it still parses')
+    .option('--allow-eval', 'Run even in a --read-only session (eval can write; the policy cannot tell)')
     .option('--content-boundaries', 'Wrap the result in begin/end markers with a per-run nonce — the result is page-authored text. Also TIRNO_CONTENT_BOUNDARIES=1')
     .action(async (expressionArg: string | undefined, opts) => {
       try {

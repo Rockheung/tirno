@@ -29,7 +29,8 @@ export type ErrorCode =
   | 'ambiguous_target'      // role+이름이 여럿에 맞는다 — data.candidates → --exact 또는 @N
   | 'expect_failed'         // expect 의 조건이 틀렸다 — data.expected / data.actual
   | 'a11y_failed'           // a11y --fail-on 의 문턱을 넘는 위반이 있다 — data.counts
-  | 'recipe_step_failed';   // recipe run 의 한 단계가 실패 — data.step / data.argv / data.code
+  | 'recipe_step_failed'    // recipe run 의 한 단계가 실패 — data.step / data.argv / data.code
+  | 'policy_denied';        // 세션 정책이 거부 — data.policy 에 어느 정책
 
 /** 코드마다 한 줄 — schema 와 문서가 같은 출처를 읽는다 */
 export const ERROR_CODES: Record<ErrorCode, string> = {
@@ -53,6 +54,7 @@ export const ERROR_CODES: Record<ErrorCode, string> = {
   expect_failed: 'the expectation did not hold — `data.expected` vs `data.actual`',
   a11y_failed: 'accessibility violations at or above --fail-on — `data.counts`',
   recipe_step_failed: 'a recipe step failed — `data.step`, `data.argv`, the step\'s own `data.code`; fix and `recipe run --from`',
+  policy_denied: 'the session policy (--allow / --read-only / --confirm destructive) refused this command — `data.policy`',
 };
 
 export class TirnoError extends Error {

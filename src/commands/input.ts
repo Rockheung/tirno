@@ -42,6 +42,7 @@ export function registerInputCommands(program: Command): void {
     .option('--exact', 'Match the accessible name exactly (case-sensitive)')
     .option('--dbl', 'Double click')
     .option('--stale-ok', 'Use the ref even if the page changed under the snapshot — see `snapshot` generations')
+    .option('--confirm', 'Act even though the target looks destructive (session policy --confirm destructive)')
     .option('--synthetic', 'Dispatch element.click() instead of a mouse click. Ignores whatever covers the element and the viewport — for elements larger than the viewport, or hidden ones that still have handlers. No pointer/mouse events are fired')
     .option(...DELTA_FLAG)
     .action(async (target: string, name: string | undefined, opts) => {
@@ -195,6 +196,7 @@ export function registerInputCommands(program: Command): void {
     .argument('<key>', 'Key name (Enter, Tab, Escape, ArrowDown, ...) or <modifier>+<key>')
     .option('-s, --session <name>', 'Session name')
     .option(...DELTA_FLAG)
+    .option('--confirm', 'Act even though the session policy would refuse (--confirm destructive)')
     .action(async (key: string, opts) => {
       try {
         const combo = parseKeyCombo(key);

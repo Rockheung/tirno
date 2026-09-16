@@ -469,6 +469,30 @@ function main() {
   q("document.getElementById('cover').classList.remove('on')");
   const wt = run('watch --for 1s --console', ['watch', '--for', '1s', '--console', ...S]);
   check('watch 가 NDJSON 으로 시작·끝을 낸다', /"type":"watch"/.test(wt.out) && /"type":"end"/.test(wt.out), wt.out.slice(0, 200));
+  // 세션 정책 (#214) — read-only · confirm destructive · allow(두 층). 별도 세션으로.
+  run('new --read-only', ['new', 'ro', PAGE, '--ephemeral', '--read-only', ...LAUNCH]);
+  run('click (read-only → policy_denied)', ['click', 'button', 'click me', '-s', 'ro'], { expectFail: true, expectMatch: /read-only/ });
+  run('eval (read-only → 거부)', ['eval', '1', '-s', 'ro'], { expectFail: true, expectMatch: /--allow-eval/ });
+  run('eval --allow-eval', ['eval', '1', '--allow-eval', '-s', 'ro'], { expectMatch: /^1$/m });
+  run('snapshot (read-only 는 관측 허용)', ['snapshot', '-s', 'ro']);
+  check('ls 에 정책이 보인다', /read-only/.test(run('ls (policy)', ['ls']).out));
+  run('kill ro', ['kill', 'ro', '--clean']);
+  fs.writeFileSync(path.join(OUT, 'destr.html'), '<button onclick="this.textContent=\'GONE\'">Delete account</button><button>Save</button>');
+  run('new --confirm destructive', ['new', 'cd', 'file://' + path.join(OUT, 'destr.html'), '--ephemeral', '--confirm', 'destructive', ...LAUNCH]);
+  run('click 파괴적 이름 (→ policy_denied)', ['click', 'button', 'Delete account', '-s', 'cd'], { expectFail: true, expectMatch: /looks destructive \(Delete\)/ });
+  run('click Save (통과)', ['click', 'button', 'Save', '-s', 'cd'], { expectMatch: /Clicked/ });
+  run('click --confirm', ['click', 'button', 'Delete account', '--confirm', '--no-delta', '-s', 'cd'], { expectMatch: /Clicked/ });
+  check('--confirm 이 실제로 눌렀다', q("document.querySelector('button').textContent", 'cd') === 'GONE');
+  run('restart (정책 물려받음)', ['restart', 'cd', 'file://' + path.join(OUT, 'destr.html'), ...LAUNCH]);
+  run('click 파괴적 이름 (restart 뒤에도 거부)', ['click', 'button', 'Delete account', '-s', 'cd'], { expectFail: true, expectMatch: /looks destructive/ });
+  run('kill cd', ['kill', 'cd', '--clean']);
+  run('new --allow example.com', ['new', 'al', 'https://example.com', '--ephemeral', '--allow', 'example.com', ...LAUNCH]);
+  run('nav 밖 (CLI 층 → policy_denied)', ['nav', 'https://www.iana.org/', '-s', 'al'], { expectFail: true, expectMatch: /outside --allow/ });
+  check('fetch 밖 (브라우저 층, dNR)', /blocked/.test(q('fetch("https://www.iana.org/").then(r=>"ok "+r.status).catch(e=>"blocked: "+e.message)', 'al') ?? ''), '');
+  check('fetch 안 (허용)', /ok 200/.test(q('fetch("https://example.com/").then(r=>"ok "+r.status).catch(e=>"blocked")', 'al') ?? ''), '');
+  check('WebRTC 억제 플래그가 선언에 있다', /webrtc-ip-handling-policy/.test(run('export al', ['export', 'al']).out));
+  run('kill al', ['kill', 'al', '--clean']);
+  run('attach smoke (정책 세션들이 active 를 가져갔다)', ['attach', 'smoke']);
   // 접근성 감사 (#219) — 알려진 위반이 심긴 픽스처. 위반마다 @N 이 붙고, expect a11y 가 게이트다.
   const A11Y = 'file://' + path.join(import.meta.dirname, 'fixtures', 'a11y-page.html');
   run('nav (a11y 픽스처)', ['nav', A11Y, ...S]);
