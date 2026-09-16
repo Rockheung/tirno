@@ -1,4 +1,4 @@
-import type { CDPSession } from 'puppeteer-core';
+import type { CdpSession } from './client.js';
 import type { RefStore, StoredRef } from '../core/ref-store.js';
 
 /**
@@ -33,7 +33,7 @@ interface AXNodeLike {
   name?: { value?: unknown };
 }
 
-async function currentLoaderId(cdp: CDPSession): Promise<string | null> {
+async function currentLoaderId(cdp: CdpSession): Promise<string | null> {
   try {
     const tree = await cdp.send('Page.getFrameTree') as unknown as { frameTree: { frame: { loaderId?: string } } };
     return tree.frameTree.frame.loaderId ?? null;
@@ -42,7 +42,7 @@ async function currentLoaderId(cdp: CDPSession): Promise<string | null> {
   }
 }
 
-async function identityOf(cdp: CDPSession, backendNodeId: number): Promise<{ role: string; name: string } | null> {
+async function identityOf(cdp: CdpSession, backendNodeId: number): Promise<{ role: string; name: string } | null> {
   try {
     const res = await cdp.send('Accessibility.getPartialAXTree', {
       backendNodeId,
@@ -60,7 +60,7 @@ async function identityOf(cdp: CDPSession, backendNodeId: number): Promise<{ rol
 }
 
 export async function checkRef(
-  cdp: CDPSession,
+  cdp: CdpSession,
   expr: string,
   stored: StoredRef,
   store: RefStore,

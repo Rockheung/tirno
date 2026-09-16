@@ -110,12 +110,13 @@ export function registerPerfCommands(program: Command): void {
         // locked from load made a 5s window take 22s and come back "idle".
         const { browser } = await connectWithoutPageSetup(opts.session);
 
-        // Not getActivePage: that goes through browser.pages(), where puppeteer
-        // builds a Page object per target, and the initialisation waits on the
+        // Not getActivePage: that attaches a session per page and enables domains
+        // on the renderer. Under puppeteer that initialisation waited on the
         // renderer — measured at 17s on a page locked from load, after which the
-        // samples describe the calm that followed. Target metadata comes from
-        // the browser process, so picking one this way stays instant.
-        const pageTargets = browser.targets().filter(t => t.type() === 'page');
+        // samples described the calm that followed. Our Page.attach is lighter,
+        // but a wedged renderer can still stall Runtime.enable; target metadata
+        // comes from the browser process, so picking one this way stays instant.
+        const pageTargets = (await browser.targets()).filter(t => t.type() === 'page');
         const content = pageTargets.filter(t => {
           const u = t.url();
           return !u.startsWith('chrome://') && !u.startsWith('devtools://') && u !== 'about:blank';

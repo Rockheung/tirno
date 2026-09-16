@@ -8,7 +8,7 @@
 // optional --categories.
 
 import fs from 'node:fs';
-import puppeteer from 'puppeteer-core';
+import { Browser } from '../cdp/browser.js';
 
 interface Args {
   ws: string;
@@ -45,7 +45,7 @@ const DEFAULT_CATEGORIES = [
 
 async function main(): Promise<void> {
   const args = parseArgs();
-  const browser = await puppeteer.connect({ browserWSEndpoint: args.ws });
+  const browser = await Browser.connect(args.ws);
   const pages = await browser.pages();
   const page = pages.find(p => !p.url().startsWith('about:')) ?? pages[0];
   if (!page) {

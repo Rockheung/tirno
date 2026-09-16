@@ -1,8 +1,9 @@
-import type { Page, CDPSession, ElementHandle } from 'puppeteer-core';
+import type { Page, ElementHandle } from './page.js';
+import type { CdpSession } from './client.js';
 
 export interface ResolvedRef {
   objectId: string;
-  cdp: CDPSession;
+  cdp: CdpSession;
 }
 
 export async function resolveBackendNode(page: Page, backendNodeId: number): Promise<ResolvedRef> {
@@ -100,7 +101,7 @@ export async function hoverByRef(page: Page, backendNodeId: number): Promise<voi
   }
 }
 
-// puppeteer 의 다른 쿼리 핸들러들. 이미 붙어 있으면 `pierce/` 를 덧대지 않는다 —
+// 셀렉터 접두사(`pierce/` 등). 이미 붙어 있으면 `pierce/` 를 덧대지 않는다 —
 // `pierce/xpath/…` 는 없는 핸들러라 진짜 실패 이유를 가린다.
 const HAS_HANDLER = /^(?:pierce|xpath|text|aria)\//;
 
@@ -112,14 +113,14 @@ const HAS_HANDLER = /^(?:pierce|xpath|text|aria)\//;
  * **shadow 쪽을 먼저 고른다**(실측). 그래서 `pierce/` 만 쓰면 지금까지 눌리던 요소가
  * 조용히 바뀐다. light DOM 을 먼저 보면 기존 동작은 그대로고, 못 찾을 때만 범위가 넓어진다.
  */
-export async function findElement(page: Page, selector: string): Promise<ElementHandle<Element> | null> {
+export async function findElement(page: Page, selector: string): Promise<ElementHandle | null> {
   const direct = await page.$(selector);
   if (direct || HAS_HANDLER.test(selector)) return direct;
   return page.$(`pierce/${selector}`);
 }
 
 /** findElement 와 같되, 못 찾으면 puppeteer 와 같은 문구로 던진다. */
-export async function requireElement(page: Page, selector: string): Promise<ElementHandle<Element>> {
+export async function requireElement(page: Page, selector: string): Promise<ElementHandle> {
   // 좌표를 셀렉터 자리에 넣으면 브라우저의 `querySelector` SyntaxError 가 그대로
   // 올라와, 무엇이 잘못됐는지 한 번 더 생각해야 한다. 여기서 먼저 알아본다.
   if (asCoords(selector)) {

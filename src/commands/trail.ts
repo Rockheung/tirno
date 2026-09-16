@@ -6,7 +6,7 @@ import * as trailStore from '../core/trail-store.js';
 import type { RecordedEvent } from '../core/record-store.js';
 import { formatTable, success, info, error } from '../output/formatter.js';
 import { emit as metric } from '../core/metrics.js';
-import type { Page } from 'puppeteer-core';
+import type { Page } from '../cdp/page.js';
 
 interface ClientRecState {
   events: RecordedEvent[];

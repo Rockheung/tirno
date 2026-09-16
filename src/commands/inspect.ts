@@ -12,7 +12,7 @@ import * as visualCache from '../core/visual-cache.js';
 import { dHash } from '../cdp/screenshot-hash.js';
 import { getElementInfo } from '../cdp/element-info.js';
 import type { Bbox } from '../cdp/iou.js';
-import type { ScreenshotOptions } from 'puppeteer-core';
+import type { ScreenshotOptions, ConsoleMessage } from '../cdp/page.js';
 
 export function registerInspectCommands(program: Command): void {
   program
@@ -210,7 +210,7 @@ export function registerInspectCommands(program: Command): void {
         }
 
         const messages: FullMsg[] = [];
-        const listener = (msg: import('puppeteer-core').ConsoleMessage) => {
+        const listener = (msg: ConsoleMessage) => {
           if (opts.type && msg.type() !== opts.type) return;
           const loc = msg.location();
           const stack = msg.stackTrace().map(f => ({

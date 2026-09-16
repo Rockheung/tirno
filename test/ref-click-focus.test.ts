@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { Page } from 'puppeteer-core';
+import type { Page } from '../src/cdp/page.js';
 import { clickByRef } from '../src/cdp/dom-actions.js';
 
 // `this.click()` 은 포커스를 옮기지 않는다. 그래서 두 방향이 어긋난다.

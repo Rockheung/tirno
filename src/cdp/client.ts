@@ -20,6 +20,8 @@ export type Params<M extends Method> = Commands[M]['paramsType'][0];
 export type Result<M extends Method> = Commands[M]['returnType'];
 export type EventName = keyof Events;
 export type EventParams<E extends EventName> = Events[E][0];
+/** 파라미터가 선택인 메서드는 인자 없이 부를 수 있다 */
+export type SendArgs<M extends Method> = undefined extends Params<M> ? [params?: Params<M>] : [params: Params<M>];
 
 /** 전송층 — 테스트는 가짜를 꽂고, 실전은 WebSocket 이다 */
 export interface Transport {
@@ -64,7 +66,7 @@ export class CdpSession {
     this.emitter.setMaxListeners(0);
   }
 
-  send<M extends Method>(method: M, ...args: Params<M> extends undefined ? [] : [Params<M>]): Promise<Result<M>> {
+  send<M extends Method>(method: M, ...args: SendArgs<M>): Promise<Result<M>> {
     if (this.detached) return Promise.reject(new Error(`session ${this.id ?? 'root'} is detached — cannot send ${method}`));
     return this.connection.rawSend(method, args[0], this.id) as Promise<Result<M>>;
   }
@@ -169,7 +171,7 @@ export class CdpConnection {
   }
 
   /** 루트 세션의 send — `connection.send('Target.getTargets')` 처럼 쓴다 */
-  send<M extends Method>(method: M, ...args: Params<M> extends undefined ? [] : [Params<M>]): Promise<Result<M>> {
+  send<M extends Method>(method: M, ...args: SendArgs<M>): Promise<Result<M>> {
     return this.root.send(method, ...args);
   }
 

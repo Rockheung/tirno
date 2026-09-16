@@ -28,7 +28,7 @@ export interface LaunchOptions {
 /**
  * 번역 제안을 끈다. 프로필의 `Default/Preferences` 에 심는다.
  *
- * `--disable-features=Translate` 로는 부족하다 — puppeteer 가 이미 그것을 넣고 있는데도
+ * `--disable-features=Translate` 로는 부족하다 — 기준 인자에 그것이 있는데도
  * 번역 UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 있었다(실측).
  *
  * 번역 버블은 페이지 위에 겹쳐 뜨고 레이아웃을 밀어낸다. 좌표로 클릭하고 스크린샷을

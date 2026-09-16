@@ -5,7 +5,7 @@ import { launch } from '../core/chrome-launcher.js';
 import { loadHeaderExt } from '../core/header-ext.js';
 import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage, waitForBootPage } from '../cdp/page-resolver.js';
-import type { Cookie } from 'puppeteer-core';
+import type { Cookie } from '../cdp/browser.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
 import { collectListeners, inspectSession, type SessionInventory } from '../core/inventory.js';

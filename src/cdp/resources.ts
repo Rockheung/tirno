@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { CDPSession } from 'puppeteer-core';
+import type { CdpSession } from './client.js';
 
 /**
  * 이 세션이 이미 받은 리소스의 **바이트**.
@@ -58,7 +58,7 @@ export function flattenResourceTree(root: ResourceTreeFrame): PageResource[] {
   return out;
 }
 
-export async function listResources(cdp: CDPSession): Promise<PageResource[]> {
+export async function listResources(cdp: CdpSession): Promise<PageResource[]> {
   // Page 도메인을 켜지 않으면 getResourceContent 가 "Agent is not enabled" 로 죽는다(실측).
   await cdp.send('Page.enable');
   const tree = await cdp.send('Page.getResourceTree') as unknown as { frameTree: ResourceTreeFrame };
@@ -149,7 +149,7 @@ export interface Body {
  * 는 프레임 컨텍스트에서 브라우저가 직접 받으므로 CORS 를 지나지 않고, 쿠키·Referer·UA 가
  * 전부 브라우저의 것이다. 툴 바깥의 curl 과 다른 점이 정확히 이것이다 — 재구성할 것이 없다.
  */
-export async function fetchBody(cdp: CDPSession, r: PageResource): Promise<Body> {
+export async function fetchBody(cdp: CdpSession, r: PageResource): Promise<Body> {
   try {
     const res = await cdp.send('Page.getResourceContent', { frameId: r.frameId, url: r.url }) as unknown as
       { content: string; base64Encoded: boolean };
@@ -162,7 +162,7 @@ export async function fetchBody(cdp: CDPSession, r: PageResource): Promise<Body>
   }
 }
 
-async function loadOverNetwork(cdp: CDPSession, r: PageResource): Promise<Buffer> {
+async function loadOverNetwork(cdp: CdpSession, r: PageResource): Promise<Buffer> {
   const { resource } = await cdp.send('Network.loadNetworkResource', {
     frameId: r.frameId,
     url: r.url,
