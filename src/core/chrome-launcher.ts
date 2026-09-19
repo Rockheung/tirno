@@ -104,6 +104,27 @@ async function spawnAndWait(spec: SpawnSpec): Promise<{ pid: number } & DevTools
   }
 }
 
+/**
+ * 대장에 적히는 `chromeFlags` — tirno 가 **명시적으로** 넘긴 것. 기준 인자(BASELINE_ARGS)는
+ * 여기 없다: drift 의 재기동 제안과 restart 가 이 목록을 그대로 다시 쓰므로, 기준을 섞으면
+ * 두 번 깔린다.
+ *
+ * 기본 viewport 1920x1080 — visual cache · journaling 의 재현성을 위해 고정. 사용자가
+ * `--` 뒤에 같은 플래그를 주면 그 값이 기본값을 **대체**한다. 예전엔 둘 다 남겨 chrome 이
+ * 마지막 값을 쓰게 뒀는데, 그러면 `--window-size` 가 장부에 두 번 실렸다(#234).
+ */
+export function declaredArgs(requestedPort: number, userFlags: string[]): string[] {
+  const defaults = [
+    `--remote-debugging-port=${requestedPort}`,
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--window-size=1920,1080',
+    '--window-position=0,0',
+  ];
+  const overridden = new Set(userFlags.map(f => f.split('=')[0]));
+  return [...defaults.filter(f => !overridden.has(f.split('=')[0])), ...userFlags];
+}
+
 export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata> {
   // Default to `--remote-debugging-port=0`: the OS picks a free port and chrome
   // records it in DevToolsActivePort. That removes the port-collision class
@@ -123,22 +144,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
 
   seedProfilePrefs(userDataDir);
 
-  // Default viewport 1920x1080 — fixed size is required for tirno's
-  // visual cache / journaling to be reproducible. User can override by
-  // passing their own `--window-size=...` after `--`; chrome uses the
-  // last value on the cmdline.
-  //
-  // 이것이 대장에 적히는 `chromeFlags` 다 — tirno 가 **명시적으로** 넘긴 것. 기준 인자
-  // (BASELINE_ARGS)는 여기 없다: drift 의 재기동 제안과 restart 가 이 목록을 그대로
-  // 다시 쓰므로, 기준을 섞으면 두 번 깔린다.
-  const args = [
-    `--remote-debugging-port=${requestedPort}`,
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--window-size=1920,1080',
-    '--window-position=0,0',
-    ...(opts.chromeFlags ?? []),
-  ];
+  const args = declaredArgs(requestedPort, opts.chromeFlags ?? []);
 
   // 기동은 tirno 가 한다 (cdp/launch.ts). puppeteer 시절 싸우던 것들 — 기본 인자가 우리
   // 포트를 덮고(#33), --disable-extensions 를 되돌릴 수 없고(#113), 프로세스와 함께
