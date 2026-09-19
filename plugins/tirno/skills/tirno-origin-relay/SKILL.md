@@ -50,7 +50,7 @@ host-resolver 는 **크롬 전용**이다. `--host-resolver-rules="MAP app.examp
 
 ## 굽기
 
-`generate.mjs` 는 이 스킬 안에 있다(SW 를 안 쓰므로 sw-template·overlay·부트 페이지를 굽지 않는다 — serve.mjs 와 인증서만 낸다). SPA 라면 문서 마운트에 `navigateFallback` 을 준다.
+`generate.mjs` 는 이 스킬 안에 있다(SW 를 안 쓰므로 sw-template·overlay·부트 페이지를 굽지 않는다 — serve.mjs 와 인증서만 낸다). SPA 라면 문서 마운트에 `navigateFallback` 을 준다. 디렉터리 마운트(`root:`)는 요청 시점에 디스크를 보므로 **앱을 재빌드해도 다시 굽지 않는다** — 새 해시의 청크도 그대로 로컬로 나간다.
 
 ```json
 {

@@ -33,16 +33,27 @@ function run(mounts: unknown): Run {
   }
 }
 
-function mapOf(serve: string): Record<string, { file: string; headers?: Record<string, string> }> {
-  const start = serve.indexOf('const MAP = ') + 'const MAP = '.length;
-  return JSON.parse(serve.slice(start, serve.indexOf('\n};', start) + 2));
+function dirsOf(serve: string): Array<{ prefix: string; root: string; headers?: Record<string, string> }> {
+  const start = serve.indexOf('const DIRS = ') + 'const DIRS = '.length;
+  return JSON.parse(serve.slice(start, serve.indexOf('\n];', start) + 2));
 }
+
+// 생성 시점의 파일 목록을 박으면 재빌드로 해시가 바뀐 청크가 "목록 밖" 이 돼 origin 으로
+// 릴레이되고 거기엔 없어 404 였다(#235). 디렉터리 마운트는 접두사 → root 만 굽는다.
+test('디렉터리 마운트는 파일 목록이 아니라 root 를 굽는다', () => {
+  const r = run([{ path: '/_/app/', root: './dist' }]);
+  try {
+    assert.ok(r.ok, r.out);
+    assert.ok(!r.out.includes('loader.mjs'), '생성 시점의 파일명이 박혀 있다');
+    assert.equal(dirsOf(r.out)[0]?.root, path.join(r.dir, 'dist'));
+  } finally { fs.rmSync(r.dir, { recursive: true, force: true }); }
+});
 
 test('마운트가 선언한 헤더가 그 경로의 응답 계획에 실린다', () => {
   const r = run([{ path: '/_/app/', root: './dist', headers: { 'access-control-allow-origin': '*' } }]);
   try {
     assert.ok(r.ok, r.out);
-    const entry = mapOf(r.out)['/_/app/loader.mjs'];
+    const entry = dirsOf(r.out).find(d => d.prefix === '/_/app/');
     assert.deepEqual(entry?.headers, { 'access-control-allow-origin': '*' });
   } finally { fs.rmSync(r.dir, { recursive: true, force: true }); }
 });
@@ -51,7 +62,7 @@ test('헤더를 선언하지 않은 마운트는 헤더 없이 나간다', () =>
   const r = run([{ path: '/_/app/', root: './dist' }]);
   try {
     assert.ok(r.ok, r.out);
-    const entry = mapOf(r.out)['/_/app/loader.mjs'];
+    const entry = dirsOf(r.out).find(d => d.prefix === '/_/app/');
     assert.equal(entry?.headers, undefined);
   } finally { fs.rmSync(r.dir, { recursive: true, force: true }); }
 });
