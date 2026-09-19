@@ -72,6 +72,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // meta.wsEndpoint (a launch-time snapshot that goes stale on restart);
   // legacy fixed-port sessions write no such file and fall back to meta.
   const browser = await Browser.connect(inv.wsEndpoint);
+  browser.preferredTargetId = meta.selectedTarget;
 
   // Auto-dismiss any JS dialog (alert/confirm/prompt) and neutralize
   // beforeunload handlers on every page so navigation/clicks don't silently

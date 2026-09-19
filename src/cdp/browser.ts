@@ -55,6 +55,8 @@ export type Cookie = Protocol.Network.Cookie;
 export class Browser {
   private readonly pageCache = new Map<string, Page>();
   private discovering = false;
+  /** `select` 가 고른 탭 — connect 가 세션 메타에서 실어 준다. page-resolver 가 먼저 본다 */
+  preferredTargetId?: string;
 
   private constructor(readonly connection: CdpConnection) {}
 

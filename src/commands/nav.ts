@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
+import * as store from '../core/session-store.js';
 import { activateWindow } from '../core/os-focus.js';
 import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
 import { formatTable, success, warn, error, fail } from '../output/formatter.js';
@@ -177,9 +178,10 @@ export function registerNavCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .action(async (pageId: string, opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getPageByHandle(browser, pageId);
         await page.bringToFront();
+        store.update(meta.name, { selectedTarget: page.targetId });
         browser.disconnect();
         success(`Selected page ${pageId}: ${page.url()}`);
       } catch (e) {
@@ -194,8 +196,10 @@ export function registerNavCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .action(async (url: string, opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await browser.newPage();
+        // 방금 연 탭이 곧 다음 명령의 대상이다 — select 이전의 "마지막에 연 탭" 규칙과 같다
+        store.update(meta.name, { selectedTarget: page.targetId });
         if (url !== 'about:blank') {
           await page.goto(url, { waitUntil: 'domcontentloaded' });
         }
@@ -213,10 +217,11 @@ export function registerNavCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .action(async (pageId: string, opts) => {
       try {
-        const { browser } = await connect(opts.session);
+        const { browser, meta } = await connect(opts.session);
         const page = await getPageByHandle(browser, pageId);
         const url = page.url();
         await page.close();
+        if (meta.selectedTarget === page.targetId) store.update(meta.name, { selectedTarget: undefined });
         browser.disconnect();
         success(`Closed tab ${pageId}: ${url}`);
       } catch (e) {

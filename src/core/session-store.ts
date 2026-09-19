@@ -85,6 +85,12 @@ export interface SessionMetadata {
    */
   injects?: Array<{ id: string; source: string; addedAt: string }>;
   group?: string;
+  /**
+   * `select` 가 고른 탭의 targetId. 명령마다 프로세스가 새로 붙으므로 여기 두지 않으면
+   * 선택은 그 명령과 함께 사라지고, 다음 eval 은 다시 "마지막에 연 탭"을 잡는다(#233).
+   * 그 탭이 닫혔으면 무시된다 — 리졸버가 못 찾으면 예전 규칙으로 돌아간다.
+   */
+  selectedTarget?: string;
   /** `--headless` 로 떴는가. 뱃지처럼 "화면이 있을 때만" 인 것들이 이 값을 본다. */
   headless?: boolean;
   /**
