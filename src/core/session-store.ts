@@ -28,6 +28,12 @@ export function defaultEmulation(): EmulationState {
 
 export interface SessionMetadata {
   name: string;
+  /**
+   * `external` — tirno 가 띄우지 않은 브라우저에 `tirno connect` 로 붙은 세션(#236).
+   * pid 는 0, chromeFlags 는 빈 배열, userDataDir 는 표준 경로지만 **만들지 않는다**.
+   * 없으면(기본) tirno 가 띄운 로컬 크롬이다. core/external 참조.
+   */
+  kind?: 'external';
   pid: number;
   /** Observed at launch. With `--remote-debugging-port=0` the OS picks it. */
   port: number;
@@ -124,7 +130,7 @@ function ensureDirs(): void {
   fs.mkdirSync(profilesRoot(), { recursive: true });
 }
 
-function sessionPath(name: string): string {
+export function sessionPath(name: string): string {
   return path.join(sessionsRoot(), `${name}.json`);
 }
 
