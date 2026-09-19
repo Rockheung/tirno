@@ -17,6 +17,35 @@ export interface HeaderRule {
   hosts?: string[];
 }
 
+/**
+ * `tirno intercept` 의 규칙 하나 — 차단이거나 가짜 응답이다(#178). 같은 확장에 산다:
+ * page 타깃의 Fetch 인터셉트는 서비스워커와 OOPIF 를 못 보고, 상주 데몬이 응답을 못
+ * 하는 동안 요청이 매달린다(#122). 확장 규칙은 둘 다 없다(실측 — 서비스워커가 스스로
+ * 보낸 요청도 서버에 닿지 않았다).
+ *
+ * `mock` 은 `redirect` 로 data: URL 을 내므로 **상태 코드는 늘 200** 이다. 그 하나 때문에
+ * 기각된 기법을 되살리지 않는다 — 문서에 적는다.
+ */
+export interface InterceptRule {
+  id: string;
+  kind: 'block' | 'mock';
+  /** declarativeNetRequest 의 urlFilter 문법 그대로 — `/ads/` 는 부분 일치, `||host/` · `*` · `^` 도 된다 */
+  pattern: string;
+  hosts?: string[];
+  body?: string;
+  contentType?: string;
+}
+
+/** 확장이 필요한 명령이 먼저 부른다 — 확장은 기동 이후에 켤 수 없다(#113). */
+export function requireExtensions(name: string, meta: store.SessionMetadata, what = 'a persistent header'): void {
+  if (meta.extensions) return;
+  throw new Error(
+    `Session '${name}' runs with extensions off, and ${what} is an extension. ` +
+    `Re-launch with \`tirno restart ${name} --extensions\` (stored rules come back with it)` +
+    (what === 'a persistent header' ? ', or add --once for a header that only lasts while a tirno command runs.' : '.')
+  );
+}
+
 // declarativeNetRequest 는 조건이 어긋난 규칙을 조용히 버린다 — 목록에 없는
 // resourceType 하나를 적으면 확장은 정상 로드되고 id 까지 돌려주면서 규칙만
 // 무효가 되고, 에러는 어디에도 나오지 않는다(실측). 그래서 손으로 고르지 않고
@@ -63,7 +92,29 @@ export function buildBlockRules(allow: string[], firstId: number): unknown[] {
   }];
 }
 
-export function buildRules(rules: HeaderRule[], allow: string[] = []): unknown[] {
+/**
+ * block · mock 은 modifyHeaders 와 다른 action 이라 서로 가리지 않는다 — 같은 priority 에서
+ * 헤더 수정은 독립으로 적용되고, block 과 redirect 가 같이 맞으면 block 이 이긴다(dNR 의
+ * action 우선순위). #151 의 함정("헤더 규칙이 먼저 걸려 mock 이 영영 안 걸림")은 데몬의
+ * 것이었고 이 형태에는 없다 — 스모크가 헤더+mock 을 같은 호스트에 걸어 확인한다.
+ */
+export function buildInterceptRules(rules: InterceptRule[], firstId: number): unknown[] {
+  return rules.map((r, i) => ({
+    id: firstId + i,
+    priority: 1,
+    action: r.kind === 'block'
+      ? { type: 'block' }
+      : { type: 'redirect', redirect: { url: `data:${r.contentType ?? 'application/json'};base64,${Buffer.from(r.body ?? '', 'utf-8').toString('base64')}` } },
+    condition: {
+      urlFilter: r.pattern,
+      ...(r.hosts?.length ? { requestDomains: r.hosts } : {}),
+      resourceTypes: RESOURCE_TYPES,
+    },
+  }));
+}
+
+export function buildRules(rules: HeaderRule[], allow: string[] = [], intercepts: InterceptRule[] = []): unknown[] {
+  const blocks = buildBlockRules(allow, rules.length + 1);
   return [...rules.map((r, i) => ({
     id: i + 1,
     priority: 1,
@@ -75,7 +126,7 @@ export function buildRules(rules: HeaderRule[], allow: string[] = []): unknown[]
       ...(r.hosts?.length ? { requestDomains: r.hosts } : { urlFilter: '*' }),
       resourceTypes: RESOURCE_TYPES,
     },
-  })), ...buildBlockRules(allow, rules.length + 1)];
+  })), ...blocks, ...buildInterceptRules(intercepts, rules.length + blocks.length + 1)];
 }
 
 /**
@@ -211,11 +262,11 @@ fetch(chrome.runtime.getURL('view.json'))
 `;
 
 /** 규칙을 디스크에 굽고, chrome 에 넘길 확장 경로를 돌려준다. */
-export function writeHeaderExt(userDataDir: string, rules: HeaderRule[], allow: string[] = []): string {
+export function writeHeaderExt(userDataDir: string, rules: HeaderRule[], allow: string[] = [], intercepts: InterceptRule[] = []): string {
   const dir = headerExtDir(userDataDir);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(MANIFEST, null, 2));
-  fs.writeFileSync(path.join(dir, 'rules.json'), JSON.stringify(buildRules(rules, allow), null, 2));
+  fs.writeFileSync(path.join(dir, 'rules.json'), JSON.stringify(buildRules(rules, allow, intercepts), null, 2));
   // 창 안에서 보이게 하는 쪽. 규칙과 같은 호출에서 함께 써야 뱃지가 규칙보다
   // 낡지 않는다.
   fs.writeFileSync(path.join(dir, 'view.json'), JSON.stringify(buildView(rules), null, 2));
@@ -224,6 +275,11 @@ export function writeHeaderExt(userDataDir: string, rules: HeaderRule[], allow: 
   fs.writeFileSync(path.join(dir, 'popup.css'), POPUP_CSS);
   fs.writeFileSync(path.join(dir, 'popup.js'), POPUP_JS);
   return dir;
+}
+
+/** 세션 메타가 가진 규칙 전부(헤더 · 허용 목록 · intercept)로 굽는다 — 한쪽만 넘기면 나머지가 사라진다 */
+export function writeHeaderExtFor(meta: store.SessionMetadata): string {
+  return writeHeaderExt(meta.userDataDir, meta.headerRules ?? [], meta.policy?.allowDomains ?? [], meta.interceptRules ?? []);
 }
 
 /**
@@ -240,7 +296,7 @@ export function writeHeaderExt(userDataDir: string, rules: HeaderRule[], allow: 
  */
 export async function loadHeaderExt(sessionName: string, opts: { reload?: boolean } = {}): Promise<void> {
   const meta = store.get(sessionName);
-  const dir = writeHeaderExt(meta.userDataDir, meta.headerRules ?? [], meta.policy?.allowDomains ?? []);
+  const dir = writeHeaderExtFor(meta);
   const { browser } = await connect(sessionName);
   try {
      

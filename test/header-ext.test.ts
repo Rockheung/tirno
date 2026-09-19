@@ -140,3 +140,24 @@ test('팝업은 인라인 스크립트를 쓰지 않는다', () => {
     fs.rmSync(profile, { recursive: true, force: true });
   }
 });
+
+// ── intercept (#178) — 같은 확장, 다른 action. 헤더·허용 규칙 뒤 id 를 이어 쓴다.
+test('intercept 규칙은 헤더·허용 규칙 뒤 id 로 이어지고 action 이 다르다', () => {
+  const rules = buildRules(
+    [{ name: 'X-A', value: '1' }],
+    ['example.com'],
+    [{ id: 'ic1', kind: 'block', pattern: '/ads/' }, { id: 'ic2', kind: 'mock', pattern: '/api/user', body: '{"from":"mock"}', contentType: 'application/json', hosts: ['api.acme.com'] }],
+  ) as Array<{ id: number; action: { type: string; redirect?: { url: string } }; condition: { urlFilter?: string; requestDomains?: string[] } }>;
+  assert.deepEqual(rules.map(r => r.id), [1, 2, 3, 4]);
+  assert.equal(rules[2].action.type, 'block');
+  assert.equal(rules[2].condition.urlFilter, '/ads/');
+  assert.equal(rules[3].action.type, 'redirect');
+  // data: URL 로 본문과 content-type 이 실린다 — 상태 코드는 표현할 자리가 없다(늘 200)
+  assert.equal(rules[3].action.redirect?.url, `data:application/json;base64,${Buffer.from('{"from":"mock"}').toString('base64')}`);
+  assert.deepEqual(rules[3].condition.requestDomains, ['api.acme.com']);
+});
+
+test('intercept 규칙만 있어도 id 는 1 부터다', () => {
+  const rules = buildRules([], [], [{ id: 'ic1', kind: 'block', pattern: '/x' }]) as Array<{ id: number }>;
+  assert.deepEqual(rules.map(r => r.id), [1]);
+});

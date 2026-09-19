@@ -14,7 +14,7 @@
 //
 // 네트워크가 필요하다 — audit(lighthouse)은 http(s) 만 받고, 히스토리 검사는
 // 다른 출처를 한 번 거쳐야 한다. 그래서 example.com 을 쓴다.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -500,6 +500,54 @@ function main() {
   check('fetch 안 (허용)', /ok 200/.test(q('fetch("https://example.com/").then(r=>"ok "+r.status).catch(e=>"blocked")', 'al') ?? ''), '');
   check('WebRTC 억제 플래그가 선언에 있다', /webrtc-ip-handling-policy/.test(run('export al', ['export', 'al']).out));
   run('kill al', ['kill', 'al', '--clean']);
+
+  // intercept (#178) — 차단·모킹. **서버가 무엇을 못 받았는가**로 증명한다: 페이지 쪽만
+  // 보면 "차단됐다" 와 "원본이 원래 그렇게 답했다" 를 못 가른다. 픽스처의 서비스워커가
+  // 스스로 /from-sw 를 부르므로, 그것이 서버에 안 닿으면 데몬이 못 덮던 자리를 확장이 덮는 것이다.
+  {
+    const icDir = fs.mkdtempSync(path.join(OUT, 'intercept-'));
+    const srv = spawn(process.execPath, [path.join(import.meta.dirname, 'fixtures', 'intercept-server.mjs'), icDir], { stdio: 'ignore' });
+    const portFile = path.join(icDir, 'port');
+    for (let i = 0; i < 50 && !fs.existsSync(portFile); i++) execFileSync('sleep', ['0.1']);
+    const port = Number(fs.existsSync(portFile) ? fs.readFileSync(portFile, 'utf8') : NaN);
+    check('intercept 픽스처 서버가 떴다', Number.isFinite(port) && port > 0, `port=${port}`);
+    if (Number.isFinite(port)) {
+      const origin = `http://127.0.0.1:${port}`;
+      const logFile = path.join(icDir, 'requests.jsonl');
+      const got = () => {
+        try { return new Set(fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l).path)); } catch { return new Set(); }
+      };
+      const IC = ['-s', 'ic'];
+      run('new --extensions (intercept 세션)', ['new', 'ic', `${origin}/`, '--ephemeral', '--extensions', ...LAUNCH]);
+      execFileSync('sleep', ['2']);
+      const base = got();
+      check('기준선: 서버가 페이지·광고·API·SW 요청을 다 받았다', ['/', '/ads/banner.png', '/api/user', '/from-sw', '/sw-ok'].every(p => base.has(p)), [...base].join(' '));
+      run('intercept block /ads/', ['intercept', 'block', '/ads/', ...IC], { expectMatch: /ic1 block/ });
+      run('intercept block /from-sw', ['intercept', 'block', '/from-sw', ...IC], { expectMatch: /ic2 block/ });
+      run('intercept mock /api/user', ['intercept', 'mock', '/api/user', '--body', '{"from":"mock"}', ...IC], { expectMatch: /status 200/ });
+      run('headers set --host (같은 호스트에 헤더 규칙 공존)', ['headers', 'set', 'X-Tirno', 'yes', '--host', '127.0.0.1', ...IC]);
+      run('intercept ls', ['intercept', 'ls', ...IC], { expectMatch: /ic3\s+│\s+mock/ });
+      // SW 를 다시 install 시켜야 워커가 /from-sw 를 다시 보낸다
+      q('navigator.serviceWorker.getRegistrations().then(rs=>Promise.all(rs.map(r=>r.unregister())))', 'ic');
+      fs.writeFileSync(logFile, '');
+      run('nav (규칙 적용 뒤)', ['nav', `${origin}/?2`, ...IC]);
+      execFileSync('sleep', ['3']);
+      const after = got();
+      check('block: /ads/ 가 서버에 안 닿았다', !after.has('/ads/banner.png'), [...after].join(' '));
+      check('block: SW 가 스스로 보낸 /from-sw 도 서버에 안 닿았다 (데몬이 못 덮던 자리)', !after.has('/from-sw') && after.has('/sw-ok'), [...after].join(' '));
+      check('mock: /api/user 가 서버에 안 닿았다', !after.has('/api/user'), [...after].join(' '));
+      check('mock: 페이지가 가짜 본문을 받았다', q('document.getElementById("api").textContent', 'ic') === '{"from":"mock"}');
+      check('block: 이미지 naturalWidth 0', q('document.getElementById("ad").naturalWidth', 'ic') === '0');
+      check('헤더 규칙이 통과 요청에 여전히 붙는다 (#151 의 함정 없음)', /"xTirno":"yes"/.test(fs.readFileSync(logFile, 'utf8')));
+      run('intercept rm ic3', ['intercept', 'rm', 'ic3', ...IC], { expectMatch: /Removed ic3/ });
+      fs.writeFileSync(logFile, '');
+      run('reload (mock 제거 뒤)', ['reload', ...IC]);
+      check('mock 제거 뒤 /api/user 가 서버에 닿는다', got().has('/api/user'));
+      run('intercept rm --all', ['intercept', 'rm', '--all', ...IC], { expectMatch: /Removed 2/ });
+      run('kill ic', ['kill', 'ic', '--clean']);
+    }
+    srv.kill();
+  }
   run('attach smoke (정책 세션들이 active 를 가져갔다)', ['attach', 'smoke']);
   // MCP 서버 (#215) — stdin 으로 JSON-RPC 를 넣고 stdout 을 읽는다. 툴은 schema 에서 온다.
   {

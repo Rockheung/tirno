@@ -217,6 +217,18 @@ user-data-dir 을 유지해도 그렇다. `permissions grant` 는 `SessionMetada
 올린다(macOS). `eval` 은 일부러 창을 안 올리므로 — 읽는 것이 보던 화면을 빼앗으면 안
 되므로 — 이 명령이 따로 있다.
 
+### 요청 차단·모킹
+
+```bash
+tirno intercept block '/ads/'                                  # 브라우저를 떠나지 않는다 — SW·OOPIF 요청 포함
+tirno intercept mock '/api/user' --body '{"error":"down"}'      # origin 에 안 닿고 이 본문. 상태는 늘 200 (--status 없음)
+tirno intercept ls · tirno intercept rm ic1 · tirno intercept rm --all
+```
+
+`headers` 와 같은 확장(declarativeNetRequest)이라 `--extensions` 세션이 필요하고 `restart` 를
+넘긴다. 데몬(Fetch 인터셉트)이 아닌 이유: 서비스워커·OOPIF 를 못 보고 응답 못 하는 동안 요청이
+매달린다(#122). 5xx 가 필요하면 tirno-origin-relay 로.
+
 ### 고정 헤더
 
 ```bash

@@ -922,8 +922,18 @@ escape 하는 것은 실패율이 높은 작업이고, 파일로 쓰고 경로�
 | `headers set <name> <value> --once` | 대신 `Network.setExtraHTTPHeaders` 를 쓴다 — tirno 명령이 도는 동안만 유효 |
 | `headers rm [name] [--once]` | 헤더 하나, 인자 없으면 전부 |
 | `headers ls [--json]` | 이 세션의 고정 헤더, 호스트 조건과 유지 범위까지. persistent 는 창 안에서도 보인다(확장 뱃지·팝업), `--once` 는 여기가 유일한 자리 |
+| `intercept block <pattern> [--host <domain>...]` | 패턴에 맞는 요청은 브라우저를 떠나지 않는다. `headers` 와 **같은 확장**의 dNR `block` 규칙 — 서비스워커·OOPIF 가 스스로 보내는 요청도 막힌다(실측). 패턴은 dNR `urlFilter` 문법(`/ads/` 부분 일치 · `\|\|host/` 도메인 앵커 · `*` · `^`) |
+| `intercept mock <pattern> --body <text> [--content-type <t>] [--host ...]` | 그 요청에 이 본문을 낸다 — origin 에 닿지 않는다. dNR `redirect` → `data:` URL 이라 **상태 코드는 늘 200**, `--status` 는 없다(5xx 가 필요하면 tirno-origin-relay 로) |
+| `intercept rm <id>` / `--all` | 규칙 제거. 확장을 다시 굽고 리로드 |
+| `intercept ls [--json]` | 규칙 목록 (ID · KIND · PATTERN · HOSTS · RESPONSE) |
 
 `perm` 으로 줄여 쓸 수 있다.
+
+`intercept` 는 데몬이 아니다(#178). page 타깃의 `Fetch.enable` 은 서비스워커와 OOPIF 를 못 보고,
+상주 프로세스가 `requestPaused` 에 답하지 못하는 동안 그 요청들은 서버에 닿지 못한 채 매달린다
+(#122 실측). 확장 규칙은 둘 다 없다. 헤더 규칙(`modifyHeaders`)과 block·mock 은 다른 action 이라
+서로 가리지 않고, block 과 mock 이 한 요청에 같이 맞으면 block 이 이긴다. 규칙은 세션 메타
+`interceptRules` 에 살아 `restart` 를 넘긴다.
 
 `headers` 에는 경로가 둘 있고 `--once` 로 갈린다.
 
