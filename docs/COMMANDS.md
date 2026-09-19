@@ -11,7 +11,8 @@
 | `new <name> [url] [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨). `[url]` 을 주면 **그 페이지가 커밋될 때까지 기다렸다가** 돌아온다(`--boot-timeout <ms>`, 기본 15000; 못 기다리면 세션은 그대로 두고 그 사실을 말한다) |
 | `ls` | 세션 목록 (port, status, **owner**, proxy, emulation, last access) |
 | `attach <name>` | active 세션 변경 |
-| `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부 |
+| `connect <name> <endpoint>` | **tirno 가 띄우지 않은 브라우저**를 외부 세션으로 등록 — adb 포워드된 안드로이드 크롬, ssh 터널, 컨테이너. `<endpoint>` 는 포트 · `host:port` · `http://…` · `/json/version` 의 `ws://…` 어느 것이든. 관측·조작은 다 되고 `kill`/`restart` 는 항목만 지운다(브라우저는 손대지 않음). 프로필 디렉터리를 만들지 않는다 |
+| `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부. `external` 은 등록만 해제 |
 | `new`/`restart` `--extensions` | 확장이 돌게 한다. **기본은 꺼짐** — 확장은 페이지가 하는 일을 바꾸고, 이 도구는 페이지를 있는 그대로 관측하려고 있다 |
 | `new`/`restart` `--badge` / `--no-badge` | 세션 뱃지(아래). headful 기본 켬 |
 | `new`/`restart` `--allow <domains>` · `--read-only` · `--confirm destructive` | 세션 정책(아래). `restart` 가 물려받는다 |
@@ -181,6 +182,7 @@ pid 생존 ∧ 그 pid 가 그 포트를 LISTEN ∧ 그 프로세스의 `--user-
 | `ambiguous` | 같은 포트에 리스너 둘 이상 (IPv4/IPv6) | 표시만. 자동 조치 전면 금지 |
 | `ghost` | 대장에만 있고 리스너·pid 없음 | connect 불가 (kill 로 정리 가능) |
 | `unknown` | **관측 자체가 안 됐다** — lsof 가 없거나 `/proc` 을 못 읽음 | 표시만. connect·kill·gc 전부 거부. 사유에 고칠 방법이 붙는다 |
+| `external` | `tirno connect` 로 붙은 것 — 3중 일치를 물을 수 없고 `/json/version` 이 답하는가만 본다 | connect / 조작 전부. `kill` 은 항목 해제, `restart`·`drift` 는 "external 이라 불가" 로 거부. 안 답하면 `ghost` |
 
 `unknown` 이 따로 있는 이유: 예전에는 lsof 가 없으면 리스너 목록이 `[]` 로 접혀, 살아 있는
 세션이 `foreign`("nothing listens") 이나 `ghost` 로 읽혔다(#186). 관측 도구의 부재와

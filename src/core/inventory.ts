@@ -6,6 +6,7 @@ import type { SessionMetadata } from './session-store.js';
 import { isAlive } from './process-guard.js';
 import { readActivePort } from './devtools-port.js';
 import { scanProcListeners, cmdlineFromProc } from './proc-net.js';
+import { httpBaseOf, isExternal, probeDevTools } from './external.js';
 
 const exec = promisify(execFile);
 
@@ -29,7 +30,12 @@ const exec = promisify(execFile);
  * 리스너 목록이 비는데, 그 빈 목록을 "아무것도 안 듣는다" 로 읽으면 살아 있는 세션이
  * foreign/ghost 가 된다 (#186). 허용 조치는 foreign 과 같다: 표시만, connect·kill 거부.
  */
-export type Ownership = 'ours' | 'foreign' | 'ambiguous' | 'ghost' | 'unknown';
+/**
+ * `external` 은 여섯 번째다 — **띄운 게 아니라 붙은 것**(`tirno connect`, #236). 프로세스
+ * 소유권은 애초에 물을 수 없고 `/json/version` 이 답하는가만 본다. 허용 조치는 ours 와
+ * 같되 kill · restart 의 프로세스 정리만 없다(원장 항목만 지운다).
+ */
+export type Ownership = 'ours' | 'foreign' | 'ambiguous' | 'ghost' | 'unknown' | 'external';
 
 export interface Listener {
   pid: number;
@@ -353,6 +359,20 @@ export async function inspectSession(
   meta: SessionMetadata,
   scan?: ListenerScan | Listener[],
 ): Promise<SessionInventory> {
+  if (isExternal(meta)) {
+    const probe = await probeDevTools(httpBaseOf(meta.wsEndpoint));
+    return {
+      ownership: probe ? 'external' : 'ghost',
+      reason: probe
+        ? `external endpoint ${meta.wsEndpoint} answers (${probe.browser}); not launched by tirno, so its process is not tirno's to manage`
+        : `external endpoint ${meta.wsEndpoint} does not answer /json/version`,
+      name: meta.name,
+      pid: 0,
+      resolvedPort: meta.port,
+      listeners: [],
+      wsEndpoint: probe?.wsEndpoint ?? meta.wsEndpoint,
+    };
+  }
   const active = readActivePort(meta.userDataDir);
   const resolvedPort = active?.port ?? meta.port ?? null;
   // 배열을 넘기는 옛 호출은 "스캔이 됐다" 로 본다 — 실패를 알릴 수 있는 것은 ListenerScan 뿐

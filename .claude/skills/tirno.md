@@ -31,6 +31,7 @@ tirno restart <name> [url] [-- flags...]     # 죽이고 새 플래그로 재생
 tirno restart <name> --keep-cookies          # 세션 쿠키까지 넘긴다 — 로그인이 살아남는다
 tirno ls [--json] [--flags]                  # 세션 목록 (STATUS + OWNER 컬럼)
 tirno attach <name>                          # 활성 세션 설정
+tirno connect <name> <port|host:port|ws://…>  # tirno 가 안 띄운 브라우저(adb 포워드·ssh 터널·컨테이너)를 외부 세션으로 등록. kill 은 항목만 해제
 tirno kill <name|--all> [--clean]            # 세션 종료 (foreign/ambiguous 는 거부)
 tirno rename <old> <new>                     # 세션 이름 변경
 tirno export <name>                          # 세션 설정 JSON 출력

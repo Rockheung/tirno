@@ -14,6 +14,7 @@ import type { Cookie } from '../cdp/browser.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
 import { clearActivePort } from '../core/devtools-port.js';
 import { scanListeners, inspectSession, type SessionInventory } from '../core/inventory.js';
+import { httpBaseOf, isExternal, probeDevTools } from '../core/external.js';
 import * as gc from '../core/gc.js';
 import * as drift from '../core/drift.js';
 import { formatTable, success, info, warn, error, fail } from '../output/formatter.js';
@@ -87,6 +88,11 @@ export function positionalUrl(
  * directory must not be deleted either when it was not.
  */
 async function killIfOurs(meta: store.SessionMetadata, verb: string): Promise<boolean> {
+  // external 은 붙기만 한 것이라 죽일 프로세스가 없다. 항목만 넘겨준다.
+  if (isExternal(meta)) {
+    info(`'${meta.name}' was an external endpoint (${meta.wsEndpoint}) — left running; ${verb} replaces the entry.`);
+    return false;
+  }
   const inv = await inspectSession(meta);
   if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous' || inv.ownership === 'unknown') {
     info(`Leaving pid ${meta.pid} alone — ${inv.ownership}: ${inv.reason}`);
@@ -285,6 +291,9 @@ export function registerSessionCommands(program: Command): void {
       try {
         let existing: store.SessionMetadata | null = null;
         try { existing = store.get(name); } catch { /* none */ }
+        if (existing && isExternal(existing)) {
+          throw new TirnoError(`'${name}' is an external endpoint (${existing.wsEndpoint}) — tirno did not launch it and cannot restart it. \`tirno kill ${name}\` drops the entry; \`tirno connect\` registers again.`, 'session_not_owned', { session: name, ownership: 'external' });
+        }
 
         // 재기동은 브라우저를 죽인다. `Expires` 없는 쿠키는 거기서 같이 죽으므로
         // 프로필은 남아도 로그인은 안 남는다 — 로그인 뒤의 화면을 보러 재기동하는
@@ -400,7 +409,18 @@ export function registerSessionCommands(program: Command): void {
       // One lsof for the whole list; each session is then matched against it.
       const listeners = sessions.length ? await scanListeners() : { listeners: [], backend: 'lsof' as const };
       const owner = new Map<string, SessionInventory>();
-      for (const s of sessions) owner.set(s.name, await inspectSession(s, listeners));
+      for (const s of sessions) {
+        try {
+          owner.set(s.name, await inspectSession(s, listeners));
+        } catch (e) {
+          // 필드가 빠진 원장 한 건 때문에 목록 전체가 `paths[0] must be of type string` 으로
+          // 죽었다(#236). 어느 파일인지 이름을 붙여 그 줄만 unknown 으로 둔다.
+          owner.set(s.name, {
+            ownership: 'unknown', name: s.name, pid: s.pid, resolvedPort: s.port ?? null, listeners: [],
+            wsEndpoint: s.wsEndpoint, reason: `ledger entry ${store.sessionPath(s.name)} is malformed: ${(e as Error).message}`,
+          });
+        }
+      }
 
       if (opts.json) {
         console.log(JSON.stringify(
@@ -428,10 +448,11 @@ export function registerSessionCommands(program: Command): void {
 
       const rows = sessions.map(s => {
         const inv = owner.get(s.name);
-        const alive = isAlive(s.pid);
+        // external 의 pid 는 0 이라 isAlive 가 늘 참이다 — 엔드포인트가 답했는가로 본다
+        const alive = isExternal(s) ? inv?.ownership === 'external' : isAlive(s.pid);
         const marker = s.name === active ? '*' : ' ';
         const status = alive ? 'running' : 'dead';
-        const proxy = s.chromeFlags.find(f => f.startsWith('--proxy'))?.split('=')[1] ?? 'direct';
+        const proxy = (s.chromeFlags ?? []).find(f => f.startsWith('--proxy'))?.split('=')[1] ?? 'direct';
         const emu = s.emulation;
         const parts: string[] = [];
         if (emu?.device) {
@@ -456,7 +477,7 @@ export function registerSessionCommands(program: Command): void {
         const row = [marker, `${dot}${s.name}`, String(inv?.resolvedPort ?? s.port), status, ownership, proxy, emulation, describePolicy(s.policy)];
         if (showGroup) row.push(s.group ?? '-');
         if (showFlags) row.push(summarizeFlags(s.chromeFlags));
-        row.push(s.lastAccessedAt.slice(0, 19).replace('T', ' '));
+        row.push((s.lastAccessedAt ?? '').slice(0, 19).replace('T', ' '));
         return row;
       });
 
@@ -478,8 +499,50 @@ export function registerSessionCommands(program: Command): void {
     });
 
   program
+    .command('connect')
+    .description('Register a browser tirno did not launch — an adb-forwarded Android Chrome, an ssh tunnel, a container — as an external session. Reads and actions work; kill/restart only drop the entry, the browser is never touched')
+    .argument('<name>', 'Session name')
+    .argument('<endpoint>', 'Port, host:port, http://host:port or the ws://…/devtools/browser/… URL from /json/version')
+    .option('--group <name>', 'Group label')
+    .action(async (name: string, endpoint: string, opts) => {
+      try {
+        let existing: store.SessionMetadata | null = null;
+        try { existing = store.get(name); } catch { /* none */ }
+        if (existing && !isExternal(existing)) {
+          throw new TirnoError(`Session '${name}' already exists and was launched by tirno — kill it first, or pick another name`, 'session_exists', { session: name });
+        }
+        const base = httpBaseOf(endpoint);
+        const probe = await probeDevTools(base);
+        if (!probe) {
+          throw new TirnoError(`${base.origin}/json/version does not answer — nothing is listening there, or it is not a DevTools endpoint`, 'session_ghost', { endpoint: base.origin });
+        }
+        const now = new Date().toISOString();
+        // 프로필 디렉터리는 만들지 않는다 — 브라우저의 프로필은 저쪽 머신에 있다. 경로만
+        // 표준 자리로 적어 두는 것은 userDataDir 를 문자열로 전제하는 곳들 때문이다.
+        store.create({
+          name,
+          kind: 'external',
+          pid: 0,
+          port: Number(base.port) || (base.protocol === 'https:' ? 443 : 80),
+          wsEndpoint: probe.wsEndpoint,
+          userDataDir: store.profileDir(name),
+          chromeFlags: [],
+          badge: false,
+          createdAt: existing?.createdAt ?? now,
+          lastAccessedAt: now,
+          ...(opts.group ? { group: opts.group } : {}),
+        });
+        store.setActive(name);
+        success(`Connected '${name}' → ${probe.wsEndpoint} (${probe.browser}, protocol ${probe.protocolVersion})`);
+        info('External session: tirno did not launch this browser, so `kill` and `restart` only drop the entry.');
+      } catch (e) {
+        fail(e);
+      }
+    });
+
+  program
     .command('kill')
-    .description('Kill a session (refuses foreign/ambiguous ports — see "tirno ls")')
+    .description('Kill a session (refuses foreign/ambiguous ports — see "tirno ls"). An external session is only unregistered')
     .argument('[name]', 'Session name')
     .option('--all', 'Kill all sessions')
     .option('--group <name>', 'Kill all sessions in this group')
@@ -509,6 +572,13 @@ export function registerSessionCommands(program: Command): void {
             // Killing on the ledger's say-so is how a stale entry turns into
             // "tirno killed an unrelated app". Refuse and name it —
             // ghosts still pass, since killing a dead pid is a no-op.
+            // external 은 죽일 프로세스가 없다 — pid 0 을 kill 하면 자기 프로세스 그룹이다.
+            if (isExternal(meta)) {
+              store.remove(meta.name);
+              if (store.getActive() === meta.name) store.clearActive();
+              success(`Unregistered external '${meta.name}' (${meta.wsEndpoint} left running)`);
+              continue;
+            }
             const inv = await inspectSession(meta, listeners);
             if (inv.ownership === 'foreign' || inv.ownership === 'ambiguous' || inv.ownership === 'unknown') {
               error(`Refusing to kill '${meta.name}' — ${inv.ownership}: ${inv.reason}`);

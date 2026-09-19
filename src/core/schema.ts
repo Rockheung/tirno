@@ -84,6 +84,7 @@ export const SEMANTICS: Record<string, CommandSemantics> = {
   'restart':      { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
   'ls':           { effects: 'read_only', output_kind: 'data', cardinality: 'unbounded' },
   'attach':       { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
+  'connect':      { effects: 'idempotent', output_kind: 'data', cardinality: 'single' },
   'kill':         { effects: 'non_idempotent', output_kind: 'data', cardinality: 'single', destructive: true },
   'gc':           { effects: 'non_idempotent', output_kind: 'data', cardinality: 'unbounded', destructive: true },
   'drift':        { effects: 'read_only', output_kind: 'data', cardinality: 'bounded' },

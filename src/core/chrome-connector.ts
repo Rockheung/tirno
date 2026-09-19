@@ -2,7 +2,7 @@ import { Browser } from '../cdp/browser.js';
 import type { Page } from '../cdp/page.js';
 import * as store from './session-store.js';
 import { inspectSession } from './inventory.js';
-import { ChromeNotRunning, NoActiveSession, SessionNotOwned } from '../util/errors.js';
+import { ChromeNotRunning, NoActiveSession, SessionNotOwned, TirnoError } from '../util/errors.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
 import { applyPermissions } from '../cdp/permissions.js';
@@ -65,8 +65,12 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // inherited. Require pid + port + profile to agree before handing CDP control
   // to whatever answers on that port.
   const inv = await inspectSession(meta);
-  if (inv.ownership === 'ghost') throw new ChromeNotRunning(name, meta.pid);
-  if (inv.ownership !== 'ours') throw new SessionNotOwned(name, inv.resolvedPort, inv.reason, inv.ownership);
+  if (inv.ownership === 'ghost') {
+    // external 은 pid 가 없다 — "(PID 0)" 대신 어느 엔드포인트가 안 답하는지 말한다
+    if (meta.kind === 'external') throw new TirnoError(`External session '${name}': ${inv.reason}`, 'session_ghost', { session: name, endpoint: meta.wsEndpoint });
+    throw new ChromeNotRunning(name, meta.pid);
+  }
+  if (inv.ownership !== 'ours' && inv.ownership !== 'external') throw new SessionNotOwned(name, inv.resolvedPort, inv.reason, inv.ownership);
 
   // inspectSession already resolved DevToolsActivePort (live) over
   // meta.wsEndpoint (a launch-time snapshot that goes stale on restart);

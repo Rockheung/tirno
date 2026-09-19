@@ -88,7 +88,7 @@ export function plan(scan: GcScan, opts: GcOptions, now: Date): GcPlan {
       skipped.push({ target: s.name, reason: `${s.ownership} — ${s.reason}. No automatic action.` });
       continue;
     }
-    if (s.ownership === 'ours') continue;        // running and ours — nothing to do
+    if (s.ownership === 'ours' || s.ownership === 'external') continue;   // running — nothing to do
 
     // Protected even when the entry is stale: an anchor pointing at it is a
     // configured MCP target, and `active` is what bare commands resolve to.
