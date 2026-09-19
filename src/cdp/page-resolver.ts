@@ -3,6 +3,10 @@ import type { Browser } from './browser.js';
 
 export async function getActivePage(browser: Browser): Promise<Page> {
   const pages = await browser.pages();
+  // `select` 가 고른 탭이 아직 열려 있으면 그것이다. 닫혔으면 아래 규칙으로 — 낡은
+  // 선택 때문에 명령이 막히는 것보다 예전처럼 마지막 탭을 잡는 편이 낫다.
+  const selected = browser.preferredTargetId && pages.find(p => p.targetId === browser.preferredTargetId);
+  if (selected) return selected;
   // filter out chrome:// and devtools:// pages
   const contentPages = pages.filter(p => {
     const url = p.url();
