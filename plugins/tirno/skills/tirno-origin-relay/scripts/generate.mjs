@@ -37,10 +37,12 @@ const port = cfg.port ?? 8443;
 //
 // origin 의 경로와 로컬 경로는 다를 수 있다 — 앱의 dist 는 자기 루트가 `/` 지만
 // origin 에서는 `/_/app/` 아래 사는 것이 보통이다. 그 어긋남을 여기서 흡수한다.
-const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e =>
-  e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
-
-const map = new Map();          // origin 경로 → 로컬 절대경로
+//
+// 디렉터리 마운트는 파일 목록을 굽지 않는다. 생성 시점의 목록을 박으면 앱을 재빌드해
+// 해시가 바뀐 청크가 "목록 밖" 이 돼 origin 으로 릴레이되고 거기엔 없어 404 다(#235).
+// 접두사 → root 만 적고 요청 시점에 디스크를 본다.
+const map = new Map();          // origin 경로 → 로컬 절대경로 (파일 마운트)
+const dirs = [];                // { prefix, root, headers } — 디렉터리 마운트, 선언 순
 const fallbacks = [];           // { prefix, file } — SPA navigate 하위 경로용
 const errors = [];
 for (const [i, m] of cfg.mounts.entries()) {
@@ -79,11 +81,7 @@ for (const [i, m] of cfg.mounts.entries()) {
     if (!m.root) { errors.push(`${label}: 디렉터리 마운트에는 "root" 가 필요하다`); continue; }
     const root = path.resolve(cfgDir, m.root);
     if (!fs.existsSync(root)) { errors.push(`${label}: root 가 없다 — ${root}`); continue; }
-    for (const f of walk(root)) {
-      const rel = path.relative(root, f).split(path.sep).join('/');
-      const urlPath = m.path + rel;
-      if (!map.has(urlPath)) map.set(urlPath, { file: f, ...(headers ? { headers } : {}) });   // 먼저 선언한 마운트가 이긴다
-    }
+    dirs.push({ prefix: m.path, root, ...(headers ? { headers } : {}) });   // 먼저 선언한 마운트가 이긴다
   } else {
     if (!m.file) { errors.push(`${label}: 파일 마운트에는 "file" 이 필요하다`); continue; }
     const file = path.resolve(cfgDir, m.file);
@@ -93,7 +91,7 @@ for (const [i, m] of cfg.mounts.entries()) {
   }
 }
 if (errors.length) { console.error(errors.map(e => '✗ ' + e).join('\n')); process.exit(1); }
-if (!map.size) { console.error('마운트가 아무 파일도 가리키지 않는다'); process.exit(1); }
+if (!map.size && !dirs.length) { console.error('마운트가 아무 파일도 가리키지 않는다'); process.exit(1); }
 
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -107,6 +105,20 @@ import tls from 'node:tls';
 
 const DIR = path.dirname(new URL(import.meta.url).pathname);
 const MAP = ${JSON.stringify(Object.fromEntries(map), null, 2)};
+
+// 디렉터리 마운트 — 요청 때마다 디스크를 본다. 재빌드로 새 청크가 생겨도 다시 굽지
+// 않는다(#235). root 밖으로 나가는 경로(..)는 마운트 밖으로 본다.
+const DIRS = ${JSON.stringify(dirs, null, 2)};
+const fromDir = pathname => {
+  for (const d of DIRS) {
+    if (!pathname.startsWith(d.prefix)) continue;
+    const file = path.resolve(d.root, pathname.slice(d.prefix.length));
+    if (!file.startsWith(d.root + path.sep)) continue;
+    let st; try { st = fs.statSync(file); } catch { continue; }
+    if (st.isFile()) return { file, ...(d.headers ? { headers: d.headers } : {}) };
+  }
+  return null;
+};
 
 // SPA 하위 경로의 navigate 요청을 이 문서로 받는다 — 아니면 릴레이로 새서 배포본을
 // 받는다(로그인 리다이렉트가 하위 경로 착지). 자산은 이 규칙을 안 탄다.
@@ -139,7 +151,7 @@ const server = https.createServer({
   key: fs.readFileSync(path.join(DIR, 'key.pem')),
 }, (req, res) => {
   const p = decodeURIComponent(new URL(req.url, 'https://x').pathname);
-  let hit = MAP[p] ?? null;
+  let hit = MAP[p] ?? fromDir(p);
   // navigate 요청이 목록에 없고 navigateFallback 접두사 아래면 그 문서를 낸다.
   if (!hit && req.headers['sec-fetch-mode'] === 'navigate') {
     const fb = FALLBACKS.find(f => underPrefix(p, f.prefix));
