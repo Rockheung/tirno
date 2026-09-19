@@ -29,6 +29,7 @@ export interface Axis {
 export function expectsExtension(meta: SessionMetadata): string | null {
   const parts: string[] = [];
   if (meta.headerRules?.length) parts.push(`${meta.headerRules.length} header rule${meta.headerRules.length === 1 ? '' : 's'}`);
+  if (meta.interceptRules?.length) parts.push(`${meta.interceptRules.length} intercept rule${meta.interceptRules.length === 1 ? '' : 's'}`);
   if (meta.policy?.allowDomains?.length) parts.push(`allow ${meta.policy.allowDomains.join(',')}`);
   return parts.length ? parts.join(' · ') : null;
 }

@@ -328,6 +328,7 @@ export function registerSessionCommands(program: Command): void {
         // 다시 적지 않아도 켠다 — 저장된 규칙이 조용히 무효가 되는 것보다 확장이 켜져
         // 있는 편이 덜 놀랍다.
         const headerRules = existing?.headerRules ?? [];
+        const interceptRules = existing?.interceptRules ?? [];
         const injects = existing?.injects ?? [];
         const restartPolicy = opts.policy === false ? undefined : (policyFromOpts(opts) ?? existing?.policy);
         if (restartPolicy?.allowDomains?.length) chromeFlags.push(...WEBRTC_CONTAINMENT_FLAGS.filter(f => !chromeFlags.includes(f)));
@@ -338,7 +339,7 @@ export function registerSessionCommands(program: Command): void {
           chromeFlags,
           executablePath: opts.executablePath ?? existing?.executablePath,
           headless: opts.headless,
-          extensions: opts.extensions || headerRules.length > 0 || !!restartPolicy?.allowDomains?.length,
+          extensions: opts.extensions || headerRules.length > 0 || interceptRules.length > 0 || !!restartPolicy?.allowDomains?.length,
           badge: opts.badge ?? existing?.badge,
           userDataDir: userDataDirOverride,
           bootUrl,
@@ -348,9 +349,10 @@ export function registerSessionCommands(program: Command): void {
         // 죽은 경로 — core/header-ext 참조). 그래서 bootUrl 로 연 페이지는 둘 다 없이
         // 받아온 것이고, 심은 뒤 다시 읽혀야 화면과 저장된 것이 어긋나지 않는다.
         if (headerRules.length) store.update(name, { headerRules });
+        if (interceptRules.length) store.update(name, { interceptRules });
         if (injects.length) store.update(name, { injects });
         if (restartPolicy) store.update(name, { policy: restartPolicy });
-        const needExt = headerRules.length > 0 || !!restartPolicy?.allowDomains?.length;
+        const needExt = headerRules.length > 0 || interceptRules.length > 0 || !!restartPolicy?.allowDomains?.length;
         if (needExt || injects.length) {
           try {
             if (needExt) {

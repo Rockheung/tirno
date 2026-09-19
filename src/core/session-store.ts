@@ -75,6 +75,8 @@ export interface SessionMetadata {
    * core/header-ext 참조. 확장이므로 세션이 `extensions` 로 떠 있어야 한다.
    */
   headerRules?: import('./header-ext.js').HeaderRule[];
+  /** `intercept block` · `intercept mock` 의 규칙. headerRules 와 같은 확장으로 나간다(#178) */
+  interceptRules?: import('./header-ext.js').InterceptRule[];
   /**
    * 이 세션이 `--extensions` 로 떴는가. 기준 인자의 `--disable-extensions` 는
    * 기동 이후에 취소할 수 없어서(chrome-launcher 참조), 확장이 필요한 명령은

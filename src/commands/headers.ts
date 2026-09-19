@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import * as store from '../core/session-store.js';
 import { connect } from '../core/chrome-connector.js';
-import { writeHeaderExt, loadHeaderExt, type HeaderRule } from '../core/header-ext.js';
+import { writeHeaderExtFor, loadHeaderExt, requireExtensions, type HeaderRule } from '../core/header-ext.js';
 import { formatTable, success, info, fail } from '../output/formatter.js';
 
 // 두 경로가 있고, 어느 쪽인지는 `--once` 하나로 갈린다.
@@ -13,16 +13,6 @@ import { formatTable, success, info, fail } from '../output/formatter.js';
 // `--once` 는 Network.setExtraHTTPHeaders 다. 연결 수명에 묶여 tirno 명령이 도는
 // 동안만 붙고 호스트 조건도 없지만, `--extensions` 없이 뜬 세션에서 쓸 수 있는
 // 것은 이쪽뿐이다.
-
-// 확장 경로에서만 부른다 — 호출 전에 세션이 확장을 받을 수 있는지 판정해야 한다.
-function requireExtensions(name: string, meta: store.SessionMetadata): void {
-  if (meta.extensions) return;
-  throw new Error(
-    `Session '${name}' runs with extensions off, and a persistent header is an extension. ` +
-    `Re-launch with \`tirno restart ${name} --extensions\` (stored rules come back with it), ` +
-    `or add --once for a header that only lasts while a tirno command runs.`
-  );
-}
 
 /** `--once` 경로. connect 가 저장된 extraHeaders 를 재적용한다. */
 async function applyOnce(name: string): Promise<void> {
@@ -108,7 +98,7 @@ export function registerHeaderCommands(program: Command): void {
         // extensions 가 꺼진 세션이면 확장 자체가 떠 있지 않다 — 규칙 파일만 갱신하고
         // 로드는 건너뛴다. 다음 `restart --extensions` 가 갱신된 파일을 읽는다.
         if (meta.extensions) await loadHeaderExt(name);
-        else writeHeaderExt(meta.userDataDir, store.get(name).headerRules ?? []);
+        else writeHeaderExtFor(store.get(name));
         success(hName ? `Removed ${hName}` : 'Cleared all headers');
       } catch (e) { fail(e); }
     });
