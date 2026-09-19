@@ -194,11 +194,12 @@ function main() {
     fixtureId = pp.find(p => String(p.url).endsWith('smoke-page.html'))?.id ?? '';
   } catch { /* ignore */ }
   if (blankId !== '' && fixtureId !== '') {
-    // new-tab 이 앞을 가져가 픽스처 탭은 hidden — select 가 실제로 앞에 세우는지는
-    // visibilityState 로만 판정된다. (select 는 bringToFront 다 — 이후 명령의 대상
-    // 선정을 바꾸지 않는다. eval 류는 여전히 "마지막 콘텐츠 페이지"로 간다.)
-    check('select 전 픽스처 탭이 hidden (전제)', q('document.visibilityState') === 'hidden');
+    // new-tab 은 새 탭을 다음 명령의 대상으로 둔다 — 그래서 eval 이 about:blank 를 본다.
+    // select 는 앞에 세우는 것에 더해 **이후 명령의 대상**을 바꾼다(#233): 탭이 둘일 때
+    // eval 이 select 한 탭으로 가는지가 판정이고, visibilityState 는 앞에 섰다는 증거다.
+    check('new-tab 뒤 eval 의 대상은 새 탭이다 (전제)', q('location.href') === 'about:blank', `실측: ${q('location.href')}`);
     run('select', ['select', fixtureId, ...S]);
+    check('select 뒤 eval 의 대상이 그 탭이다 (#233)', String(q('location.href')).endsWith('smoke-page.html'), `실측: ${q('location.href')}`);
     check('select 가 대상 탭을 앞에 세웠다', q('document.visibilityState') === 'visible',
       `실측: ${q('document.visibilityState')}`);
     run('close-tab', ['close-tab', blankId, ...S]);
