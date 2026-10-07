@@ -19,6 +19,7 @@ export function registerSetupCommand(program: Command): void {
     .option('--check', 'Diagnose only: where tirno looked, what it found, why it failed')
     .option('-y, --yes', 'Do not ask before downloading')
     .option('--force', 'Fetch even if a browser is already resolved')
+    .option('--no-icon', 'Leave the downloaded bundle\'s own icon alone. By default (macOS) tirno paints its icon on the bundle it fetched, so its windows are not your everyday Chrome in the dock')
     .option('--json', 'Output as JSON')
     .action(async (opts) => {
       try {
@@ -75,6 +76,7 @@ export function registerSetupCommand(program: Command): void {
 
         let lastShown = 0;
         const result = await install(p, {
+          icon: opts.icon,
           onProgress: (received, total) => {
             if (opts.json || process.stdout.isTTY !== true) return;
             const now = Date.now();
@@ -94,6 +96,7 @@ export function registerSetupCommand(program: Command): void {
         }
         success(`${result.binary}`);
         info(`${result.files} files, ${humanBytes(result.bytes)} downloaded — saved as the configured chrome`);
+        if (result.branded) info('Painted the tirno icon on the bundle — in the dock it is not your everyday Chrome');
         info(`Sessions will use it now: tirno new demo https://example.com --headless`);
         sandboxNote(result.binary);
       } catch (e) {
