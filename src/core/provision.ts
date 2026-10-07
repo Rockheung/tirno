@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { underRoot } from './paths.js';
 import { isRunnable, setConfiguredChrome } from './chrome-finder.js';
+import { brandBundle } from './icon.js';
 import { unzip } from './unzip.js';
 
 /**
@@ -123,6 +124,8 @@ export interface InstallResult {
   label: string;
   bytes: number;
   files: number;
+  /** 아이콘을 입힌 .icns 의 경로. 안 입혔으면 없다 (macOS 가 아니거나 `--no-icon`). */
+  branded?: string;
 }
 
 /**
@@ -131,7 +134,7 @@ export interface InstallResult {
  */
 export async function install(
   p: Plan,
-  hooks: { onProgress?: (received: number, total: number) => void } = {},
+  hooks: { onProgress?: (received: number, total: number) => void; icon?: boolean } = {},
   fetchImpl: typeof fetch = fetch,
 ): Promise<InstallResult> {
   const root = chromeRoot();
@@ -165,7 +168,13 @@ export async function install(
     if (!binary) {
       throw new Error(`Extracted ${extracted.files} files to ${dest} but found no chrome executable in them`);
     }
-    return { binary, label: p.label, bytes: received, files: extracted.files };
+    // 아이콘은 곁다리가 아니라 **우리가 받은 것임을 독에서 보이게 하는 일**이다. 다만
+    // 실패해도 설치는 성공이다 — 브라우저는 돌아가고, 아이콘은 구글 것으로 남을 뿐이다.
+    const branded = hooks.icon === false ? null : brandBundle(binary);
+    return {
+      binary, label: p.label, bytes: received, files: extracted.files,
+      ...(branded?.done ? { branded: branded.icns } : {}),
+    };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

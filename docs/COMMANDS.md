@@ -109,10 +109,19 @@ Chromium 을 어디서 어떻게 가져올지부터 판단해야 한다.
 tirno setup --check     # 진단만: 어디를 봤고, 뭘 찾았고, 왜 실패했나
 tirno setup             # 없으면 받아온다 (묻는다). --yes 로 안 묻기
 tirno setup --force     # 이미 있어도 새로 받는다
+tirno setup --no-icon   # 받은 번들의 아이콘을 구글 것 그대로 둔다 (macOS)
 ```
 
 받은 것은 `~/.tirno/chrome/<label>/` 에 두고 설정에 적는다. **sudo 가 전혀 필요 없다** —
 자동 탐색이 실패했을 때 사용자가 시스템 경로에 손대는 쪽으로 몰리는 것이 문제였다.
+
+**macOS 에서는 받은 번들에 tirno 아이콘을 입힌다.** tirno 가 띄운 창은 독에서 사용자의
+평소 크롬과 생김새가 같아서, 어느 창이 에이전트의 것인지 눈으로 구분할 수 없다. 구글도
+같은 문제를 Chrome for Testing 의 노란 TEST 리본으로 풀었고 — 그 자리에 tirno 리본을 둔다.
+**받아온 번들만 건드린다**: `tirno chrome set` 으로 가리킨 브라우저나 `/Applications` 의
+크롬은 우리 것이 아니고, 거기 아이콘을 바꾸면 사용자가 평소 쓰는 크롬이 같이 바뀐다.
+서명은 안 깨진다 — CfT 번들은 adhoc·linker-signed 라 `Resources/` 를 봉인하지 않는다.
+원본 아이콘을 쓰고 싶으면 `--no-icon`.
 
 출처가 둘인 것은 구글 사정이다:
 
