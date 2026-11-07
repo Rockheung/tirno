@@ -29,7 +29,7 @@ const PREFS = [
   'user_pref("browser.aboutwelcome.enabled", false);',
   'user_pref("datareporting.policy.dataSubmissionEnabled", false);',
 ];
-const WAIT_MS = 15000;
+const WAIT_MS = 30000;
 
 export function findFirefox(explicit?: string): string {
   const chosen = explicit ?? process.env['TIRNO_FIREFOX'];
