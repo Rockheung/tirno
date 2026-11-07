@@ -74,6 +74,14 @@ export function selfReplaceTarget(execPath: string, bunVersion: string | undefin
   return execPath;
 }
 
+/** `process.execPath` 로 tirno 를 다시 부를 때의 인자. 컴파일 바이너리의 argv[1] 은 내장 경로라 명령으로 읽힌다. */
+export function selfArgs(
+  args: string[],
+  { execPath = process.execPath, bunVersion = process.versions.bun, script = process.argv[1] }: { execPath?: string; bunVersion?: string | undefined; script?: string | undefined } = {},
+): string[] {
+  return selfReplaceTarget(execPath, bunVersion) || !script ? args : [script, ...args];
+}
+
 /** 설치된 플러그인 하나 — `claude plugin` 이 받는 식별자와 그 버전. */
 export interface InstalledPlugin {
   /** `tirno@tirno` — `<플러그인>@<마켓플레이스>` */

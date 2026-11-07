@@ -11,6 +11,7 @@ import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { selfArgs } from '../core/update.js';
 import { buildSchema, type CliSchema } from '../core/schema.js';
 import { toolsFor, commandOfTool, argvFor, CORE_TOOLS } from '../mcp/tools.js';
 import { fail } from '../output/formatter.js';
@@ -87,7 +88,7 @@ async function serve(schema: CliSchema, profile: 'core' | 'all', defaultSession?
 }
 
 async function callTirno(argv: string[]): Promise<{ ok: boolean; text: string; code?: string }> {
-  const args = [process.argv[1], ...argv].filter(Boolean);
+  const args = selfArgs(argv);
   try {
     const { stdout, stderr } = await run(process.execPath, args, { env: { ...process.env, FORCE_COLOR: '0', NO_COLOR: '1' }, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 180_000 });
     return { ok: true, text: `${stdout}${stderr}`.trim() };

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { isRunnable } from './chrome-finder.js';
 import { isAlive } from './process-guard.js';
-import { selfReplaceTarget } from './update.js';
+import { selfArgs } from './update.js';
 import * as store from './session-store.js';
 import { TirnoError } from '../util/errors.js';
 import type { ScreenshotOptions } from '../cdp/page.js';
@@ -110,8 +110,7 @@ function holderFile(profile: string): string {
 async function startHolder(profile: string, port: number): Promise<string> {
   const file = holderFile(profile);
   fs.rmSync(file, { force: true });
-  const script = selfReplaceTarget(process.execPath, process.versions.bun) ? [] : process.argv.slice(1, 2);
-  spawn(process.execPath, [...script, '__firefox-holder', String(port), file], { detached: true, stdio: 'ignore' }).unref();
+  spawn(process.execPath, selfArgs(['__firefox-holder', String(port), file]), { detached: true, stdio: 'ignore' }).unref();
   return waitFor('the Firefox session', () => fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : null);
 }
 

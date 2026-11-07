@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assetNameFor, compareVersions, installedPluginFrom, installedPluginsPath, parseChecksums, selfReplaceTarget } from '../src/core/update.js';
+import { assetNameFor, compareVersions, installedPluginFrom, installedPluginsPath, parseChecksums, selfArgs, selfReplaceTarget } from '../src/core/update.js';
 
 // 문자열 비교로는 0.2.10 이 0.2.9 보다 낮다고 나오고, 그러면 밀린 상태에서
 // "최신입니다" 를 말하게 된다 — 틀린 답이 조용히 나가는 자리다.
@@ -100,4 +100,11 @@ test('installedPluginFrom returns null when there is nothing usable', () => {
 test('installedPluginsPath honours CLAUDE_CONFIG_DIR', () => {
   assert.equal(installedPluginsPath('/home/u'), '/home/u/.claude/plugins/installed_plugins.json');
   assert.equal(installedPluginsPath('/home/u', '/cfg'), '/cfg/plugins/installed_plugins.json');
+});
+
+test('selfArgs drops the embedded script path of a compiled binary', () => {
+  const compiled = { execPath: '/usr/local/bin/tirno', bunVersion: '1.2.3', script: '/$bunfs/root/tirno' };
+  assert.deepEqual(selfArgs(['ls'], compiled), ['ls']);
+  assert.deepEqual(selfArgs(['ls'], { execPath: '/usr/bin/node', bunVersion: undefined, script: '/x/bin/tirno.js' }), ['/x/bin/tirno.js', 'ls']);
+  assert.deepEqual(selfArgs(['ls'], { execPath: '/opt/bun', bunVersion: '1.2.3', script: '/x/dist/main.js' }), ['/x/dist/main.js', 'ls']);
 });

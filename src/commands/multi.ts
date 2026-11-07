@@ -6,6 +6,7 @@ import { getActivePage } from '../cdp/page-resolver.js';
 import { success, info, error, fail } from '../output/formatter.js';
 import { TirnoError } from '../util/errors.js';
 import * as store from '../core/session-store.js';
+import { selfArgs } from '../core/update.js';
 
 export function registerMultiCommands(program: Command): void {
   program
@@ -82,7 +83,7 @@ export function registerMultiCommands(program: Command): void {
         try {
           const { stdout, stderr } = await run(
             process.execPath,
-            [process.argv[1], cmd, ...args, '-s', session.name],
+            selfArgs([cmd, ...args, '-s', session.name]),
             { encoding: 'utf-8', timeout: 30000 }
           );
           return { name: session.name, stdout, stderr, failure: null as string | null };
