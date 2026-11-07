@@ -21,8 +21,8 @@ tirno click @7                                  # 셀렉터를 몰라도 누른�
 tirno kill demo --clean
 ```
 
-**필요한 것**: Chrome 하나뿐이고, 없으면 받아온다 — `tirno setup` 이 `~/.tirno/chrome/` 에
-깐다(sudo 불필요). 어디를 보는지·무엇을 고르는지는 `tirno setup --check` 가 그대로 보여준다.
+**필요한 것**: Chrome 하나뿐이다. 기본은 Chrome for Testing 이고, `tirno setup` 이 `~/.tirno/chrome/` 에
+받아온다(sudo 불필요). 받아 두지 않았으면 agent-browser 가 받아 둔 빌드, 그다음 설치된 Google Chrome 순으로 쓴다. 어디를 보는지·무엇을 고르는지는 `tirno setup --check` 가 그대로 보여준다.
 이미 있는 것을 쓰려면 `tirno chrome set <path>` (또는 `$TIRNO_CHROME`).
 macOS 에서 받아온 번들에는 tirno 아이콘이 입혀진다 — 독에서 평소 쓰는 크롬과 섞이지
 않게(`--no-icon` 으로 끈다). 받아온 것만 건드리고, 사용자가 가리킨 브라우저는 안 건드린다.

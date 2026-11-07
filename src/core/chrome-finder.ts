@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { underRoot } from './paths.js';
+import { tirnoDir, underRoot } from './paths.js';
 
 /**
  * 어느 Chrome 을 쓸 것인가.
@@ -36,14 +36,17 @@ const ENV_VARS = ['TIRNO_CHROME', 'CHROME_PATH', 'PUPPETEER_EXECUTABLE_PATH'];
  * playwright/puppeteer 캐시가 목록에 있는 이유: 그 둘은 arm64 리눅스 빌드를 내려받고,
  * 이미 받아둔 사람이 많다. 즉 **arm64 에서 유일하게 이미 존재할 가능성이 있는 경로**다.
  */
-export function chromeCandidates(platform: string = process.platform, home: string = os.homedir()): string[] {
+export function chromeCandidates(platform: string = process.platform, home: string = os.homedir(), root: string = tirnoDir()): string[] {
   if (platform === 'darwin') {
+    const cft = 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing';
     return [
+      `${root}/chrome/chrome-*/chrome-mac*/${cft}`,
+      `${home}/.agent-browser/browsers/chrome-*/${cft}`,
       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
       '/Applications/Chromium.app/Contents/MacOS/Chromium',
       `${home}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
       `${home}/Library/Caches/ms-playwright/chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium`,
-      `${home}/.cache/puppeteer/chrome/*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+      `${home}/.cache/puppeteer/chrome/*/chrome-mac*/${cft}`,
     ];
   }
   if (platform === 'win32') {
@@ -55,6 +58,7 @@ export function chromeCandidates(platform: string = process.platform, home: stri
     ];
   }
   return [
+    `${root}/chrome/*/chrome-linux*/chrome`,
     '/usr/bin/google-chrome',
     '/usr/bin/google-chrome-stable',
     '/usr/bin/chromium',          // Debian/Fedora 의 패키지명
@@ -64,6 +68,11 @@ export function chromeCandidates(platform: string = process.platform, home: stri
     `${home}/.cache/ms-playwright/chromium-*/chrome-linux*/chrome`,
     `${home}/.cache/puppeteer/chrome/*/chrome-linux*/chrome`,
   ];
+}
+
+/** 자동화용으로 고정 배포되는 빌드인가. tirno 가 받은 것은 linux-arm64 의 chromium 도 여기 든다. */
+export function isTestBuild(p: string): boolean {
+  return p.includes('Google Chrome for Testing') || p.startsWith(underRoot('chrome') + path.sep) || p.includes('/.cache/puppeteer/chrome/');
 }
 
 function escapeRe(s: string): string {

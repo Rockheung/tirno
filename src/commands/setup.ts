@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { describeSource, inspectCandidates, resolveChrome } from '../core/chrome-finder.js';
+import { describeSource, isTestBuild, inspectCandidates, resolveChrome } from '../core/chrome-finder.js';
 import {
   apparmorProfile, chromeRoot, humanBytes, install, listInstalled,
   plan, platformKey, remember, usernsRestricted,
@@ -24,9 +24,11 @@ export function registerSetupCommand(program: Command): void {
     .action(async (opts) => {
       try {
         let resolved: { path: string; source: string } | null = null;
+        let foundEverydayChrome = false;
         try {
           const r = resolveChrome();
           resolved = { path: r.path, source: describeSource(r.source) };
+          foundEverydayChrome = r.source.kind === 'search' && !isTestBuild(r.path);
         } catch { /* 없다는 것이 이 명령의 출발점이다 */ }
 
         if (opts.check) {
@@ -35,7 +37,7 @@ export function registerSetupCommand(program: Command): void {
           return;
         }
 
-        if (resolved && !opts.force) {
+        if (resolved && !opts.force && !foundEverydayChrome) {
           if (opts.json) {
             console.log(JSON.stringify({ action: 'none', resolved }, null, 2));
             return;

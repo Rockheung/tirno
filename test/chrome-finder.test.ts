@@ -9,6 +9,7 @@ import {
   expandGlob,
   inspectCandidates,
   isRunnable,
+  isTestBuild,
   readConfig,
   resolveChrome,
   setConfiguredChrome,
@@ -42,6 +43,39 @@ afterEach(() => {
     else process.env[k] = savedEnv[k];
   }
   fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('Chrome for Testing comes before the everyday Chrome on every platform', () => {
+  for (const platform of ['darwin', 'linux']) {
+    const list = chromeCandidates(platform, '/home/u', '/r');
+    const cft = list.findIndex(p => p.startsWith('/r/chrome/'));
+    const everyday = list.findIndex(p => /\/Google Chrome\.app|google-chrome$/.test(p));
+    assert.equal(cft, 0, 'what tirno fetched is tried first');
+    assert.ok(everyday > cft);
+  }
+});
+
+test('a puppeteer cache of unknown age does not beat the everyday Chrome', () => {
+  for (const platform of ['darwin', 'linux']) {
+    const list = chromeCandidates(platform, '/home/u', '/r');
+    assert.ok(list.findIndex(p => p.includes('puppeteer')) > list.findIndex(p => /\/Google Chrome\.app|google-chrome$/.test(p)));
+  }
+});
+
+test('the agent-browser download is found by search', () => {
+  const list = chromeCandidates('darwin', tmp, path.join(tmp, 'root'));
+  const pattern = list.find(p => p.includes('.agent-browser'));
+  assert.ok(pattern);
+  const binary = fakeChrome('.agent-browser/browsers/chrome-154.0.1/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
+  assert.deepEqual(expandGlob(pattern), [binary]);
+});
+
+test('a fetched build is a test build and the everyday Chrome is not', () => {
+  assert.equal(isTestBuild(path.join(process.env['TIRNO_DIR']!, 'chrome', 'chromium-1234', 'chrome-linux', 'chrome')), true);
+  assert.equal(isTestBuild('/x/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing'), true);
+  assert.equal(isTestBuild('/home/u/.cache/puppeteer/chrome/linux-1/chrome-linux64/chrome'), true);
+  assert.equal(isTestBuild('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'), false);
+  assert.equal(isTestBuild('/usr/bin/google-chrome'), false);
 });
 
 test('--executable-path wins over everything', () => {
