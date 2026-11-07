@@ -9,7 +9,8 @@
 | 명령 | 설명 |
 |---|---|
 | `new <name> [url] [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨). `[url]` 을 주면 **그 페이지가 커밋될 때까지 기다렸다가** 돌아온다(`--boot-timeout <ms>`, 기본 15000; 못 기다리면 세션은 그대로 두고 그 사실을 말한다) |
-| `ls` | 세션 목록 (port, status, **owner**, proxy, emulation, last access) |
+| `new <name> --browser firefox` | Firefox 세션 생성. 엔진은 세션 메타데이터에 남고 이후 명령과 `restart` 가 따른다. `nav` · `eval` · `screenshot` · `ls` · `restart` · `kill` 만 되고, 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는 `capability_unsupported` 로 거절한다 |
+| `ls` | 세션 목록 (engine, port, status, **owner**, proxy, emulation, last access) |
 | `attach <name>` | active 세션 변경 |
 | `connect <name> <endpoint>` | **tirno 가 띄우지 않은 브라우저**를 외부 세션으로 등록 — adb 포워드된 안드로이드 크롬, ssh 터널, 컨테이너. `<endpoint>` 는 포트 · `host:port` · `http://…` · `/json/version` 의 `ws://…` 어느 것이든. 관측·조작은 다 되고 `kill`/`restart` 는 항목만 지운다(브라우저는 손대지 않음). 프로필 디렉터리를 만들지 않는다 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부. `external` 은 등록만 해제 |

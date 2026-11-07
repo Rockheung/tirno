@@ -23,6 +23,7 @@ const CANDIDATES = [
 ];
 const PREFS = [
   'user_pref("marionette.port", 0);',
+  'user_pref("browser.startup.page", 0);',
   'user_pref("browser.shell.checkDefaultBrowser", false);',
   'user_pref("browser.aboutwelcome.enabled", false);',
   'user_pref("datareporting.policy.dataSubmissionEnabled", false);',

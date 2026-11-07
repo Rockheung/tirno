@@ -27,9 +27,10 @@ npm link   # 또는 PATH에 bin/ 추가
 ```bash
 tirno new <name> [url] [-- chrome-flags...]  # Chrome 세션 생성
 tirno new <name> --extensions                # 확장이 돌게 한다 (기본은 꺼짐)
+tirno new <name> --browser firefox           # Firefox 세션 생성 (기본은 chrome)
 tirno restart <name> [url] [-- flags...]     # 죽이고 새 플래그로 재생성
 tirno restart <name> --keep-cookies          # 세션 쿠키까지 넘긴다 — 로그인이 살아남는다
-tirno ls [--json] [--flags]                  # 세션 목록 (STATUS + OWNER 컬럼)
+tirno ls [--json] [--flags]                  # 세션 목록 (ENGINE + STATUS + OWNER 컬럼)
 tirno attach <name>                          # 활성 세션 설정
 tirno connect <name> <port|host:port|ws://…>  # tirno 가 안 띄운 브라우저(adb 포워드·ssh 터널·컨테이너)를 외부 세션으로 등록. kill 은 항목만 해제
 tirno kill <name|--all> [--clean]            # 세션 종료 (foreign/ambiguous 는 거부)
@@ -39,7 +40,13 @@ tirno gc [--dry-run] [--older-than <days>]   # 낡은 장부·잔존 파일 정�
 tirno drift [name] [-- <flags>]              # 선언한 플래그 vs 실행 중 프로세스
 ```
 
-세션 = 독립된 Chrome 프로세스. 각각 고유한 포트, user-data-dir, Chrome 플래그를 가짐.
+세션 = 독립된 브라우저 프로세스. 각각 고유한 포트, user-data-dir, 브라우저 플래그를 가짐.
+
+엔진은 `new --browser` 로 한 번만 고른다. 값은 세션 메타데이터의 `engine` 에 남고, 이후 명령과
+`restart` 는 세션의 엔진을 따른다. Firefox 세션은 `nav` · `eval` · `screenshot` · `ls` · `restart` ·
+`kill` 만 되고, 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는
+`capability_unsupported` 로 거절한다. 실행 파일은 `--executable-path` 나 `$TIRNO_FIREFOX` 로 지정한다.
+
 `--` 뒤에 Chrome 플래그를 전달:
 
 ```bash
@@ -363,6 +370,7 @@ tirno update [--check]           # 최신 릴리즈로 — 바이너리 + 스킬
 
 `~/.tirno/sessions/<name>.json`에 저장:
 - PID, port, wsEndpoint, userDataDir, chromeFlags, createdAt, lastAccessedAt
+- engine: Firefox 세션이면 `firefox`, Chrome 세션에는 없다
 - emulation: { device, viewport, network, cpu }
 - permissions: origin → 허용 목록. connect 마다 재적용한다
 - headerRules: 확장으로 나가는 고정 헤더. 재기동이 다시 읽힌다
