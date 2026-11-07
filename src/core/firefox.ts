@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { isRunnable } from './chrome-finder.js';
 import { isAlive } from './process-guard.js';
+import { selfReplaceTarget } from './update.js';
 import * as store from './session-store.js';
 import { TirnoError } from '../util/errors.js';
 import type { ScreenshotOptions } from '../cdp/page.js';
@@ -109,7 +110,7 @@ function holderFile(profile: string): string {
 async function startHolder(profile: string, port: number): Promise<string> {
   const file = holderFile(profile);
   fs.rmSync(file, { force: true });
-  const script = process.argv[1] && fs.existsSync(process.argv[1]) ? [process.argv[1]] : [];
+  const script = selfReplaceTarget(process.execPath, process.versions.bun) ? [] : process.argv.slice(1, 2);
   spawn(process.execPath, [...script, '__firefox-holder', String(port), file], { detached: true, stdio: 'ignore' }).unref();
   return waitFor('the Firefox session', () => fs.existsSync(file) ? fs.readFileSync(file, 'utf-8') : null);
 }
@@ -133,8 +134,13 @@ export async function launchFirefox(opts: FirefoxLaunch): Promise<store.SessionM
 
   const child = spawn(binary, [...firefoxArgs(userDataDir, opts.headless), ...opts.extraArgs], { detached: true, stdio: 'ignore' });
   child.unref();
-  const port = await waitFor('Marionette to listen', () => fs.existsSync(portFile) ? Number(fs.readFileSync(portFile, 'utf-8')) : null);
-  const wsEndpoint = await startHolder(userDataDir, port);
+  const { port, wsEndpoint } = await (async () => {
+    const port = await waitFor('Marionette to listen', () => fs.existsSync(portFile) ? Number(fs.readFileSync(portFile, 'utf-8')) : null);
+    return { port, wsEndpoint: await startHolder(userDataDir, port) };
+  })().catch((e: unknown) => {
+    child.kill();
+    throw e;
+  });
 
   const now = new Date().toISOString();
   const meta: store.SessionMetadata = {
