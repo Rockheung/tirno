@@ -8,7 +8,7 @@ import { Browser } from '../cdp/browser.js';
 
 interface FrameEntry { n: number; ts: string; file: string }
 
-interface Args {
+export interface ScreencastWorkerOptions {
   ws: string;
   out: string;
   format: 'png' | 'jpeg';
@@ -18,28 +18,8 @@ interface Args {
   everyNth: number;
 }
 
-function parseArgs(): Args {
-  const argv = process.argv.slice(2);
-  const get = (flag: string): string | undefined => {
-    const i = argv.indexOf(flag);
-    return i >= 0 ? argv[i + 1] : undefined;
-  };
-  const ws = get('--ws') ?? '';
-  const out = get('--out') ?? '';
-  const format = (get('--format') ?? 'png') as 'png' | 'jpeg';
-  const quality = Number(get('--quality') ?? 80);
-  const maxWidth = get('--max-width') ? Number(get('--max-width')) : undefined;
-  const maxHeight = get('--max-height') ? Number(get('--max-height')) : undefined;
-  const everyNth = Math.max(1, Number(get('--every-nth') ?? 1));
-  if (!ws || !out) {
-    process.stderr.write('worker: --ws and --out required\n');
-    process.exit(2);
-  }
-  return { ws, out, format, quality, maxWidth, maxHeight, everyNth };
-}
-
-async function main(): Promise<void> {
-  const args = parseArgs();
+export async function runScreencastWorker(args: ScreencastWorkerOptions): Promise<void> {
+  const everyNth = Math.max(1, args.everyNth);
   const frames: FrameEntry[] = [];
   let n = 0;
   let dropped = 0;
@@ -77,7 +57,7 @@ async function main(): Promise<void> {
       await cdp.send('Page.screencastFrameAck', { sessionId: p.sessionId });
     } catch { /* CDP may have closed */ }
 
-    if (n++ % args.everyNth !== 0) {
+    if (n++ % everyNth !== 0) {
       dropped++;
       return;
     }
@@ -115,8 +95,3 @@ async function main(): Promise<void> {
   // Idle forever — wait for SIGTERM.
   await new Promise(() => { /* block */ });
 }
-
-main().catch(e => {
-  process.stderr.write(`worker: ${(e as Error).message}\n`);
-  process.exit(1);
-});

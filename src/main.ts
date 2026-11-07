@@ -36,9 +36,12 @@ import { registerTrailCommands } from './commands/trail.js';
 import { registerStatsCommand } from './commands/stats.js';
 import { registerAuditCommand } from './commands/audit.js';
 import { registerScreencastCommands } from './commands/screencast.js';
+import { runScreencastWorker } from './commands/screencast-worker.js';
+import { runTraceWorker } from './commands/trace-worker.js';
 import { registerSchemaCommand } from './commands/schema.js';
 import { registerUpdateCommand } from './commands/update.js';
 import { holdSession } from './core/firefox.js';
+import { intArg } from './util/parsers.js';
 import { fail, setJsonOutput } from './output/formatter.js';
 
 const program = new Command();
@@ -51,6 +54,25 @@ program
 program
   .command('__firefox-holder <port> <out>', { hidden: true })
   .action((port: string, out: string) => holdSession(Number(port), out));
+
+program
+  .command('__trace-worker', { hidden: true })
+  .requiredOption('--ws <url>')
+  .requiredOption('--out <path>')
+  .option('--categories <list>')
+  .option('--screenshots')
+  .action(runTraceWorker);
+
+program
+  .command('__screencast-worker', { hidden: true })
+  .requiredOption('--ws <url>')
+  .requiredOption('--out <dir>')
+  .requiredOption('--format <fmt>')
+  .requiredOption('--quality <n>', '', intArg)
+  .option('--max-width <px>', '', intArg)
+  .option('--max-height <px>', '', intArg)
+  .requiredOption('--every-nth <n>', '', intArg)
+  .action(runScreencastWorker);
 
 registerSessionCommands(program);
 registerChromeCommands(program);
@@ -116,6 +138,6 @@ function fullCommandName(c: Command): string {
   return parts.join(' ');
 }
 /** 세션과 무관한 명령은 active 세션의 저널에 적지 않는다 */
-const SESSION_FREE_FOR_JOURNAL = new Set(['new', 'ls', 'schema', 'setup', 'chrome', 'update', 'anchor', 'gc', 'cache', 'recipe', 'stats', 'memory', 'plugin', 'mcp', 'journal', 'kill', 'restart', 'rename', 'export', 'drift', 'broadcast', 'plan', 'apply', 'attach']);
+const SESSION_FREE_FOR_JOURNAL = new Set(['__trace-worker', '__screencast-worker', 'new', 'ls', 'schema', 'setup', 'chrome', 'update', 'anchor', 'gc', 'cache', 'recipe', 'stats', 'memory', 'plugin', 'mcp', 'journal', 'kill', 'restart', 'rename', 'export', 'drift', 'broadcast', 'plan', 'apply', 'attach']);
 
 program.parseAsync(process.argv).catch(e => fail(e));
