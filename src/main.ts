@@ -38,6 +38,7 @@ import { registerAuditCommand } from './commands/audit.js';
 import { registerScreencastCommands } from './commands/screencast.js';
 import { registerSchemaCommand } from './commands/schema.js';
 import { registerUpdateCommand } from './commands/update.js';
+import { holdSession } from './core/firefox.js';
 import { fail, setJsonOutput } from './output/formatter.js';
 
 const program = new Command();
@@ -46,6 +47,10 @@ program
   .name('tirno')
   .description('Multi-session browser automation CLI on raw CDP')
   .version('0.8.0');
+
+program
+  .command('__firefox-holder <port> <out>', { hidden: true })
+  .action((port: string, out: string) => holdSession(Number(port), out));
 
 registerSessionCommands(program);
 registerChromeCommands(program);

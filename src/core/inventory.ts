@@ -7,6 +7,7 @@ import { isAlive } from './process-guard.js';
 import { readActivePort } from './devtools-port.js';
 import { scanProcListeners, cmdlineFromProc } from './proc-net.js';
 import { httpBaseOf, isExternal, probeDevTools } from './external.js';
+import { parseFirefoxProfile } from './firefox.js';
 
 const exec = promisify(execFile);
 
@@ -373,7 +374,8 @@ export async function inspectSession(
       wsEndpoint: probe?.wsEndpoint ?? meta.wsEndpoint,
     };
   }
-  const active = readActivePort(meta.userDataDir);
+  const firefox = meta.engine === 'firefox';
+  const active = firefox ? null : readActivePort(meta.userDataDir);
   const resolvedPort = active?.port ?? meta.port ?? null;
   // 배열을 넘기는 옛 호출은 "스캔이 됐다" 로 본다 — 실패를 알릴 수 있는 것은 ListenerScan 뿐
   const resolved: ListenerScan = scan === undefined
@@ -382,7 +384,7 @@ export async function inspectSession(
   const listeners = resolved.listeners.filter(l => l.port === resolvedPort);
   const pidAlive = isAlive(meta.pid);
   const cmdline = pidAlive ? await readCmdline(meta.pid) : null;
-  const runningUserDataDir = cmdline ? parseUserDataDir(cmdline) : null;
+  const runningUserDataDir = cmdline ? (firefox ? parseFirefoxProfile(cmdline) : parseUserDataDir(cmdline)) : null;
 
   const verdict = classify({
     resolvedPort,

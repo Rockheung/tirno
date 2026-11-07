@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
+import { openPage } from '../core/engine.js';
 import * as store from '../core/session-store.js';
 import { activateWindow } from '../core/os-focus.js';
 import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
@@ -17,8 +18,7 @@ export function registerNavCommands(program: Command): void {
     .option('--strict', 'Exit non-zero unless response is 2xx. Without it a 4xx/5xx still exits 0 but prints a warning; no response at all (status 0 on http(s)) and chrome-error:// pages always exit 1')
     .action(async (url: string, opts) => {
       try {
-        const { browser } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const { browser, page } = await openPage(opts.session);
         const start = Date.now();
         const response = await page.goto(url, {
           waitUntil: 'domcontentloaded',
