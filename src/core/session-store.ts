@@ -34,6 +34,8 @@ export interface SessionMetadata {
    * 없으면(기본) tirno 가 띄운 로컬 크롬이다. core/external 참조.
    */
   kind?: 'external';
+  /** 없으면 Chromium 이다. Firefox 세션의 `port` 는 Marionette, `wsEndpoint` 는 BiDi 다. */
+  engine?: 'firefox';
   pid: number;
   /** Observed at launch. With `--remote-debugging-port=0` the OS picks it. */
   port: number;

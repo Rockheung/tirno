@@ -60,6 +60,9 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   if (!name) throw new NoActiveSession();
 
   const meta = store.get(name);
+  if (meta.engine === 'firefox') {
+    throw new TirnoError(`Session '${name}' is Firefox. It supports nav, eval, screenshot, ls and kill so far.`, 'capability_unsupported', { session: name, engine: 'firefox' });
+  }
 
   // `isAlive(pid)` alone is not enough here: pids are recycled and ports are
   // inherited. Require pid + port + profile to agree before handing CDP control

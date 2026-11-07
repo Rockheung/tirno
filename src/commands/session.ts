@@ -9,6 +9,7 @@ import * as store from '../core/session-store.js';
 import { launch } from '../core/chrome-launcher.js';
 import { loadHeaderExt } from '../core/header-ext.js';
 import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
+import { launchFirefox } from '../core/firefox.js';
 import { getActivePage, waitForBootPage } from '../cdp/page-resolver.js';
 import type { Cookie } from '../cdp/browser.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
@@ -129,6 +130,7 @@ export function registerSessionCommands(program: Command): void {
     .option('-p, --port <port>', 'Pin a fixed DevTools port. Omit to let the OS assign one — required for browser-MCP anchoring', intArg)
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable')
+    .option('--browser <engine>', 'chrome or firefox. A firefox session supports nav, eval, screenshot, ls and kill so far', 'chrome')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
     .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
@@ -149,6 +151,11 @@ export function registerSessionCommands(program: Command): void {
 
   newCmd.action(async (name: string, urlArg: string | undefined, opts) => {
     try {
+      const firefox = opts.browser === 'firefox';
+      if (!firefox && opts.browser !== 'chrome') throw new Error(`--browser takes chrome or firefox, not ${opts.browser}`);
+      if (firefox && (opts.port !== undefined || opts.extensions || policyFromOpts(opts))) {
+        throw new TirnoError('Firefox sessions do not support --port, --extensions or policies yet', 'capability_unsupported', { engine: 'firefox' });
+      }
       const rawArgs = process.argv;
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
@@ -193,7 +200,14 @@ export function registerSessionCommands(program: Command): void {
       // dNR 은 WebRTC 를 못 본다 — 허용 목록이 있으면 UDP 로 새는 길을 플래그로 막는다
       if (policy?.allowDomains?.length) chromeFlags.push(...WEBRTC_CONTAINMENT_FLAGS.filter(f => !chromeFlags.includes(f)));
 
-      const meta = await launch({
+      const meta = firefox ? await launchFirefox({
+        name,
+        headless: !!opts.headless,
+        extraArgs: chromeFlags,
+        ...(opts.executablePath ? { executablePath: opts.executablePath } : {}),
+        ...(userDataDirOverride ? { userDataDir: userDataDirOverride } : {}),
+        ...(bootUrl ? { bootUrl } : {}),
+      }) : await launch({
         name,
         port: opts.port,
         chromeFlags,
@@ -226,7 +240,7 @@ export function registerSessionCommands(program: Command): void {
       // `eval` 이 아직 about:blank 인 탭을 읽어 **에러 없이 0** 을 낸다 — 값이 0 이면
       // 사람은 빌드·프록시·서버를 먼저 뒤지고, 앵커는 그 셋을 지나온 다음에 의심한다 (#173).
       let bootWarning: string | null = null;
-      if (bootUrl) {
+      if (bootUrl && !firefox) {
         try {
           const { browser } = await connectWithoutPageSetup(name);
           try {

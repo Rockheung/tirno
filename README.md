@@ -51,6 +51,10 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 
 ---
 
+**Firefox** — `tirno new x --browser firefox` 는 geckodriver 없이 Marionette 와 WebDriver BiDi 를 직접 말한다.
+지금은 `nav` · `eval` · `screenshot` · `ls` · `kill` 이 되고, 다른 명령은 `capability_unsupported` 로 거절한다.
+`--port` · `--extensions` · 정책도 아직 쓸 수 없다.
+
 ## 왜 다른가
 
 | | |

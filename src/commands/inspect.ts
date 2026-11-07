@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
+import { openPage } from '../core/engine.js';
 import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
 import { writeScreenshot } from '../output/image-writer.js';
 import { formatTable, success, info, warn, error, fail } from '../output/formatter.js';
@@ -28,8 +29,7 @@ export function registerInspectCommands(program: Command): void {
     .option('--quality <n>', 'JPEG/WebP quality (0-100)', intArg)
     .action(async (opts) => {
       try {
-        const { browser } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const { browser, page } = await openPage(opts.session);
 
         const screenshotOpts: ScreenshotOptions = {
           type: opts.format as 'png' | 'jpeg' | 'webp',

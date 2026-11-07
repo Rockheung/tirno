@@ -1,9 +1,9 @@
 import { Command } from 'commander';
 import fs from 'node:fs';
 import { intArg } from '../util/parsers.js';
-import { connect } from '../core/chrome-connector.js';
+import { openPage } from '../core/engine.js';
 import { bootUrlOf } from '../core/session-store.js';
-import { getActivePage, blankAnchorHint } from '../cdp/page-resolver.js';
+import { blankAnchorHint } from '../cdp/page-resolver.js';
 import { notFocusedHint } from '../core/os-focus.js';
 import { info, warn, fail } from '../output/formatter.js';
 import { TirnoError } from '../util/errors.js';
@@ -87,8 +87,7 @@ export function registerEvalCommand(program: Command): void {
           expressionArg, opts.file, readAllStdin, process.stdin.isTTY === true,
         );
 
-        const { browser, meta } = await connect(opts.session);
-        const page = await getActivePage(browser);
+        const { browser, page, meta } = await openPage(opts.session);
         // 앵커가 아직 안 열렸으면 그렇다고 말한다. 안 그러면 DOM 을 세는 검증이
         // 에러 없이 0 을 내고, 그 0 은 페이지 이야기처럼 보인다 (#173).
         const blank = blankAnchorHint(page.url(), bootUrlOf(meta));
