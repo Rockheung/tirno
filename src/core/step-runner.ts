@@ -6,6 +6,7 @@
  */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { selfArgs } from './update.js';
 
 const run = promisify(execFile);
 
@@ -16,7 +17,7 @@ const WITH_DELTA = new Set(['click', 'fill', 'type', 'press', 'upload', 'ensure'
 
 export async function runStep(argv: string[], session: string, opts: { timeoutMs?: number } = {}): Promise<StepResult> {
   const t0 = Date.now();
-  const args = [process.argv[1], ...argv, '-s', session, ...(WITH_DELTA.has(argv[0]) ? ['--no-delta'] : [])].filter(Boolean);
+  const args = selfArgs([...argv, '-s', session, ...(WITH_DELTA.has(argv[0]) ? ['--no-delta'] : [])]);
   try {
     const { stdout, stderr } = await run(process.execPath, args, {
       env: { ...process.env, TIRNO_JSON: '' }, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: opts.timeoutMs ?? 120_000,
