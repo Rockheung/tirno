@@ -21,7 +21,7 @@ interface Context {
 
 let current: Context | null = null;
 
-const STREAMING = new Set(['watch', 'mcp', 'screencast start', 'screencast stop', 'trace-worker', 'screencast-worker', 'schema']);
+const STREAMING = new Set(['watch', 'mcp', 'screencast start', 'screencast stop', '__trace-worker', '__screencast-worker', 'schema']);
 
 export function beginCommand(opts: { session: string | null; cmd: string; argv: string[]; jsonEnvelope: boolean }): void {
   const streaming = STREAMING.has(opts.cmd);

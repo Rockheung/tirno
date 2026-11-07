@@ -1,12 +1,12 @@
 import { Command } from 'commander';
 import { floatArg, intArg } from '../util/parsers.js';
 import fs from 'node:fs';
-import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
 import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as store from '../core/session-store.js';
+import { selfArgs } from '../core/update.js';
 
 import { success, info, fail } from '../output/formatter.js';
 import { formatTable } from '../output/formatter.js';
@@ -349,19 +349,13 @@ export function registerPerfCommands(program: Command): void {
           }
         }
 
-        const workerScript = path.join(import.meta.url.startsWith('file://')
-          ? new URL('.', import.meta.url).pathname
-          : __dirname,
-          'trace-worker.js',
-        );
-
-        const args = [
-          workerScript,
+        const args = selfArgs([
+          '__trace-worker',
           '--ws', meta.wsEndpoint,
           '--out', outPath,
           ...(opts.categories ? ['--categories', opts.categories] : []),
           ...(opts.screenshots ? ['--screenshots'] : []),
-        ];
+        ]);
         const child = spawn(process.execPath, args, {
           detached: true,
           stdio: ['ignore', 'ignore', fs.openSync(`${outPath}.log`, 'a')],

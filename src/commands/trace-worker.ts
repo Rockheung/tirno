@@ -10,29 +10,11 @@
 import fs from 'node:fs';
 import { Browser } from '../cdp/browser.js';
 
-interface Args {
+export interface TraceWorkerOptions {
   ws: string;
   out: string;
-  categories?: string[];
-  screenshots: boolean;
-}
-
-function parseArgs(): Args {
-  const argv = process.argv.slice(2);
-  const get = (flag: string): string | undefined => {
-    const i = argv.indexOf(flag);
-    return i >= 0 ? argv[i + 1] : undefined;
-  };
-  const ws = get('--ws') ?? '';
-  const out = get('--out') ?? '';
-  const screenshots = argv.includes('--screenshots');
-  const catList = get('--categories');
-  const categories = catList ? catList.split(',').filter(Boolean) : undefined;
-  if (!ws || !out) {
-    process.stderr.write('trace-worker: --ws and --out required\n');
-    process.exit(2);
-  }
-  return { ws, out, categories, screenshots };
+  categories?: string;
+  screenshots?: boolean;
 }
 
 const DEFAULT_CATEGORIES = [
@@ -43,8 +25,7 @@ const DEFAULT_CATEGORIES = [
   'devtools.timeline.async',
 ];
 
-async function main(): Promise<void> {
-  const args = parseArgs();
+export async function runTraceWorker(args: TraceWorkerOptions): Promise<void> {
   const browser = await Browser.connect(args.ws);
   const pages = await browser.pages();
   const page = pages.find(p => !p.url().startsWith('about:')) ?? pages[0];
@@ -85,7 +66,7 @@ async function main(): Promise<void> {
 
   await page.tracing.start({
     screenshots: args.screenshots,
-    categories: args.categories ?? DEFAULT_CATEGORIES,
+    categories: args.categories?.split(',').filter(Boolean) ?? DEFAULT_CATEGORIES,
   });
 
   // Mark "started" so `trace stop` can see the worker is past startup.
@@ -93,8 +74,3 @@ async function main(): Promise<void> {
 
   await new Promise(() => { /* idle forever until SIGTERM */ });
 }
-
-main().catch(e => {
-  process.stderr.write(`trace-worker: ${(e as Error).message}\n`);
-  process.exit(1);
-});

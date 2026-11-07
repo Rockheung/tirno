@@ -18,6 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import * as store from '../core/session-store.js';
+import { selfArgs } from '../core/update.js';
 import { success, info, fail } from '../output/formatter.js';
 
 const DEFAULT_OUT_BASE = path.join(os.tmpdir(), 'tirno-screencast');
@@ -51,14 +52,8 @@ export function registerScreencastCommands(program: Command): void {
           }
         }
 
-        const workerScript = path.join(import.meta.url.startsWith('file://')
-          ? new URL('.', import.meta.url).pathname
-          : __dirname,
-          'screencast-worker.js'
-        );
-
-        const child = spawn(process.execPath, [
-          workerScript,
+        const child = spawn(process.execPath, selfArgs([
+          '__screencast-worker',
           '--ws', meta.wsEndpoint,
           '--out', outDir,
           '--format', opts.format,
@@ -66,7 +61,7 @@ export function registerScreencastCommands(program: Command): void {
           ...(opts.maxWidth ? ['--max-width', String(opts.maxWidth)] : []),
           ...(opts.maxHeight ? ['--max-height', String(opts.maxHeight)] : []),
           '--every-nth', String(opts.everyNth ?? 1),
-        ], {
+        ]), {
           detached: true,
           stdio: ['ignore', 'ignore', fs.openSync(path.join(outDir, 'worker.log'), 'a')],
         });
