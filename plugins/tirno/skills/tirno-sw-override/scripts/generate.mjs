@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // tirno sw-proxy — 설정 하나로 부트스트랩 산출물을 굽는다.
 //
-//   node scripts/sw-proxy/generate.mjs <mounts.json> [--out <dir>]
+//   node <스킬>/scripts/generate.mjs <mounts.json> [--out <dir>]
 //
 // 하는 일은 하나다: origin 의 지정한 경로를 로컬 빌드가 내게 만든다.
 //
@@ -19,7 +19,7 @@ import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2);
 const cfgPath = args.find(a => !a.startsWith('--'));
 if (!cfgPath) {
-  console.error('사용법: node scripts/sw-proxy/generate.mjs <mounts.json> [--out <dir>]');
+  console.error('사용법: node <스킬>/scripts/generate.mjs <mounts.json> [--out <dir>]');
   process.exit(1);
 }
 const cfgDir = path.dirname(path.resolve(cfgPath));
@@ -239,8 +239,8 @@ console.log(`
   node ${path.relative(process.cwd(), path.join(outDir, 'serve.mjs'))} &
   tirno new <세션> --headless -- --host-resolver-rules="MAP ${host} 127.0.0.1:${port}" --ignore-certificate-errors
   tirno nav ${cfg.origin}${scope}__tirno-boot.html
-  tirno eval "navigator.serviceWorker.register('${scope}__tirno-sw.js').then(r => r.scope)"
-  tirno restart <세션>          # rule 없이 — 여기서부터 진짜 origin
+  tirno eval "navigator.serviceWorker.register('${scope}__tirno-sw.js').then(() => navigator.serviceWorker.ready).then(r => r.active.scriptURL)"
+  tirno restart <세션> --keep-cookies   # rule 없이 — 여기서부터 진짜 origin. 로그인은 넘어온다
 
 scope 는 ${scope} 다 — 그 아래 문서를 열어야 SW 가 붙는다.
 

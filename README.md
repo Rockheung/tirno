@@ -63,10 +63,10 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 | **소유권을 관찰로 판정한다** | pid 생존 ∧ 그 pid 가 그 포트를 청취 ∧ `--user-data-dir` 일치. 셋이 안 맞으면 **붙지도 죽이지도 않는다** — 남의 브라우저를 조종하거나 죽이는 사고를 구조적으로 막는다. **못 봤으면 못 봤다고 한다**(`unknown`) — linux 는 `/proc` 을 직접 읽어 `lsof` 없이도 본다 |
 | **셀렉터를 몰라도 조작한다** | `snapshot` 이 a11y 트리에 `@1 @2 …` 를 붙인다. `click @7` · `fill @39 "..."` |
 | **본 것을 적어둔다** | `snapshot` 이 URL × viewport 키로 a11y(role·name)·selector·bbox·화면 지문을 저장한다. 재방문 시 `cache load` 가 **지금 화면과 대보고(낡았으면 `STALE`), ref 를 되찾아(selector → a11y → bbox) 채워 준다** — 새 세션에서 `cache load` 뒤 바로 `click @7`. 못 찾은 것은 `UNRESOLVED` 로 이름을 댄다 |
-| **여러 대에 동시에** | `broadcast … --group <g>` — 순차가 아니라 동시. 8세션 기준 1.35s → 0.35s |
+| **여러 대에 동시에** | `broadcast … --group <g>` — 세션들에 순차가 아니라 동시에 나간다 |
 | **이야기가 남는다** | `journal` — 명령마다 어떻게 끝났고 무엇이 변했는지 한 줄. `--as-recipe` 로 레시피 추출. `TIRNO_JSON=1` 이면 성공도 실패도 `{ok, cmd, data\|output, delta}` 봉투 하나 |
-| **바이너리에 든 것은 tirno 뿐** | 런타임 의존 0. `audit`(lighthouse)만 `tirno plugin install audit` 로 따로 붙인다 — 바이너리의 절반이 그것 하나였다 |
-| **MCP 서버가 내장** | `tirno mcp` — 툴이 `tirno schema` 에서 자동 생성되어 명령을 추가하면 툴이 생긴다. `readOnlyHint`·`destructiveHint` 는 `effects` 에서. 앵커 우회가 필요 없다 |
+| **바이너리에 든 것은 tirno 뿐** | 받은 파일 하나로 돈다 — Node·npm 설치가 필요 없다. `audit`(lighthouse)만 `tirno plugin install audit` 로 따로 붙이고, 그것은 PATH 의 Node 로 돈다 |
+| **MCP 서버가 내장** | `tirno mcp` — 툴이 `tirno schema` 에서 자동 생성되어 명령을 추가하면 툴이 생긴다. `readOnlyHint` 는 `effects` 에서, `destructiveHint` 는 `destructive` 에서. 앵커 우회가 필요 없다 |
 | **정책은 세션에 선언한다** | `new --allow bank.com`(CLI 사전검사 + 확장의 요청 차단, WebRTC 까지) · `--read-only`(관측만) · `--confirm destructive`(delete·pay·삭제·결제… 이름은 `--confirm` 없이 안 누름). 거부는 `code: policy_denied` |
 | **목적을 말하면 그것만 낸다** | `snapshot --interactive` · `forms` · `links` · `table` · `read` · `explain @7`(왜 안 눌리나 — 가림·보임·enabled·필드 상태·캐시 이력 한 화면) · `watch`(이벤트 NDJSON 스트림) |
 | **파일에 선언하고, 실행 전에 판정한다** | `plan checkout.json` 이 지금 페이지·캐시로 단계마다 될지(found · ambiguous · missing · unknown until N)를 말하고, `apply` 가 친다. `apply --group qa` 는 세션 × 단계 매트릭스 — `broadcast` 의 선언형 |
@@ -120,7 +120,7 @@ tirno schema | jq '.commands[] | select(.destructive) | .name'
 | **Stateless CLI** | 명령마다 connect/disconnect. daemon 없음 — `~/.tirno/sessions/<name>.json` 에서 메타 복원 |
 | **a11y `@ref`** | `snapshot` 이 붙인 번호. **세션마다·페이지마다 다시 찍는다** |
 | **Visual cache** | URL **과 viewport** 둘 다가 키다. bbox 는 viewport 종속이라 분리가 필수 |
-| **다채널 fallback** | `replay`·`trail replay` 가 `dom.selector → a11y → bbox → 기록 좌표` 순으로 대상을 다시 찾는다. **캐시 경로에는 아직 없다** |
+| **다채널 fallback** | `cache load` 가 `dom.selector → a11y → bbox` 로, `replay`·`trail replay` 가 거기에 `기록 좌표` 를 더해 대상을 다시 찾는다 |
 | **Emulation 영속** | device/network/cpu/dpr 을 한 번 적용하면 다음 명령에도 유지된다 |
 | **앵커** | 브라우저 MCP 가 붙을 대상을 포트가 아니라 디렉터리로 고정 |
 
@@ -132,15 +132,13 @@ tirno schema | jq '.commands[] | select(.destructive) | .name'
 
 ## 아직 구현이 아닌 것 (drift)
 
-문서가 앞서 있던 것을 실측해 내렸다. 목표는 여전하지만 지금 코드는 여기까지다.
+목표는 여전하지만 지금 코드는 여기까지다.
 
 | 하고 싶은 것 | 지금 | 근거 |
 |---|---|---|
 | 캐시에 **selector** 를 더 자주 담기 | `snapshot` 은 `id`·`data-testid`·`aria-label`·`name` 이 있을 때만 `dom.selector` 를 적는다(안정적인 것만). 그 외 요소는 `a11y`(role·name)와 `bbox` 로 되찾는다 — HN 971개 중 dom 32 · a11y 770 · bbox 128 · 미해결 41(5px 스페이서 행) 실측. 짧은 CSS 경로 같은 덜 안정적인 selector 를 담을지는 미정 | `cache load` 요약 줄 |
 
-**다채널 fallback 은 `record`/`trail` 쪽에서는 실제로 돈다** — `replay` 가
-`dom.selector → a11y(role+name) → bbox → 기록 좌표` 순으로 되찾는다. 캐시 경로가 그
-수준에 아직 못 미친 것이다.
+캐시 경로는 `기록 좌표` 를 뺀 세 채널로 되찾는다. 남은 차이는 selector 를 적는 범위(위 표)다.
 
 ## 장애·불편은 이슈로
 

@@ -50,7 +50,7 @@ host-resolver 는 **크롬 전용**이다. `--host-resolver-rules="MAP app.examp
 
 ## 굽기
 
-`generate.mjs` 는 이 스킬 안에 있다(SW 를 안 쓰므로 sw-template·overlay·부트 페이지를 굽지 않는다 — serve.mjs 와 인증서만 낸다). SPA 라면 문서 마운트에 `navigateFallback` 을 준다. 디렉터리 마운트(`root:`)는 요청 시점에 디스크를 보므로 **앱을 재빌드해도 다시 굽지 않는다** — 새 해시의 청크도 그대로 로컬로 나간다.
+`generate.mjs` 는 이 스킬 안에 있다 — 플러그인으로 설치했으면 `skills/tirno-origin-relay/scripts/generate.mjs`, tirno 레포에서 직접 쓰면 `plugins/tirno/skills/tirno-origin-relay/scripts/generate.mjs`(SW 를 안 쓰므로 sw-template·overlay·부트 페이지를 굽지 않는다 — serve.mjs 와 인증서만 낸다). SPA 라면 문서 마운트에 `navigateFallback` 을 준다. 디렉터리 마운트(`root:`)는 요청 시점에 디스크를 보므로 **앱을 재빌드해도 다시 굽지 않는다** — 새 해시의 청크도 그대로 로컬로 나간다.
 
 ```json
 {
@@ -66,13 +66,13 @@ host-resolver 는 **크롬 전용**이다. `--host-resolver-rules="MAP app.examp
 ```
 
 ```bash
-node scripts/generate.mjs mounts.json --out .relay
+node <스킬>/scripts/generate.mjs mounts.json --out .relay
 ```
 
 ## 심기 — restart 가 없다
 
 ```bash
-node .relay/serve.mjs &     # --out .relay 로 구운 것
+node .relay/serve.mjs > serve.log 2>&1 &     # --out .relay 로 구운 것. serve.mjs 는 파일을 안 쓰므로 serve.log 는 이 리다이렉트가 만든다
 tirno new preview https://app.example.com/<진입경로> -- \
   --host-resolver-rules="MAP app.example.com 127.0.0.1:8443" --ignore-certificate-errors \
   --disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessChecks
@@ -125,7 +125,7 @@ origin 을 통째로 MAP 하면 문서도 loopback 에서 오므로 주소 공�
 ```
 목록 안   /app                       → 로컬              (serve.log "200 /app")
 하위경로  /app/library/my (navigate) → 로컬 navigateFallback  ("200 /app/library/my")
-하위경로  /app/chunk.js   (자산)      → 진짜 origin 릴레이   ("→ … (relay)")
+하위경로  /app/chunk.js   (자산)      → 진짜 origin 릴레이   ("→ GET /app/chunk.js (relay)")
 목록 밖   /_/api/auth/…              → 진짜 origin 릴레이   (로그인·API 가 산다)
 ```
 
@@ -152,8 +152,8 @@ origin 을 통째로 MAP 하면 문서도 loopback 에서 오므로 주소 공�
 무엇이 릴레이되는지는 `serve.log` 가 유일한 창이다:
 
 - `200 <경로>` → 로컬(마운트 또는 navigateFallback)
-- `→ <경로> (relay)` → 진짜 origin
-- `WS <경로> (ws relay)` → WebSocket upgrade 를 진짜 origin 으로 넘겼다
+- `→ <메서드> <경로> (relay)` → 진짜 origin
+- `WS <메서드> <경로> (ws relay)` → WebSocket upgrade 를 진짜 origin 으로 넘겼다
 - `x <경로> (ws relay) <이유>` → 그 WS 릴레이가 끊겼다
 
 ## 대가 — 옵트인인 이유

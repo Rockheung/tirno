@@ -89,9 +89,8 @@ description: 진짜 origin 의 특정 경로를 로컬 빌드가 내게 만든�
 }
 ```
 
-`mounts.json` 의 `"passthrough": true` 는 이 스킬이 아니라 [[tirno-origin-relay]] 가 쓰는
-플래그다 — 목록 밖을 진짜 origin 으로 릴레이해 host-resolver 를 세션 내내 상주시킨다. 지연 등록
-워커·로그인 뒤 화면이 대상이면 그쪽이다. 이 스킬(SW 오버레이)은 켜지 않는다.
+목록 밖을 진짜 origin 으로 릴레이하려면 별도 생성기인 [[tirno-origin-relay]] 를 쓴다 — host-resolver 를
+세션 내내 상주시킨다. 지연 등록 워커·로그인 뒤 화면이 대상이면 그쪽이다.
 
 ### 레이어 — 위에 있는 것이 이긴다
 
@@ -179,8 +178,8 @@ tirno eval 'fetch("/admin/__tirno/mount").then(r => r.text())'      # layer 생�
 그 경로에. **origin 의 경로와 로컬 경로는 달라도 된다** — 앱의 `dist/` 는 자기 루트가
 `/` 지만 origin 에서는 `/_/app/` 아래 사는 것이 보통이고, 그 어긋남을 마운트가 흡수한다.
 
-가리키는 곳이 없거나 마운트가 겹치면 생성이 실패한다 — 어느 빌드가 이길지 모호한 채로
-심는 것보다 낫다.
+가리키는 곳이 없거나 레이어 이름이 겹치면 생성이 실패한다. 경로가 겹치는 것은 오류가 아니라
+우선순위다(위 "레이어" 절).
 
 ### 2. 굽는다
 
@@ -269,7 +268,8 @@ register 하는 워커는, 부트에서 미리 심어 둬도 진짜 origin 복�
 
 ```bash
 tirno eval 'fetch("/admin/__tirno/status").then(r => r.text())'
-# {"buildId":"76fb0737063c","origin":"…","paths":3,"served":12,…}
+# {"buildId":"76fb0737063c","origin":"…","scope":"/admin/","generatedAt":"…","stamps":true,
+#  "layers":[{"name":"local-override","paths":3,"served":12,…},…]}
 
 tirno eval 'fetch("/admin/__tirno/off").then(r => r.text())'   # unregister + 캐시 삭제
 ```
@@ -321,8 +321,6 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
 
 ## 계보
 
-뜬금없는 발명이 아니다. 검증된 세 조각의 조합이다.
-
 | | |
 |---|---|
 | [Wayne](https://github.com/jcubic/wayne) | "Express inside Service Worker". SW 를 브라우저 안의 HTTP 서버로 쓰고, VFS·커스텀 핸들러·네트워크 폴백으로 응답을 고른다 |
@@ -333,9 +331,6 @@ tirno eval 'navigator.serviceWorker.controller?.scriptURL'
 얹는 곳이 **살아 있는 production 페이지**라는 것이다. 그래서 mock 보다는 **deployment
 overlay** 라고 부르는 편이 정확하다 — 페이지를 프리뷰용으로 다시 빌드하지 않고, URL 도
 production 그대로다.
-
-레이어 모델도 여기서 왔다. 앱마다 SW 를 띄우려는 충동이 자연스럽지만 그건 불가능하고,
-**SW 하나를 커널로 두고 배포본을 마운트/언마운트**하는 편이 이 문제의 모양에 맞다.
 
 ## 조사할 때 걸리는 것
 
