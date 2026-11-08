@@ -497,6 +497,10 @@ function main() {
   const targets = run('cdp Target.getTargets', ['cdp', '--browser', 'Target.getTargets', '-s', 'al']);
   const extId = (/chrome-extension:\/\/([a-z]+)\//.exec(targets.out) ?? [])[1];
   if (extId) run('cdp Extensions.uninstall', ['cdp', '--browser', 'Extensions.uninstall', JSON.stringify({ id: extId }), '-s', 'al']);
+  for (let i = 0; i < 30; i++) {
+    try { execFileSync(EXE, [...PRE, 'drift', 'al'], { env, stdio: 'ignore' }); } catch { break; }
+    execFileSync('sleep', ['0.1']);
+  }
   run('drift (확장 축 DRIFT → exit≠0)', ['drift', 'al'], { expectFail: true, expectMatch: /extensions\s+✗ DRIFT/ });
   run('nav 밖 (CLI 층 → policy_denied)', ['nav', 'https://www.iana.org/', '-s', 'al'], { expectFail: true, expectMatch: /outside --allow/ });
   check('fetch 밖 (브라우저 층, dNR)', /blocked/.test(q('fetch("https://www.iana.org/").then(r=>"ok "+r.status).catch(e=>"blocked: "+e.message)', 'al') ?? ''), '');
