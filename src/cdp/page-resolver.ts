@@ -1,5 +1,5 @@
 import type { Page } from './page.js';
-import type { Browser } from './browser.js';
+import type { Browser, Target } from './browser.js';
 
 export async function getActivePage(browser: Browser): Promise<Page> {
   const pages = await browser.pages();
@@ -100,34 +100,22 @@ export function blankAnchorHint(pageUrl: string, bootUrl: string | undefined): s
  * not a corner: it closed the wrong tab during a smoke run. targetId does not
  * move for the life of the tab.
  */
-export async function pageHandle(page: Page): Promise<string> {
-  const cdp = await page.createCDPSession();
-  try {
-    const { targetInfo } = await cdp.send('Target.getTargetInfo') as { targetInfo: { targetId: string } };
-    return targetInfo.targetId.slice(0, 8).toLowerCase();
-  } finally {
-    await cdp.detach();
-  }
+export function tabHandle(targetId: string): string {
+  return targetId.slice(0, 8).toLowerCase();
 }
 
 export interface PageEntry {
-  /** stable handle — see pageHandle */
+  /** stable handle — see tabHandle */
   id: string;
   url: string;
   title: string;
 }
 
+/** 브라우저가 아는 것만으로 만든다 — 탭에 붙지 않으므로 크래시한 탭도, 문서 응답을 기다리는 탭도 나온다 */
 export async function listPages(browser: Browser): Promise<PageEntry[]> {
-  const pages = await browser.pages();
-  const result: PageEntry[] = [];
-  for (const page of pages) {
-    try {
-      result.push({ id: await pageHandle(page), url: page.url(), title: await page.title() });
-    } catch {
-      continue; // 읽는 사이 닫혔다
-    }
-  }
-  return result;
+  return (await browser.targets())
+    .filter(t => t.type() === 'page')
+    .map(t => ({ id: tabHandle(t.targetId), url: t.url(), title: t.info.title }));
 }
 
 /**
@@ -135,7 +123,7 @@ export async function listPages(browser: Browser): Promise<PageEntry[]> {
  * tab; an ambiguous or unknown handle is an error rather than a guess, because
  * the callers close and switch tabs.
  */
-export async function getPageByHandle(browser: Browser, handle: string): Promise<Page> {
+export async function getTabByHandle(browser: Browser, handle: string): Promise<Target> {
   const wanted = handle.trim().toLowerCase();
   if (!wanted) throw new Error('Empty page id — run `tirno pages` for the list');
 
@@ -152,13 +140,16 @@ export async function getPageByHandle(browser: Browser, handle: string): Promise
     );
   }
 
-  const pages = await browser.pages();
-  const matches: Page[] = [];
-  for (const page of pages) {
-    if ((await pageHandle(page)).startsWith(wanted)) matches.push(page);
-  }
-
+  const tabs = (await browser.targets()).filter(t => t.type() === 'page');
+  const matches = tabs.filter(t => tabHandle(t.targetId).startsWith(wanted));
   if (matches.length === 1) return matches[0];
-  if (matches.length === 0) throw new Error(`No page with id '${handle}' (${pages.length} open) — run \`tirno pages\``);
+  if (matches.length === 0) throw new Error(`No page with id '${handle}' (${tabs.length} open) — run \`tirno pages\``);
   throw new Error(`Page id '${handle}' matches ${matches.length} tabs — use more characters`);
+}
+
+export async function getPageByHandle(browser: Browser, handle: string): Promise<Page> {
+  const tab = await getTabByHandle(browser, handle);
+  const page = (await browser.pages()).find(p => p.targetId === tab.targetId);
+  if (!page) throw new Error(`Tab '${handle}' crashed — \`tirno close-tab ${handle}\` closes it`);
+  return page;
 }

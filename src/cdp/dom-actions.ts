@@ -10,8 +10,17 @@ export interface ResolvedRef {
 
 export async function resolveBackendNode(page: Page, backendNodeId: number): Promise<ResolvedRef> {
   const cdp = await page.createCDPSession();
-  const res = await cdp.send('DOM.resolveNode', { backendNodeId }) as { object: { objectId: string } };
-  return { objectId: res.object.objectId, cdp };
+  try {
+    const res = await cdp.send('DOM.resolveNode', { backendNodeId }) as { object: { objectId: string } };
+    return { objectId: res.object.objectId, cdp };
+  } catch (e) {
+    await cdp.detach().catch(() => {});
+    // 문서에서 떨어진 노드가 수거되면 id 자체가 사라진다 — 떨어진 채 남아 있을 때와 같은 일이다
+    if (/No node with given id/.test((e as Error).message)) {
+      throw new Error('that element is no longer in the document — the page re-rendered and replaced it. Run "tirno snapshot" and use the new ref', { cause: e });
+    }
+    throw e;
+  }
 }
 
 /**

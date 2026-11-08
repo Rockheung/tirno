@@ -208,17 +208,20 @@ export class Page {
     const session = await browser.connection.attach(targetId);
     const page = new Page(browser, targetId, session);
     page.currentUrl = initialUrl;
+    // 탭의 메인 프레임 id 는 targetId 와 같다.
+    page.mainFrameId = targetId;
     page.wire();
+    // 크래시한 탭과 문서 응답을 기다리는 탭은 렌더러가 답할 호출에 응답하지 않는다.
+    // Inspector.enable 은 둘 다 답하고, 크래시한 탭이면 그 전에 Inspector.targetCrashed 가 온다.
+    await session.send('Inspector.enable');
+    if (session.isCrashed) throw new Error(`target ${targetId} crashed`);
     // Page: 네비게이션 이벤트·다이얼로그·스크린샷. Runtime: evaluate·console. Network: 문서
     // 상태 코드·헤더 오버라이드·idle 판정. puppeteer 도 같은 셋을 처음에 켠다.
-    const [tree] = await Promise.all([
-      session.send('Page.getFrameTree'),
-      session.send('Page.enable'),
-      session.send('Runtime.enable'),
-      session.send('Network.enable'),
-    ]);
-    page.mainFrameId = tree.frameTree.frame.id;
-    if (tree.frameTree.frame.url) page.currentUrl = tree.frameTree.frame.url;
+    // 응답은 기다리지 않는다. 세션의 호출은 보낸 순서대로 처리되므로 이 탭에 보내는 다음
+    // 호출보다 먼저 켜지고, 기다리는 탭 하나가 다른 탭을 쓰는 명령을 붙잡지 않는다.
+    for (const method of ['Page.enable', 'Runtime.enable', 'Network.enable'] as const) {
+      session.send(method).catch(() => {});
+    }
     return page;
   }
 
@@ -435,7 +438,7 @@ export class Page {
     const waiter = this.navigationWaiter(opts);
     let res: Protocol.Page.NavigateResponse;
     try {
-      res = await this.session.send('Page.navigate', { url, frameId: this.mainFrameId || undefined });
+      res = await sendWhileWaiting(waiter, this.session.send('Page.navigate', { url, frameId: this.mainFrameId || undefined }));
     } catch (e) {
       waiter.cancel();
       throw e;
@@ -455,7 +458,7 @@ export class Page {
   async reload(opts: NavigationOptions & { ignoreCache?: boolean } = {}): Promise<void> {
     const waiter = this.navigationWaiter(opts);
     try {
-      await this.session.send('Page.reload', { ignoreCache: opts.ignoreCache ?? false });
+      await sendWhileWaiting(waiter, this.session.send('Page.reload', { ignoreCache: opts.ignoreCache ?? false }));
     } catch (e) {
       waiter.cancel();
       throw e;
@@ -469,7 +472,7 @@ export class Page {
     if (!entry) return false;
     const waiter = this.navigationWaiter(opts);
     try {
-      await this.session.send('Page.navigateToHistoryEntry', { entryId: entry.id });
+      await sendWhileWaiting(waiter, this.session.send('Page.navigateToHistoryEntry', { entryId: entry.id }));
     } catch (e) {
       waiter.cancel();
       throw e;
@@ -635,4 +638,12 @@ function evaluationError(d: Protocol.Runtime.ExceptionDetails): Error {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
+}
+
+/**
+ * 네비게이션 명령의 응답은 서버가 문서를 답할 때까지 오지 않는다. 그동안 waiter 의
+ * 시간 초과가 따로 터지면 아무도 받지 않는 거절이 되어 프로세스가 죽는다 — 둘을 겨룬다.
+ */
+function sendWhileWaiting<T>(waiter: Waiter<void>, sent: Promise<T>): Promise<T> {
+  return Promise.race([sent, waiter.promise.then(() => sent)]);
 }

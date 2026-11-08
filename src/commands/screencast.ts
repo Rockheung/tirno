@@ -18,6 +18,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import * as store from '../core/session-store.js';
+import { waitForWorker } from '../core/worker-ready.js';
 import { selfArgs } from '../core/update.js';
 import { success, info, fail } from '../output/formatter.js';
 
@@ -52,6 +53,8 @@ export function registerScreencastCommands(program: Command): void {
           }
         }
 
+        const marker = path.join(outDir, '.started');
+        fs.rmSync(marker, { force: true });
         const child = spawn(process.execPath, selfArgs([
           '__screencast-worker',
           '--ws', meta.wsEndpoint,
@@ -69,6 +72,7 @@ export function registerScreencastCommands(program: Command): void {
 
         if (typeof child.pid !== 'number') throw new Error('Failed to spawn worker');
         fs.writeFileSync(pidFile, String(child.pid));
+        await waitForWorker(child.pid, marker, path.join(outDir, 'worker.log'));
         success(`Screencast started (PID ${child.pid}) — frames → ${outDir}`);
         info(`Stop with: tirno screencast stop --out ${outDir}`);
       } catch (e) {
