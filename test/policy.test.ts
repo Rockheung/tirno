@@ -59,3 +59,10 @@ test('dNR 차단 규칙 — 허용 밖 전부, 헤더 규칙 뒤 id', () => {
   assert.deepEqual(rules[1].condition.excludedRequestDomains, ['a.com', 'b.com']);
   assert.deepEqual(buildBlockRules([], 1), []);
 });
+
+test('read-only — 하위 명령은 전체 이름으로 본다: inject add · rm 은 막고 ls 는 둔다', () => {
+  const p: Policy = { readOnly: true };
+  assert.equal(checkPolicy(p, { command: 'inject add', argv: ['1'] })?.policy, 'readOnly');
+  assert.equal(checkPolicy(p, { command: 'inject rm', argv: ['x'] })?.policy, 'readOnly');
+  assert.equal(checkPolicy(p, { command: 'inject ls', argv: [] }), null);
+});

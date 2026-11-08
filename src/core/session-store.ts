@@ -53,6 +53,8 @@ export interface SessionMetadata {
   wsEndpoint: string;
   userDataDir: string;
   chromeFlags: string[];
+  /** `new <name> <url>` 의 시작 URL — drift 의 재기동 제안과 앵커 경고가 읽는다 */
+  bootUrl?: string;
   /**
    * Only set when `--executable-path` was given. Chrome auto-detection covers
    * three fixed paths, so a session on Chromium/Brave/Edge is only reproducible
@@ -226,5 +228,5 @@ export function clearActive(): void {
  * 하나로 둔다.
  */
 export function bootUrlOf(meta: SessionMetadata): string | undefined {
-  return meta.chromeFlags?.find(f => !f.startsWith('--'));
+  return meta.bootUrl ?? meta.chromeFlags?.find(f => !f.startsWith('--'));
 }

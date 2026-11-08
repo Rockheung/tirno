@@ -25,10 +25,17 @@ import { parseFlags, readCmdline, inspectSession, type SessionInventory } from '
  * `--host-resolver-rules=MAP example.com 127.0.0.1` is a single argument with
  * spaces in it; unquoted it becomes three.
  */
+const SHELL_SPECIAL = /[\s'"$`\\|&;<>()*?[\]{}!#~]/;
+
+/** 단어 하나를 통째로 — URL 처럼 `=` 가 값의 일부인 것 */
+export function shellQuote(word: string): string {
+  return SHELL_SPECIAL.test(word) ? `'${word.replace(/'/g, `'\\''`)}'` : word;
+}
+
 export function shellQuoteFlag(flag: string): string {
-  if (!/[\s'"$`\\|&;<>()*?[\]{}!#~]/.test(flag)) return flag;
+  if (!SHELL_SPECIAL.test(flag)) return flag;
   const eq = flag.indexOf('=');
-  if (eq === -1) return `'${flag.replace(/'/g, `'\\''`)}'`;
+  if (eq === -1) return shellQuote(flag);
   const name = flag.slice(0, eq);
   const value = flag.slice(eq + 1).replace(/'/g, `'\\''`);
   return `${name}='${value}'`;

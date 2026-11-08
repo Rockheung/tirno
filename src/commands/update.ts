@@ -130,7 +130,7 @@ export function registerUpdateCommand(program: Command): void {
         if (!opts.binaryOnly && pluginBehind && plugin) {
           const skills = updateSkills(plugin);
           if (skills === 'no-claude') {
-            warn('`claude` not on PATH — skills unchanged. Update them with `claude plugin marketplace update tirno && claude plugin update tirno`.');
+            warn(`\`claude\` not on PATH — skills unchanged. Update them with \`claude plugin marketplace update tirno && claude plugin update ${plugin.id}\`.`);
           } else {
             success(`Skills ${plugin.version} → ${latest} (restart Claude Code to apply)`);
           }

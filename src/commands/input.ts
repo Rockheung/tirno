@@ -434,6 +434,12 @@ export function registerInputCommands(program: Command): void {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
+        // The three forms are alternatives, not a priority list. Silently
+        // ignoring the selector because --network-idle was also given makes the
+        // command wait for something the caller did not ask about.
+        const forms = [selector && 'selector', opts.text && '--text', opts.networkIdle && '--network-idle'].filter(Boolean);
+        if (forms.length > 1) throw new Error(`Give one of: selector, --text, --network-idle (got ${forms.join(' + ')})`);
+
         // role + 이름 — 나타날 때까지 a11y 트리를 묻는다. 모호해도 "나타났다" 는 참이다.
         if (selector && takesName(selector)) {
           const deadline = Date.now() + opts.timeout;
@@ -450,12 +456,6 @@ export function registerInputCommands(program: Command): void {
           success(`Visible: ${label}`);
           return;
         }
-
-        // The three forms are alternatives, not a priority list. Silently
-        // ignoring the selector because --network-idle was also given makes the
-        // command wait for something the caller did not ask about.
-        const forms = [selector && 'selector', opts.text && '--text', opts.networkIdle && '--network-idle'].filter(Boolean);
-        if (forms.length > 1) throw new Error(`Give one of: selector, --text, --network-idle (got ${forms.join(' + ')})`);
 
         if (opts.networkIdle) {
           await page.waitForNetworkIdle({ timeout: opts.timeout });
@@ -506,6 +506,7 @@ export function registerInputCommands(program: Command): void {
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
+        if (asCoords(selector)) throw new Error('upload takes a file input element, not coordinates');
         const input = await page.$(selector);
         if (!input) throw new Error(`Element not found: ${selector}`);
 

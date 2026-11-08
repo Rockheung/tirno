@@ -99,7 +99,8 @@ export function registerNetCommands(program: Command): void {
         }
 
         fs.mkdirSync(opts.out, { recursive: true });
-        const taken = new Set<string>();
+        // 이미 있는 파일도 겹치는 이름으로 센다 — 덮어쓰지 않는다
+        const taken = new Set<string>(fs.readdirSync(opts.out));
         const saved: Array<{ file: string; bytes: number; source: string; url: string }> = [];
         const failed: Array<{ url: string; reason: string }> = [];
 

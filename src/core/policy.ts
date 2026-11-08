@@ -22,7 +22,7 @@ export interface Policy {
 }
 
 /** 페이지 상태를 바꾸는 명령 — read-only 세션이 거부한다 */
-export const MUTATING = new Set(['click', 'fill', 'type', 'press', 'upload', 'drag', 'select', 'eval', 'ensure', 'apply', 'recipe', 'replay', 'inject', 'cdp']);
+export const MUTATING = new Set(['click', 'fill', 'type', 'press', 'upload', 'drag', 'select', 'eval', 'ensure', 'apply', 'recipe', 'replay', 'inject add', 'inject rm', 'cdp']);
 
 /** URL 을 첫 positional 로 받는 명령 — allowDomains 가 본다 */
 const URL_COMMANDS = new Set(['nav', 'new', 'new-tab', 'restart']);
@@ -98,13 +98,12 @@ export function checkPolicy(policy: Policy | undefined, input: CheckInput): Deni
     }
   }
 
-  if (policy.confirmDestructive && !input.confirmed && ['click', 'ensure', 'press'].includes(command)) {
+  if (policy.confirmDestructive && !input.confirmed && ['click', 'ensure'].includes(command)) {
     // role + 이름, 또는 @N 의 저장된 이름. 셀렉터 뒤의 이름은 여기서 모른다.
     let name: string | undefined;
     if (command === 'click' && positional[1] !== undefined && /^[a-z]+$/i.test(positional[0]) && !positional[0].startsWith('@')) name = positional[1];
     else if (command === 'click' && positional[0]?.startsWith('@')) name = input.nameOfRef?.(positional[0]);
     else if (command === 'ensure') name = positional.find((p, i) => i > 0 && /^[A-Za-z]/.test(p) && !['checked', 'unchecked', 'focused', 'url', 'value', 'visible', 'hidden', 'text'].includes(p));
-    if (command === 'press' && /^enter$/i.test(positional[0] ?? '')) name = undefined;   // Enter 는 이름이 없다 — 막지 않는다
     const hit = name ? looksDestructive(name, policy.destructivePattern) : null;
     if (hit) {
       return { code: 'policy_denied', policy: 'confirmDestructive', message: `"${name}" looks destructive (${hit}) — this session requires --confirm to act on it` };

@@ -793,7 +793,7 @@ export function registerSessionCommands(program: Command): void {
         .map(drift.shellQuoteFlag);
       const bootUrl = store.bootUrlOf(meta);
       const parts = [`tirno restart ${target}`];
-      if (bootUrl) parts.push(bootUrl);
+      if (bootUrl) parts.push(drift.shellQuote(bootUrl));
       if (/(?:^|\s)--headless(?:[=\s]|$)/.test(d.cmdline ?? '')) parts.push('--headless');
       if (meta.userDataDir.startsWith(os.tmpdir())) parts.push('--ephemeral');
       if (meta.group) parts.push(`--group ${meta.group}`);

@@ -38,7 +38,7 @@ tirno new qa https://app --confirm destructive              # 위험해 보이�
 | 정책 | CLI 층 (명령 진입 전, argv 만) | 브라우저 층 |
 |---|---|---|
 | `--allow` | `nav` · `new` · `new-tab` · `ensure url` 의 URL 이 목록 밖이면 거부 (`policy_denied`). `a.com` 은 `x.a.com` 도 | `headers` 확장에 declarativeNetRequest **차단** 규칙 — 문서·스크립트·XHR·WebSocket·beacon 전부. 스크립트가 여는 이동도 막힌다(`chrome-error://`). 확장을 켠 채로 뜬다. dNR 이 못 보는 WebRTC 는 `--webrtc-ip-handling-policy=disable_non_proxied_udp` 로 |
-| `--read-only` | `click` `fill` `type` `press` `upload` `drag` `select` `eval` `ensure` `replay` `cdp` 거부. `recipe run`·`apply` 는 각 단계가 자식 명령으로 같은 검사를 받는다(`nav` 단계는 통과). `inject` 는 막지 않는다. `eval` 은 쓰기인지 알 수 없어 통째로 — `--allow-eval` 로 명시 | — |
+| `--read-only` | `click` `fill` `type` `press` `upload` `drag` `select` `eval` `ensure` `replay` `cdp` 거부. `inject add`·`inject rm` 도 거부한다(`inject ls` 는 둔다). `recipe run`·`apply` 는 각 단계가 자식 명령으로 같은 검사를 받는다(`nav` 단계는 통과). `eval` 은 쓰기인지 알 수 없어 통째로 — `--allow-eval` 로 명시 | — |
 | `--confirm destructive` | `click`/`ensure` 의 대상 **이름**이 delete·remove·pay·purchase·checkout·transfer·unsubscribe·삭제·결제·구매·송금·해지… 에 맞으면 `--confirm` 없이 거부. role+이름과 `@N`(저장된 이름)만 본다 — **셀렉터 뒤의 이름은 모른다**. `press` 는 대상 이름이 없어 검사하지 않는다 | — |
 
 `--destructive-pattern <regex>` 로 목록에 덧붙인다. 오탐은 `--confirm` 으로 넘기면 되므로
@@ -205,11 +205,11 @@ tirno drift d1 -- --host-resolver-rules="…"   # 지금 원하는 flags vs 실�
 ```
 → changed  --host-resolver-rules: expected MAP example.com 10.0.0.1, running MAP example.com 127.0.0.1
 ✗ 'd1' has drifted. Chrome only reads these at launch — restart to apply:
-→   tirno restart d1 --headless --ephemeral -- --host-resolver-rules='MAP example.com 10.0.0.1'
+→   tirno restart d1 https://example.com/ --headless --ephemeral -- --host-resolver-rules='MAP example.com 10.0.0.1'
 ```
 
-제안 명령은 headless 여부·ephemeral 프로필·group 을 싣는다. `new <name> <url>` 로 준 시작
-URL 은 싣지 않으므로 필요하면 덧붙인다.
+제안 명령은 `new <name> <url>` 의 시작 URL(셸에 그대로 붙여 넣도록 인용한다)·headless 여부·
+ephemeral 프로필·group 을 싣는다.
 
 값에 `" --"` 가 든 플래그(`--user-agent="tirno --probe"` 등)는 `ps` 출력에서 되읽을 수
 없어 `unreadable` 로 따로 보고하고 drift 로 세지 않는다. 거짓 일치도 아니고, 재기동해도
@@ -424,8 +424,8 @@ FROM 열이 그 바이트의 출처다. `cache` 는 브라우저가 실제로 �
 
 파일 이름은 URL 경로의 basename 이다 — 쿼리는 뗀다(만료 토큰이지 이름이 아니고, 파일
 시스템에 못 쓰는 문자가 들어 있다). 확장자가 mime 과 맞지 않으면(없을 때 포함) mime 의 확장자를
-덧붙인다. 한 번의 호출 안에서 겹치는 이름에만 번호를 붙이고, `--out` 에 이미 있는 같은 이름의
-파일은 덮어쓴다.
+덧붙인다. 겹치는 이름에는 번호를 붙인다(`s.js` → `s-2.js`) — 한 번의 호출 안에서 겹치는 것도,
+`--out` 에 이미 있는 파일과 겹치는 것도. 덮어쓰지 않는다.
 
 `--limit`(기본 200) 을 넘으면 **한 개도 쓰지 않고 멈춘다.** 패턴이 넓은 줄 모르고 부른 것과
 정말 그만큼 원한 것은 다르고, 그 차이는 디렉터리에 2000개가 쌓인 뒤에는 되돌리기 어렵다.
@@ -547,7 +547,7 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
 | `press <modifier>+<key>` | `Meta+v` · `Ctrl+a` · `Shift+Tab`. 수식키는 Alt·Ctrl·Meta·Shift(별칭 cmd/command/option 도 받는다) |
 | `scroll up\|down\|<pixels>` | 스크롤 |
-| `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — CSS 셀렉터·`--text`·`--network-idle` 중 둘 이상이면 거부한다. role+이름 대상에서는 `--text`/`--network-idle` 을 무시한다 |
+| `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 셀렉터(role+이름 포함)·`--text`·`--network-idle` 중 둘 이상이면 거부한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
 
@@ -846,8 +846,8 @@ light DOM 에서 눌리던 요소가 조용히 바뀐다(실측). 그래서 ligh
 shadow root 안이나 셀렉터가 없는 캔버스 위 요소에는 좌표가 유일한 길이라, 그 길은 포인터 계열
 명령에 고르게 있어야 한다.
 
-`fill` 에 좌표꼴을 넣으면 좌표를 받지 않는다고 알려 준다(`fill takes an element, not coordinates`).
-`upload` 는 아직 셀렉터로 그대로 넘겨 브라우저의 `querySelector` SyntaxError 가 나온다.
+좌표를 받지 않는 명령(`fill`·`upload`)에 좌표꼴을 넣으면 그렇다고 알려 준다(`fill takes an element,
+not coordinates`).
 
 붙여넣기·복사·잘라내기·전체선택·실행취소는 **키 이벤트만으로 일어나지 않는다.** 브라우저가
 그 동작을 실제로 하려면 CDP 에 `commands` 를 함께 실어야 하고(실측: `commands` 없이 Meta+V 를
@@ -1058,7 +1058,7 @@ npm link 는 `process.execPath` 가 런타임을 가리키므로 대상이 아�
 스킬은 파일을 직접 만지지 않는다. Claude Code 가 플러그인을 자기 상태로 관리하므로
 `claude plugin marketplace update tirno` → `claude plugin update tirno@tirno` 를 부른다 —
 마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.
-`claude` 가 PATH 에 없으면 `claude plugin marketplace update tirno && claude plugin update tirno` 를 안내하고 바이너리만 올린다(이 안내에는 `@tirno` 가 빠져 있어 그대로 치면 "not found" 로 끝난다 — `claude plugin update tirno@tirno` 로 친다).
+`claude` 가 PATH 에 없으면 `claude plugin marketplace update tirno && claude plugin update <식별자>`(설치된 식별자, 예: `tirno@tirno`)를 안내하고 바이너리만 올린다.
 
 **바이너리와 플러그인은 따로 설치되고 따로 낡으므로 각각 판정한다.** 릴리즈 바이너리를 직접
 받아 쓰다가 `update` 로 갈아타면 바이너리만 최신이고 플러그인은 처음 설치 시점에 멈춰 있다.

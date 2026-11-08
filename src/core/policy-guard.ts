@@ -8,15 +8,16 @@ import { checkPolicy, type Denial } from './policy.js';
 
 const SESSION_FREE = new Set(['new', 'ls', 'schema', 'setup', 'chrome', 'update', 'anchor', 'gc', 'cache', 'recipe', 'stats', 'memory', 'attach', 'rename', 'export', 'kill', 'restart', 'drift', 'broadcast', 'plan', 'apply']);
 
+/** `command` 는 하위 명령까지 포함한 전체 이름이다 — `inject add` 가 `add` 로 들어오면 정책을 비켜 간다 */
 export function guardPolicy(command: string, argv: string[], opts: { session?: string; confirm?: boolean; allowEval?: boolean }): Denial | null {
-  if (SESSION_FREE.has(command)) return null;
+  if (SESSION_FREE.has(command.split(' ')[0])) return null;
   const name = opts.session ?? store.getActive();
   if (!name) return null;
   let meta: store.SessionMetadata;
   try { meta = store.get(name); } catch { return null; }
   if (!meta.policy) return null;
   // 명령 이름 뒤의 인자만 — `tirno click …` 의 `click` 은 뺀다
-  const i = argv.indexOf(command);
+  const i = argv.indexOf(command.split(' ').at(-1)!);
   const rest = i === -1 ? argv : argv.slice(i + 1);
   const cleaned: string[] = [];
   for (let k = 0; k < rest.length; k++) {
