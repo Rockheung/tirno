@@ -89,7 +89,7 @@ export async function holdSession(port: number, out: string): Promise<void> {
     for (const frame of frames) {
       if (!greeted) {
         greeted = true;
-        const body = JSON.stringify([0, 1, 'WebDriver:NewSession', { webSocketUrl: true }]);
+        const body = JSON.stringify([0, 1, 'WebDriver:NewSession', { webSocketUrl: true, acceptInsecureCerts: true }]);
         socket.write(`${Buffer.byteLength(body)}:${body}`);
         continue;
       }

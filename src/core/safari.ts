@@ -83,7 +83,8 @@ export async function launchSafari(opts: SafariLaunch): Promise<store.SessionMet
       await new Promise(r => setTimeout(r, 100));
     }
     const session = await webdriver<{ sessionId: string; capabilities: { webSocketUrl?: string } }>(port, 'POST', '/session', {
-      capabilities: { alwaysMatch: { browserName: browserNameFor(driver), webSocketUrl: true, 'safari:experimentalWebSocketUrl': true } },
+      // 로컬 하네스는 대개 mkcert 같은 자체 인증서다 — 경고 화면에 막히지 않게 세 엔진 모두 받는다
+      capabilities: { alwaysMatch: { browserName: browserNameFor(driver), webSocketUrl: true, 'safari:experimentalWebSocketUrl': true, acceptInsecureCerts: true } },
     });
     if (!session.capabilities.webSocketUrl) throw new TirnoError('safaridriver opened a session without WebDriver BiDi', 'safari_error');
     const now = new Date().toISOString();

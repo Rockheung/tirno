@@ -49,7 +49,7 @@ tirno drift [name] [-- <flags>]              # 선언한 플래그 vs 실행 중
 `capability_unsupported` 로 거절한다. 실행 파일은 `--executable-path` 나 `$TIRNO_FIREFOX` 로 지정한다.
 `snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다.
 Safari 세션도 같은 명령이 된다. safaridriver 는 세션을 하나만 열고, `--headless` 와 `--` 뒤 플래그는 거절한다. 드라이버는 `--executable-path` 나 `$TIRNO_SAFARI` 로 지정한다.
-Safari 세션에는 프록시와 인증서 예외가 없다 — 신뢰되지 않은 https 는 경고 화면(`safari-resource:/CertificateWarning…html`)에 막힌다. 로컬 하네스는 http 주소를 쓴다(tirno-runbook 의 "인증서 경고" 제약).
+세 엔진 모두 신뢰되지 않은 https 인증서를 받는다(Chrome `--ignore-certificate-errors`, Firefox · Safari `acceptInsecureCerts`) — 경고 화면이 없는 대신, 이동 주소가 틀리면 경고 없이 다른 서버의 응답을 받는다(tirno-runbook 의 "인증서" 제약).
 
 `--` 뒤에 Chrome 플래그를 전달:
 

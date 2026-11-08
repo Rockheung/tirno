@@ -328,18 +328,18 @@ tirno ls                      # 남은 게 없는지
 ## 사실로 확인해 둔 제약
 
 - `tirno audit` 은 lighthouse 를 부르므로 **http(s) 만** 된다. `file://` 은 `INVALID_URL`.
-- **인증서 경고 화면은 엔진마다 다르게 보인다**(2026-11-08 실측, 신뢰되지 않은 CA 의 https).
-  Chrome: `nav` 가 `net::ERR_CERT_AUTHORITY_INVALID` 로 실패하고 `location.href` 는
-  `chrome-error://chromewebdata/`. Firefox: `nav` 가 `SEC_ERROR_UNKNOWN_ISSUER` 로 실패하는데
-  `location.href` 는 **원래 주소 그대로**이고 제목만 "경고: 보안 위험" 이다 — 주소만 보면 놓친다.
-  Safari: `location.href` 가 `safari-resource:/CertificateWarning…html`, 제목 "This Connection Is Not Private".
-  `nav` 를 거치지 않고 `eval` 의 `location.replace` 로 이동하면 어느 엔진이든 실패 없이 경고 화면에 머문다.
-- **Safari 세션에는 프록시도 인증서 예외도 없다.** Firefox 하네스처럼 프로필의 프록시 설정과
-  `cert_override.txt` 로 https 를 로컬 서버에 돌리는 방법이 Safari 에는 없다. 그래서 로컬 하네스를
-  Safari 로 돌릴 때는 하네스가 직접 띄운 `http://<host>:<포트>/` 를 **첫 이동과 이후의 모든 이동
-  (`nav` · `location.replace`)에 같은 값으로** 쓴다. 엔진별로 주소를 고르는 코드에서 첫 이동만 바꾸고
-  이후 이동이 https 상수를 그대로 쓰면, 같은 호스트의 443 포트에 떠 있는 다른 서버(예: 다른 머신의
-  mkcert 인증서를 내주는 ssh 포워딩)로 가서 경고 화면에 막힌다.
+- **tirno 세션은 세 엔진 모두 신뢰되지 않은 인증서를 받는다** — Chrome 은 기준 인자
+  `--ignore-certificate-errors`, Firefox · Safari 는 WebDriver `acceptInsecureCerts`. 로컬 하네스가 대개
+  mkcert 같은 자체 인증서라서다. 그래서 경고 화면은 안 뜨지만, **이동 주소가 틀리면 경고 없이 엉뚱한
+  서버의 응답을 받는다.** 하네스가 직접 띄운 주소를 **첫 이동과 이후의 모든 이동(`nav` ·
+  `location.replace`)에 같은 값으로** 쓴다. 엔진별로 주소를 고르는 코드에서 첫 이동만 바꾸고 이후 이동이
+  https 상수를 그대로 쓰면, 같은 호스트의 443 포트에 떠 있는 다른 서버(예: 다른 머신의 mkcert 인증서를
+  내주는 ssh 포워딩)로 간다. 의심되면 `tirno eval 'location.href'` 로 실제 주소와 포트를 확인한다.
+- 이 설정이 없는 브라우저에서 보는 인증서 경고 화면(2026-11-08 실측): Chrome 은 `nav` 가
+  `net::ERR_CERT_AUTHORITY_INVALID` 로 실패하고 `location.href` 가 `chrome-error://chromewebdata/`,
+  Firefox 는 `SEC_ERROR_UNKNOWN_ISSUER` 인데 `location.href` 는 **원래 주소 그대로**(제목만 "경고: 보안 위험"),
+  Safari 는 `safari-resource:/CertificateWarning…html`. `eval` 의 `location.replace` 로 가면 실패 없이 그
+  화면에 머문다.
 - `audit --mode timespan` 은 미구현이다.
 - 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜬다.
 - **`cache load` 로 꺼낸 `@N` 으로는 바로 조작할 수 없다.** 출력만 하고 ref store 를 안 채워서
