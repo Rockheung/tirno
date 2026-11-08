@@ -230,3 +230,8 @@ export function clearActive(): void {
 export function bootUrlOf(meta: SessionMetadata): string | undefined {
   return meta.bootUrl ?? meta.chromeFlags?.find(f => !f.startsWith('--'));
 }
+
+/** 앵커 경고가 볼 시작 URL — `select`·`new-tab` 으로 다른 탭을 골랐으면 그 탭은 시작 탭이 아니다 */
+export function anchorUrlOf(meta: SessionMetadata): string | undefined {
+  return meta.selectedTarget ? undefined : bootUrlOf(meta);
+}
