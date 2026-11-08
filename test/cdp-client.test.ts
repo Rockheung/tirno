@@ -117,3 +117,16 @@ test('타깃이 떨어지면 그 세션에서 기다리던 호출이 깨어난�
   t.push({ id: 3, result: { product: 'Chrome/1' } });
   assert.equal((await other).product, 'Chrome/1');
 });
+
+test('타깃이 크래시하면 그 세션의 호출이 깨어나고, 이후 호출도 바로 거절된다', async () => {
+  const t = fakeTransport();
+  const c = new CdpConnection(t);
+  const attaching = c.attach('T1');
+  t.push({ id: 1, result: { sessionId: 'S1' } });
+  const s = await attaching;
+  const waiting = s.send('Runtime.evaluate', { expression: '1' });
+  t.push({ method: 'Inspector.targetCrashed', params: {}, sessionId: 'S1' });
+  await assert.rejects(waiting, /crashed/);
+  await assert.rejects(s.send('Page.enable'), /crashed/);
+  assert.equal(s.isCrashed, true);
+});

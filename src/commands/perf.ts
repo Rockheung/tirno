@@ -151,6 +151,21 @@ export function registerPerfCommands(program: Command): void {
         // it frees up, and until then the readings simply say "unknown" instead
         // of holding the whole command hostage.
         void rendererCdp.send('Performance.enable').catch(() => {});
+        // A crashed tab still lists and still attaches, and its round trips go
+        // unanswered exactly like a wedged one. Inspector.enable is the call it
+        // still answers, and the session gets Inspector.targetCrashed with it.
+        void rendererCdp.send('Inspector.enable').catch(() => {});
+
+        // The renderer's own CPU tells a busy main thread from one that is only
+        // waiting (a document response, a relay): both leave round trips
+        // unanswered. The browser process reports it, so a wedged page cannot
+        // block the reading. Which renderer is this tab's is not exposed, so the
+        // busiest renderer stands in.
+        const readCpu = async (): Promise<{ at: number; byPid: Map<number, number> } | null> => {
+          const res = await withCap(browserCdp.send('SystemInfo.getProcessInfo') as Promise<{ processInfo: Array<{ type: string; id: number; cpuTime: number }> }>);
+          if (!res) return null;
+          return { at: Date.now(), byPid: new Map(res.processInfo.filter(p => p.type === 'renderer').map(p => [p.id, p.cpuTime])) };
+        };
 
         const readMetrics = async (): Promise<Record<string, number> | null> => {
           const res = await withCap(rendererCdp.send('Performance.getMetrics') as Promise<{ metrics: Array<{ name: string; value: number }> }>);
@@ -183,9 +198,10 @@ export function registerPerfCommands(program: Command): void {
         const rttLabel = (ms: number) =>
           ms === Number.POSITIVE_INFINITY ? `no answer in ${RTT_CAP_MS}ms` : Number.isNaN(ms) ? 'error' : `${ms}ms`;
 
-        const samples: Array<{ t: number; rendererRttMs: number; browserRttMs: number; taskPct: number; scriptPct: number; layoutPct: number; stylePct: number }> = [];
+        const samples: Array<{ t: number; rendererRttMs: number; browserRttMs: number; cpuPct: number; taskPct: number; scriptPct: number; layoutPct: number; stylePct: number }> = [];
         let prev = await readMetrics();
         let prevAt = Date.now();
+        let cpuPrev = await readCpu();
         // A tick with no counters is not zero load — it is no reading. Saying
         // "task 0%" there would be the same lie as the one this command exists
         // to catch.
@@ -195,11 +211,18 @@ export function registerPerfCommands(program: Command): void {
 
         if (!opts.json) info(`Watching for ${opts.window}s — renderer vs browser round trips, and where the time goes`);
 
-        while (Date.now() - started < windowMs) {
+        while (Date.now() - started < windowMs && !rendererCdp.isCrashed) {
           await new Promise(r => setTimeout(r, 1000));
+          if (rendererCdp.isCrashed) break;
           const rendererRttMs = await rtt(() => rendererCdp.send('Runtime.evaluate', { expression: '1', returnByValue: true }));
           const browserRttMs = await rtt(() => browserCdp.send('Browser.getVersion'));
           const now = await readMetrics();
+          const cpuNow = await readCpu();
+          const cpuSpan = cpuNow && cpuPrev ? (cpuNow.at - cpuPrev.at) / 1000 : 0;
+          const cpuPct = cpuNow && cpuPrev && cpuSpan > 0
+            ? Math.round(Math.max(0, ...[...cpuNow.byPid].map(([pid, v]) => v - (cpuPrev!.byPid.get(pid) ?? v))) / cpuSpan * 100)
+            : UNKNOWN;
+          if (cpuNow) cpuPrev = cpuNow;
           const at = Date.now();
           const span = (at - prevAt) / 1000;
           const haveDelta = now !== null && prev !== null && span > 0;
@@ -208,6 +231,7 @@ export function registerPerfCommands(program: Command): void {
             t: Number(((at - started) / 1000).toFixed(1)),
             rendererRttMs,
             browserRttMs,
+            cpuPct,
             taskPct: Number(pct('TaskDuration').toFixed(1)),
             scriptPct: Number(pct('ScriptDuration').toFixed(1)),
             layoutPct: Number(pct('LayoutDuration').toFixed(1)),
@@ -218,12 +242,13 @@ export function registerPerfCommands(program: Command): void {
           if (!opts.json) {
             console.log(
               `  ${String(s.t).padStart(5)}s  renderer=${rttLabel(s.rendererRttMs).padStart(18)}` +
-              `  browser=${rttLabel(s.browserRttMs).padStart(6)}  task=${pctLabel(s.taskPct).padStart(6)}` +
+              `  browser=${rttLabel(s.browserRttMs).padStart(6)}  cpu=${pctLabel(s.cpuPct).padStart(6)}  task=${pctLabel(s.taskPct).padStart(6)}` +
               `  script=${pctLabel(s.scriptPct).padStart(6)}  layout=${pctLabel(s.layoutPct).padStart(6)}  style=${pctLabel(s.stylePct).padStart(6)}`
             );
           }
         }
 
+        const crashed = rendererCdp.isCrashed;
         await rendererCdp.detach().catch(() => {});
         await browserCdp.detach().catch(() => {});
         browser.disconnect();
@@ -243,13 +268,17 @@ export function registerPerfCommands(program: Command): void {
         const scriptMax = max('scriptPct');
         const layoutMax = max('layoutPct');
         const styleMax = max('stylePct');
+        const cpuKnown = samples.some(x => !Number.isNaN(x.cpuPct));
+        const cpuMax = max('cpuPct');
 
         // Two different failures hide under "the page is slow", and only both
         // numbers together tell them apart: a queue that is backed up (round
         // trips crawl) versus a flood of short tasks (CPU pinned, round trips
         // still fine). Reading one alone gets the second case wrong.
         let verdict: string;
-        if (rendererMax >= 200) verdict = 'queue backed up — the UI is frozen and DevTools will not open';
+        if (crashed) verdict = 'tab crashed — its renderer is gone; reload the tab';
+        else if (rendererMax === Number.POSITIVE_INFINITY && cpuKnown && cpuMax < 50) verdict = 'renderer not answering, but no renderer is busy — waiting on something (a document response, a relay), not a frozen main thread';
+        else if (rendererMax >= 200) verdict = 'queue backed up — the UI is frozen and DevTools will not open';
         else if (taskMax >= 90) verdict = 'short-task flood — CPU is pinned (fans, battery) but input still lands';
         else if (taskMax >= 50) verdict = 'heavy but not stuck — will be felt on slower hardware';
         else verdict = 'idle enough';
@@ -257,7 +286,7 @@ export function registerPerfCommands(program: Command): void {
         // Naming a culprit on an idle page is noise dressed as a finding — a
         // layout share of 0.3% is not thrashing, it is a page doing nothing.
         // Only apportion blame once there is load worth apportioning.
-        const blame = !gotCounters || taskMax < 50
+        const blame = crashed || !gotCounters || taskMax < 50
           ? null
           : scriptMax >= layoutMax + styleMax
             ? 'script (JS logic)'
@@ -265,7 +294,11 @@ export function registerPerfCommands(program: Command): void {
             : 'neither script nor layout — GC, raster or parsing, which these counters do not split';
 
         if (opts.json) {
-          console.log(JSON.stringify({ samples, summary: { taskMax, scriptMax, layoutMax, styleMax, rendererRttMaxMs: rendererMax, browserRttMaxMs: browserMax, verdict, blame } }, null, 2));
+          // JSON has no Infinity or NaN, and both would print as null — the
+          // unanswered round trip, the strongest reading, would vanish.
+          const reading = (_k: string, v: unknown) =>
+            v === Number.POSITIVE_INFINITY ? 'no-answer' : typeof v === 'number' && Number.isNaN(v) ? 'unknown' : v;
+          console.log(JSON.stringify({ samples, summary: { crashed, taskMax, scriptMax, layoutMax, styleMax, cpuMax: cpuKnown ? cpuMax : Number.NaN, rendererRttMaxMs: rendererMax, browserRttMaxMs: browserMax, verdict, blame } }, reading, 2));
           return;
         }
 
@@ -276,6 +309,7 @@ export function registerPerfCommands(program: Command): void {
         if (rendererMax >= 200 && browserMax < rendererMax / 4) {
           info('the browser kept answering while the renderer did not — this page, not the machine');
         }
+        if (cpuKnown) info(`busiest renderer process: up to ${cpuMax}% CPU`);
         if (gotCounters) {
           info(`worst second: task ${taskMax}% (script ${scriptMax}%, layout ${layoutMax}%, style ${styleMax}%)`);
         } else {

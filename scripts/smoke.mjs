@@ -398,7 +398,8 @@ function main() {
   run('click @vG:N (맞는 세대)', ['click', `@v${gen}:${btnRef}`, ...S], { expectMatch: /Clicked/ });
   run('click @vG:N (틀린 세대 → exit≠0)', ['click', `@v${gen + 99}:${btnRef}`, ...S], { expectFail: true });
   // 같은 문서 안에서 DOM 만 갈아치운다 — loaderId 는 안 바뀌므로 요소 identity 로만 잡힌다.
-  run('eval (DOM 교체)', ['eval', `document.querySelector('form').innerHTML = '<button id=x type=button>other</button>'`, ...S]);
+  // 떨어진 노드를 붙잡아 둔다 — 수거되면 --synthetic 이 누를 노드 자체가 없다
+  run('eval (DOM 교체)', ['eval', `window.__replaced = [...document.querySelector('form').children]; document.querySelector('form').innerHTML = '<button id=x type=button>other</button>'`, ...S]);
   const stale = run('click @N (교체된 DOM → exit≠0)', ['click', `@${btnRef}`, ...S], { expectFail: true });
   check('거부 메시지가 무엇이 무엇으로 바뀌었는지 말한다',
     /was button "click me"/.test(stale.out + stale.err), (stale.out + stale.err).slice(0, 110));

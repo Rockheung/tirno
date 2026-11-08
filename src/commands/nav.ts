@@ -4,7 +4,7 @@ import { connect } from '../core/chrome-connector.js';
 import { openPage } from '../core/engine.js';
 import * as store from '../core/session-store.js';
 import { activateWindow } from '../core/os-focus.js';
-import { getActivePage, listPages, getPageByHandle } from '../cdp/page-resolver.js';
+import { getActivePage, listPages, getPageByHandle, getTabByHandle } from '../cdp/page-resolver.js';
 import { formatTable, success, warn, error, fail } from '../output/formatter.js';
 import { judgeNavigation } from '../cdp/nav-verdict.js';
 
@@ -218,10 +218,10 @@ export function registerNavCommands(program: Command): void {
     .action(async (pageId: string, opts) => {
       try {
         const { browser, meta } = await connect(opts.session);
-        const page = await getPageByHandle(browser, pageId);
-        const url = page.url();
-        await page.close();
-        if (meta.selectedTarget === page.targetId) store.update(meta.name, { selectedTarget: undefined });
+        const tab = await getTabByHandle(browser, pageId);
+        const url = tab.url();
+        await browser.connection.send('Target.closeTarget', { targetId: tab.targetId });
+        if (meta.selectedTarget === tab.targetId) store.update(meta.name, { selectedTarget: undefined });
         browser.disconnect();
         success(`Closed tab ${pageId}: ${url}`);
       } catch (e) {

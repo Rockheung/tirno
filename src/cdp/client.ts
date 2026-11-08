@@ -62,12 +62,14 @@ interface Incoming {
 export class CdpSession {
   private readonly emitter = new EventEmitter();
   private detached = false;
+  private crashed = false;
 
   constructor(readonly connection: CdpConnection, readonly id: string | undefined, readonly targetId?: string) {
     this.emitter.setMaxListeners(0);
   }
 
   send<M extends Method>(method: M, ...args: SendArgs<M>): Promise<Result<M>> {
+    if (this.crashed) return Promise.reject(new Error(`target crashed — cannot send ${method}`));
     if (this.detached) return Promise.reject(new Error(`session ${this.id ?? 'root'} is detached — cannot send ${method}`));
     return this.connection.rawSend(method, args[0], this.id) as Promise<Result<M>>;
   }
@@ -110,6 +112,10 @@ export class CdpSession {
     return this.detached;
   }
 
+  get isCrashed(): boolean {
+    return this.crashed;
+  }
+
   /** 타깃에서 떨어진다. 루트 세션은 떨어질 것이 없다 — 연결을 닫아라. */
   async detach(): Promise<void> {
     if (this.detached || !this.id) return;
@@ -126,6 +132,11 @@ export class CdpSession {
   markDetached(): void {
     this.detached = true;
     this.emitter.removeAllListeners();
+  }
+
+  /** @internal 렌더러가 죽었다. 세션은 붙어 있지만 렌더러가 답할 호출에는 응답이 오지 않는다 */
+  markCrashed(): void {
+    this.crashed = true;
   }
 }
 
@@ -243,16 +254,24 @@ export class CdpConnection {
       const { sessionId } = msg.params as { sessionId: string };
       this.sessions.get(sessionId)?.markDetached();
       this.sessions.delete(sessionId);
-      for (const [id, p] of this.pending) {
-        if (p.sessionId !== sessionId) continue;
-        this.pending.delete(id);
-        p.reject(new Error(`session ${sessionId} detached while waiting for ${p.method}`));
-      }
+      this.rejectPending(sessionId, method => `session ${sessionId} detached while waiting for ${method}`);
+    }
+    if (msg.method === 'Inspector.targetCrashed' && msg.sessionId) {
+      this.sessions.get(msg.sessionId)?.markCrashed();
+      this.rejectPending(msg.sessionId, method => `target crashed while waiting for ${method}`);
     }
     const target = msg.sessionId ? this.sessions.get(msg.sessionId) : this.root;
     target?.dispatch(msg.method, msg.params);
     // 자식 세션의 이벤트를 루트에서도 볼 수 있게 — `Target.*` 류 관측용
     if (msg.sessionId) this.root.dispatch(`session:${msg.method}`, { sessionId: msg.sessionId, params: msg.params });
+  }
+
+  private rejectPending(sessionId: string, message: (method: string) => string): void {
+    for (const [id, p] of this.pending) {
+      if (p.sessionId !== sessionId) continue;
+      this.pending.delete(id);
+      p.reject(new Error(message(p.method)));
+    }
   }
 
   private handleClose(): void {
