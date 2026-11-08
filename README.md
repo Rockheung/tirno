@@ -50,8 +50,8 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 ---
 
 **Firefox** — `tirno new x --browser firefox` 는 geckodriver 없이 Marionette 와 WebDriver BiDi 를 직접 말한다.
-지금은 `nav` · `eval` · `screenshot` · `ls` · `restart` · `kill` 이 되고, 다른 명령은 `capability_unsupported` 로 거절한다.
-`--port` · `--extensions` · 정책도 아직 쓸 수 없다.
+지금은 `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `ls` · `restart` · `kill` 이 되고, 다른 명령은 `capability_unsupported` 로 거절한다.
+`snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다. `--port` · `--extensions` · 정책도 아직 쓸 수 없다.
 
 ## 왜 다른가
 

@@ -17,6 +17,8 @@ import { requireElement } from '../cdp/dom-actions.js';
 import { renderAXTree, type AXNode } from '../cdp/ax-render.js';
 import type { Bbox } from '../cdp/iou.js';
 import type { ScreenshotOptions, ConsoleMessage } from '../cdp/page.js';
+import { firefoxSession, firefoxSnapshot } from '../core/firefox-act.js';
+import { TirnoError } from '../util/errors.js';
 
 export function registerInspectCommands(program: Command): void {
   program
@@ -66,6 +68,14 @@ export function registerInspectCommands(program: Command): void {
     .option('--content-boundaries', 'Wrap the tree in begin/end markers with a per-run nonce so a reader can tell page-authored text from tirno output. Also TIRNO_CONTENT_BOUNDARIES=1. A marker, not a security boundary')
     .action(async (opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          const given = ([['selector', '--selector'], ['ref', '--ref'], ['interactive', '--interactive'], ['verbose', '--verbose'],
+            ['maxOutput', '--max-output'], ['contentBoundaries', '--content-boundaries']] as const).filter(([k]) => opts[k] !== undefined && opts[k] !== false);
+          if (given.length) throw new TirnoError(`Firefox snapshots take no options yet (got ${given.map(([, f]) => f).join(', ')})`, 'capability_unsupported', { engine: 'firefox' });
+          console.log(await firefoxSnapshot(ff));
+          return;
+        }
         const { browser, meta } = await connect(opts.session);
         const page = await getActivePage(browser);
         // 앵커가 아직 안 열렸으면 그렇다고 말한다 — 빈 트리는 페이지가 비었다는

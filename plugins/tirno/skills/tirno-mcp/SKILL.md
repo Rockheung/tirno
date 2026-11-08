@@ -18,7 +18,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 - chrome 를 띄우는 명령(`tirno new`, `tirno restart`)은 Bash 호출 시 timeout 10s 이상 명시.
 - 직접 매핑이 없으면 `tirno cdp <method> [params-json]` 로 raw CDP passthrough — 거의 모든 mcp tool 의 fallback 경로.
 - `tirno cdp --browser <method>` 로 browser-level CDP 도메인(`Target.*`, `Browser.*`, `Tracing.*`).
-- 이 문서의 매핑은 Chrome 세션 기준이다. `tirno new --browser firefox` 세션에서는 `nav` · `eval` · `screenshot` 만 대응하고 `cdp` 는 쓸 수 없다.
+- 이 문서의 매핑은 Chrome 세션 기준이다. `tirno new --browser firefox` 세션에서는 `navigate_page` · `evaluate_script` · `take_screenshot` · `take_snapshot` · `click` · `fill` · `press_key` · `wait_for` 만 대응하고 `cdp` 는 쓸 수 없다.
 
 ## 카테고리별 매핑 표
 

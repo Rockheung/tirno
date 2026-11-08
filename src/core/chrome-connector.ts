@@ -61,7 +61,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
 
   const meta = store.get(name);
   if (meta.engine === 'firefox') {
-    throw new TirnoError(`Session '${name}' is Firefox. It supports nav, eval, screenshot, ls, restart and kill so far.`, 'capability_unsupported', { session: name, engine: 'firefox' });
+    throw new TirnoError(`Session '${name}' is Firefox. It supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, ls, restart and kill so far.`, 'capability_unsupported', { session: name, engine: 'firefox' });
   }
 
   // `isAlive(pid)` alone is not enough here: pids are recycled and ports are

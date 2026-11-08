@@ -10,6 +10,7 @@ import { resolveTarget, takesName, findByRoleName, axRole } from '../cdp/target.
 import { asCoords } from '../cdp/dom-actions.js';
 import { editingCommandFor, keyCodeName, modifierBits, parseKeyCombo, virtualKeyCode } from '../cdp/keys.js';
 import type { Page } from '../cdp/page.js';
+import { firefoxSession, firefoxClick, firefoxFill, firefoxType, firefoxPress, firefoxWaitFor } from '../core/firefox-act.js';
 
 /**
  * 파이프로 들어온 값 전부.
@@ -47,6 +48,11 @@ export function registerInputCommands(program: Command): void {
     .option(...DELTA_FLAG)
     .action(async (target: string, name: string | undefined, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          success(await firefoxClick(ff, target, name, { exact: opts.exact, dbl: opts.dbl, synthetic: opts.synthetic }));
+          return;
+        }
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
@@ -116,6 +122,16 @@ export function registerInputCommands(program: Command): void {
           fromStdin = true;
         }
 
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          if (opts.batch) throw new TirnoError('Firefox sessions fill one field at a time — --batch is Chrome-only for now', 'capability_unsupported', { engine: 'firefox' });
+          if (!target || value === undefined) {
+            throw new Error(named ? 'Provide <role> <name> <value>, or --value-stdin' : 'Provide <target> <value> or --batch <json>');
+          }
+          const label = await firefoxFill(ff, target, name, value, { exact: opts.exact, verify: opts.verify !== false });
+          success(fromStdin ? `Filled ${label} (${value.length} chars from stdin)` : `Filled ${label} with "${value}"`);
+          return;
+        }
         const { browser, meta } = await connect(opts.session);
         const page = await getInteractivePage(browser);
 
@@ -177,6 +193,12 @@ export function registerInputCommands(program: Command): void {
     .option(...DELTA_FLAG)
     .action(async (text: string, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          await firefoxType(ff, text);
+          success(`Typed "${text.slice(0, 40)}${text.length > 40 ? '...' : ''}"`);
+          return;
+        }
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 
@@ -199,6 +221,12 @@ export function registerInputCommands(program: Command): void {
     .option('--confirm', 'Act even though the session policy would refuse (--confirm destructive)')
     .action(async (key: string, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          await firefoxPress(ff, key);
+          success(`Pressed ${key}`);
+          return;
+        }
         const combo = parseKeyCombo(key);
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
@@ -395,6 +423,14 @@ export function registerInputCommands(program: Command): void {
     .option('--timeout <ms>', 'Max wait time', intArg, 30000)
     .action(async (selector: string | undefined, name: string | undefined, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          if (opts.networkIdle) throw new TirnoError('Firefox sessions do not wait for network idle yet', 'capability_unsupported', { engine: 'firefox' });
+          const text = opts.text ? (opts.text as string).split(',').map(s => s.trim()).filter(Boolean) : undefined;
+          if (text && selector) throw new Error('Give one of: selector, --text, --network-idle (got selector + --text)');
+          success(await firefoxWaitFor(ff, { selector, name, text, exact: opts.exact }, opts.timeout));
+          return;
+        }
         const { browser } = await connect(opts.session);
         const page = await getActivePage(browser);
 

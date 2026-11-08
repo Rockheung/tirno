@@ -44,3 +44,35 @@ test('a firefox session starts on a scriptable page and stays firefox across res
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('a firefox session snapshots, clicks, fills and waits like a chrome one', { skip: !hasFirefox() }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tirno-ff-'));
+  const bin = path.join(import.meta.dirname, '..', '..', 'bin', 'tirno.js');
+  const tirno = (...args: string[]) => execFileSync('node', [bin, ...args, '-s', 'ffa'], { env: { ...process.env, TIRNO_DIR: dir }, encoding: 'utf8', stdio: 'pipe' });
+  const page = path.join(dir, 'page.html');
+  fs.writeFileSync(page, `<!doctype html><title>t</title>
+    <form onsubmit="event.preventDefault(); out.textContent = 'sent:' + q.value">
+      <label for=q>Email</label><input id=q>
+      <button type=button onclick="this.textContent = 'done'">Go</button>
+      <div style="position:relative"><button type=button>Under</button><div style="position:absolute;inset:0;background:#fff">x</div></div>
+    </form><p id=out></p><div id=re><button>Old</button></div>`);
+  try {
+    execFileSync('node', [bin, 'new', 'ffa', `file://${page}`, '--browser', 'firefox', '--headless'], { env: { ...process.env, TIRNO_DIR: dir }, stdio: 'pipe' });
+    const snap = tirno('snapshot');
+    assert.match(snap, /@\d+\s+textbox "Email"/);
+    const go = /@(\d+)\s+button "Go"/.exec(snap)![1];
+    tirno('click', `@${go}`);
+    assert.equal(tirno('eval', 'document.querySelector("button").textContent').trim(), 'done');
+    tirno('fill', 'textbox', 'Email', 'Ab!');
+    tirno('press', 'Enter');
+    assert.match(tirno('wait-for', '--text', 'sent:Ab!', '--timeout', '5000'), /Text visible/);
+    assert.throws(() => tirno('click', 'button', 'Under'), /covered at/);
+    const old = /@(\d+)\s+button "Old"/.exec(snap)![1];
+    tirno('eval', 're.innerHTML = "<button>New</button>"');
+    assert.throws(() => tirno('click', `@${old}`), /no longer in the document/);
+    assert.throws(() => tirno('wait-for', '--network-idle'), /capability_unsupported/);
+  } finally {
+    try { execFileSync('node', [bin, 'kill', 'ffa'], { env: { ...process.env, TIRNO_DIR: dir }, stdio: 'pipe' }); } catch { /* new failed */ }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
