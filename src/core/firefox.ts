@@ -196,11 +196,17 @@ interface BidiReply { id?: number; type: string; result?: unknown; error?: strin
 interface EvalResult {
   type: 'success' | 'exception';
   result?: { value?: string };
-  exceptionDetails?: { text?: string };
+  exceptionDetails?: { text?: string; exception?: { value?: { message?: string } } };
 }
 
 export class FirefoxPage {
   constructor(private readonly bidi: Bidi, private readonly context: string, private currentUrl: string) {}
+
+  /** 실제 입력 장치 동작. 끝나면 눌린 키·버튼을 놓는다 */
+  async perform(actions: unknown[]): Promise<void> {
+    await this.bidi.send('input.performActions', { context: this.context, actions });
+    await this.bidi.send('input.releaseActions', { context: this.context });
+  }
 
   url(): string {
     return this.currentUrl;
@@ -223,7 +229,7 @@ export class FirefoxPage {
       target: { context: this.context },
       awaitPromise: true,
     });
-    if (r.type === 'exception') throw new TirnoError(r.exceptionDetails?.text ?? 'Expression threw', 'page_threw');
+    if (r.type === 'exception') throw new TirnoError(r.exceptionDetails?.text ?? r.exceptionDetails?.exception?.value?.message ?? 'Expression threw', 'page_threw');
     return r.result?.value === undefined ? undefined : JSON.parse(r.result.value);
   }
 

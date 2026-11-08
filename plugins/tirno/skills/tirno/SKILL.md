@@ -43,9 +43,10 @@ tirno drift [name] [-- <flags>]              # 선언한 플래그 vs 실행 중
 세션 = 독립된 브라우저 프로세스. 각각 고유한 포트, user-data-dir, 브라우저 플래그를 가짐.
 
 엔진은 `new --browser` 로 한 번만 고른다. 값은 세션 메타데이터의 `engine` 에 남고, 이후 명령과
-`restart` 는 세션의 엔진을 따른다. Firefox 세션은 `nav` · `eval` · `screenshot` · `ls` · `restart` ·
-`kill` 만 되고, 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는
+`restart` 는 세션의 엔진을 따른다. Firefox 세션은 `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `ls` · `restart` · `kill` 이
+되고, 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는
 `capability_unsupported` 로 거절한다. 실행 파일은 `--executable-path` 나 `$TIRNO_FIREFOX` 로 지정한다.
+`snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다.
 
 `--` 뒤에 Chrome 플래그를 전달:
 
