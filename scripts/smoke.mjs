@@ -11,6 +11,7 @@
 // 실행: node scripts/smoke.mjs
 //   CHROME=<path>        실행 파일 지정
 //   CHROME_FLAGS="a b"   `--` 뒤로 넘길 chrome 플래그 (CI 컨테이너의 --no-sandbox 등)
+//   TIRNO_BIN=<path>     node bin/tirno.js 대신 컴파일 바이너리로 돌린다
 //
 // 네트워크가 필요하다 — audit(lighthouse)은 http(s) 만 받고, 히스토리 검사는
 // 다른 출처를 한 번 거쳐야 한다. 그래서 example.com 을 쓴다.
@@ -20,6 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const TIRNO = path.join(import.meta.dirname, '..', 'bin', 'tirno.js');
+const [EXE, PRE] = process.env.TIRNO_BIN ? [process.env.TIRNO_BIN, []] : ['node', [TIRNO]];
 const PAGE = 'file://' + path.join(import.meta.dirname, 'fixtures', 'smoke-page.html');
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'tirno-smoke-out-'));
 const extraFlags = (process.env.CHROME_FLAGS ?? '').split(' ').filter(Boolean);
@@ -38,6 +40,7 @@ const env = {
   TIRNO_TRAILS_DIR: path.join(ROOT, 'trails'),
   TIRNO_CACHE_DIR: path.join(ROOT, 'visual-cache'),
   TIRNO_METRICS_FILE: path.join(ROOT, 'metrics.jsonl'),
+  ...(process.env.TIRNO_BIN ? { TIRNO_LIGHTHOUSE: path.join(import.meta.dirname, '..') } : {}),
 };
 
 const HOME_TIRNO = path.join(os.homedir(), '.tirno');
@@ -47,7 +50,7 @@ function run(label, args, { timeout = 60_000, expectFail = false, expectMatch, k
   let exit = 0, out = '', err = '';
   const t0 = Date.now();
   try {
-    out = execFileSync('node', [TIRNO, ...args], {
+    out = execFileSync(EXE, [...PRE, ...args], {
       env, encoding: 'utf8', timeout, stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch (e) {
@@ -79,7 +82,7 @@ function check(label, cond, note = '', { known } = {}) {
 // 검증용 조용한 eval — 결과 목록을 어지럽히지 않는다. 실패하면 null.
 function q(expr, session = 'smoke') {
   try {
-    return execFileSync('node', [TIRNO, 'eval', expr, '-s', session], {
+    return execFileSync(EXE, [...PRE, 'eval', expr, '-s', session], {
       env, encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
   } catch {
@@ -124,7 +127,7 @@ function lsTree(dir, prefix = '') {
 function resolveChrome() {
   if (process.env.CHROME) return process.env.CHROME;
   try {
-    const out = execFileSync('node', [TIRNO, 'chrome', '--json'], {
+    const out = execFileSync(EXE, [...PRE, 'chrome', '--json'], {
       env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
     });
     return JSON.parse(out).resolved?.path ?? null;
@@ -178,7 +181,7 @@ function main() {
   // 우회했는지는 못 본다**: file:// 에는 캐시가 없고, https 로 재봐도 navigation
   // transferSize 는 일반 reload 와 갈리지 않았다(618/618/300, 원 서버 헤더에 좌우됨).
   // 우회 자체는 CDP 호출(Page.reload{ignoreCache:true})을 읽어 확인했다.
-  execFileSync('node', [TIRNO, 'eval', 'window.__survives = 1', ...S], { env, stdio: 'ignore' });
+  execFileSync(EXE, [...PRE, 'eval', 'window.__survives = 1', ...S], { env, stdio: 'ignore' });
   run('reload --hard', ['reload', '--hard', ...S], { expectMatch: /cache bypassed/ });
   check('reload --hard 가 문서를 다시 적재했다', q('typeof window.__survives') === 'undefined',
     `실측: ${q('typeof window.__survives')}`);
@@ -385,7 +388,7 @@ function main() {
   // hover 만 @ref 를 안 받았다 — click/fill 은 받는데. 표면이 갈리면 호출자가 분기해야 한다.
   // 포인터를 먼저 다른 곳으로 뗀다 — 같은 요소 위에 이미 있으면 mouseover 가 다시 뜨지
   // 않아, 검사가 hover 를 안 해도 통과하거나(옛 값) 해도 실패한다.
-  execFileSync('node', [TIRNO, 'hover', '#text', ...S], { env, stdio: 'ignore' });
+  execFileSync(EXE, [...PRE, 'hover', '#text', ...S], { env, stdio: 'ignore' });
   q("document.getElementById('status').textContent = ''");
   // @ref 는 한 스냅샷 안에서만 안전하다. 그 경계를 도구가 지키는지 본다 (#138).
   const snapGen = run('snapshot (세대 확인)', ['snapshot', ...S]);
@@ -415,7 +418,7 @@ function main() {
   // 레시피 (#211) — 기록 · 가림 · @N → role+이름 · 재생 · 실패 지점.
   run('recipe begin', ['recipe', 'begin', 'smoke-flow', '--var', 'TIRNO_SMOKE_SECRET', ...S], { expectMatch: /recording recipe/ });
   const secretEnv = { ...env, TIRNO_SMOKE_SECRET: 'sm0ke-secret' };
-  execFileSync('node', [TIRNO, 'ensure', 'textbox', 'type here', '=', 'sm0ke-secret', ...S], { env: secretEnv, encoding: 'utf8', stdio: 'pipe' });
+  execFileSync(EXE, [...PRE, 'ensure', 'textbox', 'type here', '=', 'sm0ke-secret', ...S], { env: secretEnv, encoding: 'utf8', stdio: 'pipe' });
   const snapR = run('snapshot (recipe 용)', ['snapshot', ...S]);
   const btnR = (/@(\d+)[^\n]*button "click me"/.exec(snapR.out) ?? [])[1];
   run('click @N (기록 중)', ['click', `@${btnR ?? 0}`, ...S]);
@@ -494,6 +497,10 @@ function main() {
   const targets = run('cdp Target.getTargets', ['cdp', '--browser', 'Target.getTargets', '-s', 'al']);
   const extId = (/chrome-extension:\/\/([a-z]+)\//.exec(targets.out) ?? [])[1];
   if (extId) run('cdp Extensions.uninstall', ['cdp', '--browser', 'Extensions.uninstall', JSON.stringify({ id: extId }), '-s', 'al']);
+  for (let i = 0; i < 30; i++) {
+    try { execFileSync(EXE, [...PRE, 'drift', 'al'], { env, stdio: 'ignore' }); } catch { break; }
+    execFileSync('sleep', ['0.1']);
+  }
   run('drift (확장 축 DRIFT → exit≠0)', ['drift', 'al'], { expectFail: true, expectMatch: /extensions\s+✗ DRIFT/ });
   run('nav 밖 (CLI 층 → policy_denied)', ['nav', 'https://www.iana.org/', '-s', 'al'], { expectFail: true, expectMatch: /outside --allow/ });
   check('fetch 밖 (브라우저 층, dNR)', /blocked/.test(q('fetch("https://www.iana.org/").then(r=>"ok "+r.status).catch(e=>"blocked: "+e.message)', 'al') ?? ''), '');
@@ -542,6 +549,7 @@ function main() {
       run('intercept rm ic3', ['intercept', 'rm', 'ic3', ...IC], { expectMatch: /Removed ic3/ });
       fs.writeFileSync(logFile, '');
       run('reload (mock 제거 뒤)', ['reload', ...IC]);
+      for (let i = 0; i < 30 && !got().has('/api/user'); i++) execFileSync('sleep', ['0.1']);
       check('mock 제거 뒤 /api/user 가 서버에 닿는다', got().has('/api/user'));
       run('intercept rm --all', ['intercept', 'rm', '--all', ...IC], { expectMatch: /Removed 2/ });
       run('kill ic', ['kill', 'ic', '--clean']);
@@ -560,7 +568,7 @@ function main() {
     ];
     let out = '';
     try {
-      out = execFileSync('node', [TIRNO, 'mcp', '--session', 'smoke'], { env, input: msgs.map(m => JSON.stringify(m)).join('\n') + '\n', encoding: 'utf8', timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] });
+      out = execFileSync(EXE, [...PRE, 'mcp', '--session', 'smoke'], { env, input: msgs.map(m => JSON.stringify(m)).join('\n') + '\n', encoding: 'utf8', timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] });
     } catch (e) { out = String(e.stdout ?? ''); }
     const replies = out.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
     const by = Object.fromEntries(replies.map(r => [r.id, r]));
@@ -570,7 +578,7 @@ function main() {
     check('mcp 실패는 isError 와 code', by[4]?.result?.isError === true && by[4].result._meta?.code === 'target_not_found', JSON.stringify(by[4]).slice(0, 160));
   }
   // 플러그인 (#216) — lighthouse 는 번들에 없다. 스모크의 audit 은 레포의 node_modules 로 돈다.
-  run('plugin ls', ['plugin', 'ls'], { expectMatch: /audit.*found \((repo|plugin|global)\)/ });
+  run('plugin ls', ['plugin', 'ls'], { expectMatch: /audit.*found \((env|repo|plugin|global)\)/ });
   // 저널과 JSON 봉투 (#217)
   const jl = run('journal', ['journal', ...S]);
   check('저널이 성공·실패를 순서대로 낸다', /✓ click button click me/.test(jl.out) && /✗ click button Nope.*code:target_not_found/.test(jl.out), jl.out.slice(0, 300));
@@ -579,9 +587,9 @@ function main() {
   run('recipe rm from-journal', ['recipe', 'rm', 'from-journal']);
   {
     let out = '';
-    try { out = execFileSync('node', [TIRNO, 'click', 'button', 'click me', ...S], { env: { ...env, TIRNO_JSON: '1' }, encoding: 'utf8', stdio: 'pipe' }); } catch (e) { out = String(e.stdout); }
+    try { out = execFileSync(EXE, [...PRE, 'click', 'button', 'click me', ...S], { env: { ...env, TIRNO_JSON: '1' }, encoding: 'utf8', stdio: 'pipe' }); } catch (e) { out = String(e.stdout); }
     check('TIRNO_JSON=1 성공 봉투 {ok:true, cmd, output, delta}', (() => { try { const j = JSON.parse(out.trim()); return j.ok === true && j.cmd === 'click' && /Clicked/.test(j.output) && 'delta' in j; } catch { return false; } })(), out.slice(0, 160));
-    try { out = execFileSync('node', [TIRNO, 'forms', '--json', ...S], { env: { ...env, TIRNO_JSON: '1' }, encoding: 'utf8', stdio: 'pipe' }); } catch (e) { out = String(e.stdout); }
+    try { out = execFileSync(EXE, [...PRE, 'forms', '--json', ...S], { env: { ...env, TIRNO_JSON: '1' }, encoding: 'utf8', stdio: 'pipe' }); } catch (e) { out = String(e.stdout); }
     check('--json 출력은 봉투의 data 로 들어간다', (() => { try { const j = JSON.parse(out.trim()); return j.ok === true && Array.isArray(j.data); } catch { return false; } })(), out.slice(0, 160));
   }
   run('journal --clear', ['journal', '--clear', ...S], { expectMatch: /cleared/ });
@@ -986,7 +994,7 @@ function main() {
   const pidBefore = renamedLs?.find(s => s.name === 'smoke-renamed')?.pid;
   run('restart', ['restart', 'smoke-renamed', PAGE, ...LAUNCH], { timeout: 120_000 });
   let restartLs = null;
-  try { restartLs = JSON.parse(execFileSync('node', [TIRNO, 'ls', '--json'], { env, encoding: 'utf8' })); } catch { /* ignore */ }
+  try { restartLs = JSON.parse(execFileSync(EXE, [...PRE, 'ls', '--json'], { env, encoding: 'utf8' })); } catch { /* ignore */ }
   const pidAfter = restartLs?.find(s => s.name === 'smoke-renamed')?.pid;
   check('restart 가 새 프로세스로 되살렸다',
     typeof pidAfter === 'number' && pidAfter !== pidBefore && q('document.title', 'smoke-renamed') === 'tirno smoke',
@@ -1003,7 +1011,7 @@ function main() {
     run('restart (옵션 없이)', ['restart', 'smokefixed', '--headless', '--ephemeral',
       ...(extraFlags.length ? ['--', ...extraFlags] : [])], { timeout: 120_000 });
     let fixedMeta = null;
-    try { fixedMeta = JSON.parse(execFileSync('node', [TIRNO, 'export', 'smokefixed'], { env, encoding: 'utf8' })); } catch { /* ignore */ }
+    try { fixedMeta = JSON.parse(execFileSync(EXE, [...PRE, 'export', 'smokefixed'], { env, encoding: 'utf8' })); } catch { /* ignore */ }
     // --executable-path 는 메타에 저장돼 restart 가 물려받아야 한다 — 잃으면 다른 브라우저로 되살린다.
     check('restart 가 --executable-path 를 물려받았다', fixedMeta?.executablePath === CHROME_BIN,
       `실측: ${fixedMeta?.executablePath ?? '(없음)'}`);
@@ -1047,7 +1055,7 @@ try {
 } finally {
   // 실패 경로에서도 크롬은 반드시 정리한다 — 스모크가 죽어도 브라우저가 남으면 안 된다.
   try {
-    execFileSync('node', [TIRNO, 'kill', '--all', '--clean'], {
+    execFileSync(EXE, [...PRE, 'kill', '--all', '--clean'], {
       env, encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'],
     });
   } catch { /* 남은 세션이 없으면 그걸로 족하다 */ }

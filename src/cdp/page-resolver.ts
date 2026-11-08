@@ -121,11 +121,11 @@ export async function listPages(browser: Browser): Promise<PageEntry[]> {
   const pages = await browser.pages();
   const result: PageEntry[] = [];
   for (const page of pages) {
-    result.push({
-      id: await pageHandle(page),
-      url: page.url(),
-      title: await page.title(),
-    });
+    try {
+      result.push({ id: await pageHandle(page), url: page.url(), title: await page.title() });
+    } catch {
+      continue; // 읽는 사이 닫혔다
+    }
   }
   return result;
 }

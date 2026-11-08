@@ -5,6 +5,7 @@
  * 만든다, (2) 명령이 어떻게 끝났든(postAction 이든 fail() 이든) 저널에 한 줄 적는다.
  * 스트림 명령(watch · mcp · screencast)은 가로채지 않는다 — 그 stdout 은 프로토콜이다.
  */
+import { format } from 'node:util';
 import * as journal from './journal.js';
 import type { Delta } from '../cdp/action-delta.js';
 
@@ -39,7 +40,12 @@ export function beginCommand(opts: { session: string | null; cmd: string; argv: 
       }
       return (original as (c: string | Uint8Array, ...r: unknown[]) => boolean)(chunk, ...rest);
     }) as typeof out.write;
-    ctx.restore = () => { (out as unknown as { write: typeof out.write }).write = original; };
+    const log = console.log;
+    console.log = (...args: unknown[]) => { out.write(format(...args) + '\n'); };
+    ctx.restore = () => {
+      (out as unknown as { write: typeof out.write }).write = original;
+      console.log = log;
+    };
   }
   current = ctx;
 }

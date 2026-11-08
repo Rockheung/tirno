@@ -103,3 +103,17 @@ test('프로토콜이 아닌 메시지는 무시한다 — 연결을 죽이지 �
   t.onmessage?.('not json');
   assert.ok(!c.isClosed);
 });
+
+test('타깃이 떨어지면 그 세션에서 기다리던 호출이 깨어난다 — 다른 세션은 그대로', async () => {
+  const t = fakeTransport();
+  const c = new CdpConnection(t);
+  const attaching = c.attach('T1');
+  t.push({ id: 1, result: { sessionId: 'S1' } });
+  const s = await attaching;
+  const dying = s.send('Runtime.evaluate', { expression: 'document.title' });
+  const other = c.send('Browser.getVersion');
+  t.push({ method: 'Target.detachedFromTarget', params: { sessionId: 'S1', targetId: 'T1' } });
+  await assert.rejects(dying, /detached while waiting for Runtime\.evaluate/);
+  t.push({ id: 3, result: { product: 'Chrome/1' } });
+  assert.equal((await other).product, 'Chrome/1');
+});

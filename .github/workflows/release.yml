@@ -16,7 +16,7 @@ on:
   # 이 파이프라인이 바뀌면 PR 에서 스스로 돈다. 릴리즈 날에 처음 돌려보는 것은
   # 확인이 아니라 도박이다.
   pull_request:
-    paths: ['.github/workflows/release.yml']
+    paths: ['.github/workflows/release.yml', 'scripts/smoke.mjs']
 
 permissions:
   contents: write
@@ -68,8 +68,42 @@ jobs:
           name: tirno-${{ matrix.target }}
           path: tirno-${{ matrix.target }}
 
-  release:
+  # 바이너리에서만 깨지는 것이 있다(bun 의 console.log 가 stdout 가로채기를 건너뛰는 것 등).
+  # 그래서 노드로 도는 CI 스모크와 별도로, 배포할 그 바이너리로 스모크 전체를 돌린다.
+  smoke-binary:
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: bun-linux-x64
+            os: ubuntu-latest
+            chrome-flags: '--no-sandbox --disable-dev-shm-usage'
+          - target: bun-darwin-arm64
+            os: macos-latest
+            chrome-flags: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      # audit 이 쓰는 lighthouse 는 레포의 node_modules 에서 온다
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: tirno-${{ matrix.target }}
+          path: bin-dist
+      - run: chmod +x bin-dist/tirno-${{ matrix.target }}
+      - name: 바이너리 스모크
+        env:
+          TIRNO_BIN: ${{ github.workspace }}/bin-dist/tirno-${{ matrix.target }}
+          CHROME_FLAGS: ${{ matrix.chrome-flags }}
+        run: node scripts/smoke.mjs
+
+  release:
+    needs: [build, smoke-binary]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

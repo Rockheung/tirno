@@ -41,6 +41,7 @@ export class CdpError extends Error {
 
 interface Pending {
   method: string;
+  sessionId?: string;
   resolve: (v: unknown) => void;
   reject: (e: Error) => void;
 }
@@ -187,7 +188,7 @@ export class CdpConnection {
     const message: Record<string, unknown> = { id, method, params: params ?? {} };
     if (sessionId) message.sessionId = sessionId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { method, resolve, reject });
+      this.pending.set(id, { method, sessionId, resolve, reject });
       try {
         this.transport.send(JSON.stringify(message));
       } catch (e) {
@@ -242,6 +243,11 @@ export class CdpConnection {
       const { sessionId } = msg.params as { sessionId: string };
       this.sessions.get(sessionId)?.markDetached();
       this.sessions.delete(sessionId);
+      for (const [id, p] of this.pending) {
+        if (p.sessionId !== sessionId) continue;
+        this.pending.delete(id);
+        p.reject(new Error(`session ${sessionId} detached while waiting for ${p.method}`));
+      }
     }
     const target = msg.sessionId ? this.sessions.get(msg.sessionId) : this.root;
     target?.dispatch(msg.method, msg.params);
