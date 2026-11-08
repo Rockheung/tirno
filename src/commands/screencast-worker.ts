@@ -91,6 +91,7 @@ export async function runScreencastWorker(args: ScreencastWorkerOptions): Promis
     maxHeight: args.maxHeight,
     everyNthFrame: 1, // we filter on our side via everyNth so frame numbers stay sane
   });
+  fs.writeFileSync(path.join(args.out, '.started'), new Date().toISOString());
 
   // Idle forever — wait for SIGTERM.
   await new Promise(() => { /* block */ });

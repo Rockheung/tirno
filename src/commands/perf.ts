@@ -7,6 +7,7 @@ import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { getActivePage } from '../cdp/page-resolver.js';
 import * as store from '../core/session-store.js';
 import { selfArgs } from '../core/update.js';
+import { waitForWorker } from '../core/worker-ready.js';
 
 import { success, info, fail } from '../output/formatter.js';
 import { formatTable } from '../output/formatter.js';
@@ -370,7 +371,7 @@ export function registerPerfCommands(program: Command): void {
     .option('--categories <list>', 'Comma-separated trace categories (override defaults)')
     .option('--screenshots', 'Include screenshots in trace', true)
     .option('--no-screenshots', "Don't include screenshots")
-    .action((pathArg: string | undefined, opts) => {
+    .action(async (pathArg: string | undefined, opts) => {
       try {
         const meta = resolveSession(opts.session);
         const outPath = pathArg ?? `/tmp/tirno-trace-${Date.now()}.json`;
@@ -383,6 +384,7 @@ export function registerPerfCommands(program: Command): void {
           }
         }
 
+        fs.rmSync(`${outPath}.started`, { force: true });
         const args = selfArgs([
           '__trace-worker',
           '--ws', meta.wsEndpoint,
@@ -398,6 +400,7 @@ export function registerPerfCommands(program: Command): void {
 
         if (typeof child.pid !== 'number') throw new Error('Failed to spawn trace worker');
         fs.writeFileSync(pidFile, String(child.pid));
+        await waitForWorker(child.pid, `${outPath}.started`, `${outPath}.log`);
         success(`Trace started (PID ${child.pid}) → ${outPath}`);
         info(`Stop with: tirno trace stop ${outPath}`);
       } catch (e) {
