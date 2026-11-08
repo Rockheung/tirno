@@ -13,9 +13,9 @@ tirno — raw CDP 위의 다중 세션 브라우저 자동화 CLI. **이 도구�
 ```bash
 npm install
 npm run build            # tsc → dist/. 안 하면 bin/tirno.js 가 아무것도 못 한다
-npm test                 # 유닛 190건 (~0.6s, Chrome 안 띄움)
+npm test                 # 유닛 580여 건 (~10s, Chrome 안 띄움 — Firefox 가 있으면 Firefox 세션 테스트가 돈다)
 npm run lint             # eslint, 경고 0 유지
-node scripts/smoke.mjs   # 전 명령 190건 (~55s, 진짜 Chrome + 네트워크)
+node scripts/smoke.mjs   # 전 명령 449건 (~150s, 진짜 Chrome + 네트워크)
 ```
 
 `npm test` 와 스모크 **둘 다 PR 게이트**다(`.github/workflows/ci.yml`).
@@ -48,7 +48,7 @@ tirno kill s1 --clean
 
 - **`-s` 는 하위 명령 뒤에 온다.** `tirno eval "1+1" -s s1` ✓ / `tirno -s s1 eval …` ✗
 - **`@ref` 는 세션마다·페이지마다 다시 찍는다.** 번호가 같아도 매핑은 세션별이고 이동하면
-  무효다. `No node with given id found` 가 뜨면 `snapshot` 을 다시. 여러 세션이면
+  무효다. `… no longer in the document — … Run "tirno snapshot"` 이 뜨면 `snapshot` 을 다시. 여러 세션이면
   `tirno broadcast snapshot --group <g>`
 - **chrome 플래그는 `--` 뒤로.** `tirno new s1 -- --no-proxy-server`
 - **실패는 전부 exit 1, 종류는 `code:` 로.** stderr 마지막 줄이 `code: <snake_case>` 다 —

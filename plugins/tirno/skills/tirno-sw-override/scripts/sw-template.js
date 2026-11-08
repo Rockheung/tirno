@@ -66,7 +66,7 @@ self.addEventListener('fetch', e => {
   //
   // 그래서 **navigate 요청에 한해**, 접두사를 밝힌 레이어가 자기 문서를 낸다. 자산까지
   // 이렇게 하면 없는 청크가 200 text/html 로 위장되어 훨씬 나쁜 실패가 된다.
-  // 접두사를 안 밝힌 레이어는 예전대로 통과시킨다 — 목록에 없으면 원본이 이 도구의 규율이고,
+  // 접두사를 안 밝힌 레이어는 통과시킨다 — 목록에 없으면 원본이 이 도구의 규율이고,
   // 이것은 부르는 쪽이 명시적으로 켠 예외다.
   if (e.request.mode === 'navigate') {
     const fb = state.layers.find(l =>
@@ -142,11 +142,7 @@ async function fromLayer(layer, pathname, request) {
   const h = new Headers(hit.headers);
   h.set('x-served-by', 'tirno-sw/' + CONFIG.buildId);
   h.set('x-tirno-layer', layer.name);
-  // 문서 응답의 헤더는 JS 에서 못 읽는다 — 그래서 `sw status` 는 문서 URL 을 다시
-  // 받아 x-served-by 를 봤고, 그 재fetch 는 non-navigate 라 navigateFallback 이 덮은
-  // 문서를 원본으로 오판했다 (#132).
-  //
-  // Server-Timing 은 다르다. Navigation Timing 엔트리에 그대로 실리므로(same-origin),
+  // Server-Timing 은 Navigation Timing 엔트리에 그대로 실리므로(same-origin),
   // **재fetch 없이 이 문서가 받은 바로 그 응답**을 읽을 수 있다. 실측으로 확인했다.
   h.set('Server-Timing', 'tirno-sw;desc="' + CONFIG.buildId + '"');
   return new Response(hit.body, { status: 200, headers: h });

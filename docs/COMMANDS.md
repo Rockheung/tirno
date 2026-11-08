@@ -11,7 +11,7 @@
 | `new <name> [url] [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨). `[url]` 을 주면 **그 페이지가 커밋될 때까지 기다렸다가** 돌아온다(`--boot-timeout <ms>`, 기본 15000; 못 기다리면 세션은 그대로 두고 그 사실을 말한다) |
 | `new <name> --browser firefox` | Firefox 세션 생성. 엔진은 세션 메타데이터에 남고 이후 명령과 `restart` 가 따른다. `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `ls` · `restart` · `kill` 이 되고(`snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다. `@ref` 는 페이지 전역의 `Symbol.for('tirno.refs')` 에 심은 WeakRef 로 가리키므로 페이지 스크립트가 볼 수 있고, 이동하면 사라진다), 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는 `capability_unsupported` 로 거절한다 |
 | `new <name> <url> --browser safari` | Safari Technology Preview 세션. 되는 명령과 계산 방식은 Firefox 와 같다. safaridriver 는 세션을 하나만 연다. `--headless` · `--` 뒤 플래그 · `--port` · `--extensions` · 정책은 `capability_unsupported`. 입력은 classic WebDriver 로 보낸다(STP 의 BiDi 는 포인터를 못 받고, 키 입력은 OS 입력기를 탄다). 세션은 `acceptInsecureCerts` 로 열려 신뢰되지 않은 https 인증서도 받는다(Chrome 은 기준 인자 `--ignore-certificate-errors`, Firefox 도 `acceptInsecureCerts`). 드라이버는 `--executable-path` 나 `$TIRNO_SAFARI` |
-| `ls` | 세션 목록 (engine, port, status, **owner**, proxy, emulation, last access) |
+| `ls` | 세션 목록 (engine, port, status, **owner**, proxy, emulation, policy, last access). group 이 있는 세션이 있으면 GROUP 열, `--flags` 를 주면 FLAGS 열이 붙는다 |
 | `attach <name>` | active 세션 변경 |
 | `connect <name> <endpoint>` | **tirno 가 띄우지 않은 브라우저**를 외부 세션으로 등록 — adb 포워드된 안드로이드 크롬, ssh 터널, 컨테이너. `<endpoint>` 는 포트 · `host:port` · `http://…` · `/json/version` 의 `ws://…` 어느 것이든. 관측·조작은 다 되고 `kill`/`restart` 는 항목만 지운다(브라우저는 손대지 않음). 프로필 디렉터리를 만들지 않는다 |
 | `kill [name]` | 세션 종료. `foreign`/`ambiguous`면 거부. `external` 은 등록만 해제 |
@@ -37,9 +37,9 @@ tirno new qa https://app --confirm destructive              # 위험해 보이�
 
 | 정책 | CLI 층 (명령 진입 전, argv 만) | 브라우저 층 |
 |---|---|---|
-| `--allow` | `nav` · `new` · `ensure url` 의 URL 이 목록 밖이면 거부 (`policy_denied`). `a.com` 은 `x.a.com` 도 | `headers` 확장에 declarativeNetRequest **차단** 규칙 — 문서·스크립트·XHR·WebSocket·beacon 전부. 스크립트가 여는 이동도 막힌다(`chrome-error://`). 확장을 켠 채로 뜬다. dNR 이 못 보는 WebRTC 는 `--webrtc-ip-handling-policy=disable_non_proxied_udp` 로 |
-| `--read-only` | `click` `fill` `type` `press` `upload` `drag` `select` `eval` `ensure` `apply` `recipe run` `replay` `inject` `cdp` 거부. `eval` 은 쓰기인지 알 수 없어 통째로 — `--allow-eval` 로 명시 | — |
-| `--confirm destructive` | `click`/`ensure`/`press` 의 대상 **이름**이 delete·remove·pay·purchase·checkout·transfer·unsubscribe·삭제·결제·구매·송금·해지… 에 맞으면 `--confirm` 없이 거부. role+이름과 `@N`(저장된 이름)만 본다 — **셀렉터 뒤의 이름은 모른다** | — |
+| `--allow` | `nav` · `new` · `new-tab` · `ensure url` 의 URL 이 목록 밖이면 거부 (`policy_denied`). `a.com` 은 `x.a.com` 도 | `headers` 확장에 declarativeNetRequest **차단** 규칙 — 문서·스크립트·XHR·WebSocket·beacon 전부. 스크립트가 여는 이동도 막힌다(`chrome-error://`). 확장을 켠 채로 뜬다. dNR 이 못 보는 WebRTC 는 `--webrtc-ip-handling-policy=disable_non_proxied_udp` 로 |
+| `--read-only` | `click` `fill` `type` `press` `upload` `drag` `select` `eval` `ensure` `replay` `cdp` 거부. `recipe run`·`apply` 는 각 단계가 자식 명령으로 같은 검사를 받는다(`nav` 단계는 통과). `inject` 는 막지 않는다. `eval` 은 쓰기인지 알 수 없어 통째로 — `--allow-eval` 로 명시 | — |
+| `--confirm destructive` | `click`/`ensure` 의 대상 **이름**이 delete·remove·pay·purchase·checkout·transfer·unsubscribe·삭제·결제·구매·송금·해지… 에 맞으면 `--confirm` 없이 거부. role+이름과 `@N`(저장된 이름)만 본다 — **셀렉터 뒤의 이름은 모른다**. `press` 는 대상 이름이 없어 검사하지 않는다 | — |
 
 `--destructive-pattern <regex>` 로 목록에 덧붙인다. 오탐은 `--confirm` 으로 넘기면 되므로
 목록은 보수적이다. 거부는 `code: policy_denied`, `data.policy` 에 어느 정책인지.
@@ -102,10 +102,8 @@ tirno new smoke https://example.com --headless      # 이제 -- --no-sandbox 없
 
 #### 브라우저가 없으면 — `tirno setup`
 
-찾는 것과 **받아오는 것**은 다른 문제다. tirno 의 셀링 포인트는 "런타임이 바이너리에
-들어 있어 Node 를 안 깔아도 된다" 인데, 런타임 의존성을 없앤 자리를 브라우저 의존성이
-그대로 채우고 있었다. linux-arm64 에는 Google Chrome 이 **아예 없어서**, 사용자가
-Chromium 을 어디서 어떻게 가져올지부터 판단해야 한다.
+찾는 것과 **받아오는 것**은 다른 문제다. linux-arm64 에는 Google Chrome 이 **없어서**
+Chromium 을 따로 받아야 한다.
 
 ```bash
 tirno setup --check     # 진단만: 어디를 봤고, 뭘 찾았고, 왜 실패했나
@@ -113,8 +111,7 @@ tirno setup             # 없으면 받아온다 (묻는다). --yes 로 안 묻�
 tirno setup --force     # 이미 있어도 새로 받는다
 ```
 
-받은 것은 `~/.tirno/chrome/<label>/` 에 두고 설정에 적는다. **sudo 가 전혀 필요 없다** —
-자동 탐색이 실패했을 때 사용자가 시스템 경로에 손대는 쪽으로 몰리는 것이 문제였다.
+받은 것은 `~/.tirno/chrome/<label>/` 에 두고 설정에 적는다. **sudo 가 전혀 필요 없다**.
 
 출처가 둘인 것은 구글 사정이다:
 
@@ -154,9 +151,10 @@ tirno 뿐이다.
 명시적으로 가리킨 경로(플래그·env·설정)가 틀렸으면 **다음 후보로 넘어가지 않고 실패한다.**
 조용히 다른 chrome 으로 넘어가면, 지정한 바이너리가 돌고 있다고 믿은 채 다른 것을 관측하게 된다.
 
-탐색 목록(linux)에는 배포판 `chromium`, snap, 그리고 playwright·puppeteer 캐시가 들어 있다:
+탐색 목록(linux)에는 `tirno setup` 이 받은 것, 배포판 `chromium`, snap, 그리고 playwright·puppeteer 캐시가 들어 있다:
 
 ```
+~/.tirno/chrome/*/chrome-linux*/chrome
 /usr/bin/google-chrome · google-chrome-stable · chromium · chromium-browser
 /snap/bin/chromium · /usr/lib/chromium/chromium
 ~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome
@@ -186,9 +184,7 @@ pid 생존 ∧ 그 pid 가 그 포트를 LISTEN ∧ 그 프로세스의 `--user-
 | `unknown` | **관측 자체가 안 됐다** — lsof 가 없거나 `/proc` 을 못 읽음 | 표시만. connect·kill·gc 전부 거부. 사유에 고칠 방법이 붙는다 |
 | `external` | `tirno connect` 로 붙은 것 — 3중 일치를 물을 수 없고 `/json/version` 이 답하는가만 본다 | connect / 조작 전부. `kill` 은 항목 해제, `restart`·`drift` 는 "external 이라 불가" 로 거부. 안 답하면 `ghost` |
 
-`unknown` 이 따로 있는 이유: 예전에는 lsof 가 없으면 리스너 목록이 `[]` 로 접혀, 살아 있는
-세션이 `foreign`("nothing listens") 이나 `ghost` 로 읽혔다(#186). 관측 도구의 부재와
-프로세스의 부재는 다른 답이어야 한다.
+`unknown` 이 따로 있는 것은 관측 도구의 부재와 프로세스의 부재가 다른 답이어야 하기 때문이다.
 
 리스너를 보는 백엔드는 둘이다. linux 에서는 `/proc/net/tcp{,6}` + `/proc/<pid>/fd` 를
 직접 읽는다 — 외부 바이너리가 없고, `lsof` 가 없는 최소 이미지(`debian:slim` · distroless)
@@ -209,11 +205,11 @@ tirno drift d1 -- --host-resolver-rules="…"   # 지금 원하는 flags vs 실�
 ```
 → changed  --host-resolver-rules: expected MAP example.com 10.0.0.1, running MAP example.com 127.0.0.1
 ✗ 'd1' has drifted. Chrome only reads these at launch — restart to apply:
-→   tirno restart d1 https://example.com --headless --ephemeral -- --host-resolver-rules='MAP example.com 10.0.0.1'
+→   tirno restart d1 --headless --ephemeral -- --host-resolver-rules='MAP example.com 10.0.0.1'
 ```
 
-제안 명령은 그대로 복붙하면 된다 — headless 여부·ephemeral 프로필·시작 URL·group 을
-모두 실어 보내므로 세션의 성격이 바뀌지 않는다.
+제안 명령은 headless 여부·ephemeral 프로필·group 을 싣는다. `new <name> <url>` 로 준 시작
+URL 은 싣지 않으므로 필요하면 덧붙인다.
 
 값에 `" --"` 가 든 플래그(`--user-agent="tirno --probe"` 등)는 `ps` 출력에서 되읽을 수
 없어 `unreadable` 로 따로 보고하고 drift 로 세지 않는다. 거짓 일치도 아니고, 재기동해도
@@ -268,7 +264,7 @@ UI 가 떴고, 프로필에 `translate_ignored_count_for_language` 가 남아 �
 안 돈다. **성공한 것처럼 보이는 응답이 돌아오는 것**이 이 실패의 고약한 점이라, 기동 때
 빼는 것 말고는 길이 없다.
 
-`--load-extension` 자체도 Chrome 151 에서 죽었다(tirno 를 안 거친 크롬에서도 안 먹는다).
+`--load-extension` 자체도 Chrome 152 에서 죽었다(tirno 를 안 거친 크롬에서도 안 먹는다).
 그래서 로드는 CDP 로 한다:
 
 ```bash
@@ -379,7 +375,7 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 | `screenshot [--full] [--out path]` | 스크린샷 |
 | `snapshot [--verbose] [--no-cache]` | a11y 트리 + visual cache 적재. 기본은 **조작 가능한 것 위주**로 접는다(아래). 끝줄에 **세대**를 밝힌다 |
 | `snapshot --selector <css>` · `--ref @N` | **부분 트리**만. 번호는 그 안에서 `@1` 부터 다시 매긴다(ref store 도 그것만 든다). 상한을 올리기 전에 먼저 좁혀라 |
-| `snapshot --max-output <chars>` | 줄 경계에서 자르고 **마지막 줄에 반드시** `… truncated: showed N of M lines (a/b chars)` 를 낸다. env `TIRNO_MAX_OUTPUT`. `eval` 도 같은 옵션 — `--json` 이면 `{"truncated":…,"partial":"…"}` 로 감싸 파싱은 깨지지 않는다 |
+| `snapshot --max-output <chars>` | 줄 경계에서 자르고 **트리 끝에 반드시** `… truncated: showed N of M lines (a/b chars)` 를 낸다(세대·접힘 줄은 그 뒤에 온다). env `TIRNO_MAX_OUTPUT`. `eval` 도 같은 옵션 — `--json` 이면 `{"truncated":…,"partial":"…"}` 로 감싸 파싱은 깨지지 않는다 |
 | `snapshot --content-boundaries` | 트리를 `--- a11y tree (untrusted) begin <nonce> ---` / `--- … end <nonce> ---` 로 감싼다. env `TIRNO_CONTENT_BOUNDARIES=1`. 페이지가 쓴 문자열과 tirno 의 말을 가르는 **표식**이지 보안 경계가 아니다. `eval` 도 같다 |
 | `console [--type <t>]` | 콘솔 메시지 (한정적 — stateless 모델 한계) |
 | `network [--type <t>] [--no-reload]` | reload 하고 networkidle2 까지의 요청 캡처. **`--no-reload` 는 리로드하지 않는다** — 페이지 상태를 잃지 않는 대신, 그 창(`--ms`) 동안 페이지가 스스로 내는 요청만 잡는다 |
@@ -389,17 +385,16 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 
 #### net — 본 것의 바이트
 
-`network` 는 **reload 해서 그 한 번의 왕복**을 본다. 그것이 기본값인 것이 실사용에서
-아팠다 — 캐러셀을 7번 넘겨둔 페이지에서 `network` 를 부르면 **1번으로 돌아간다.** 이미
-본 리소스를 회수하려는 바로 그 순간에, 그것을 보게 만든 상태가 사라진다. `--no-reload`
-가 그 자리이고, 그때는 그 창 동안 페이지가 스스로 내는 요청만 잡힌다.
+`network` 는 **reload 해서 그 한 번의 왕복**을 본다. reload 하므로 페이지 상태(캐러셀 위치
+등)를 잃는다. 잃으면 안 될 때는 `--no-reload` 이고, 그때는 그 창 동안 페이지가 스스로 내는
+요청만 잡힌다.
 
 `net` 은 **이미 받아둔 것**을 본다 — reload 하지 않고, 요청 시점에 듣고 있지 않아도 되고,
 `click` 으로 13라운드 돌며 여러 명령에 걸쳐 쌓인 것도 그대로 남아 있다. 명령마다 CDP 를
 붙였다 끊는 구조에서 그게 가능한 이유는 **렌더러가 그 응답을 들고 있기** 때문이다
 (`Page.getResourceTree` / `Page.getResourceContent`).
 
-건별 본문은 예전부터 `network --show <id> --json` 이 `body`(+`bodyBase64`)로 준다.
+건별 본문은 `network --show <id> --json` 이 `body`(+`bodyBase64`)로 준다.
 `net save` 가 더하는 것은 **일괄**이다 — N건을 파일로 떨구려고 `--show` 를 인덱스로 세며
 반복하면, 그 사이 캡처가 갱신될 때 인덱스가 어긋나고 확장자·파일명도 직접 정해야 한다.
 
@@ -411,10 +406,9 @@ tirno net save 'scontent*.jpg' --out ./out
 패턴은 URL **어디에나** 걸린다(`*`·`?` 만 와일드카드). 양끝이 열려 있어야 서명 URL 처럼
 토큰이 길게 붙는 주소에 `scontent*.jpg` 가 걸린다.
 
-예전에는 `eval` 로 `<img src>` 를 긁어 툴 바깥에서 `curl` 로 받아야 했고, 그 우회는 세 가지를
-깨뜨렸다:
+`eval` 로 `<img src>` 를 긁어 툴 바깥에서 `curl` 로 받는 대신 `net` 을 쓰는 이유는 셋이다:
 
-1. **브라우저가 이미 가진 상태를 버린다.** 쿠키·Referer·UA 를 curl 쪽에서 손으로 재구성해야
+1. **curl 은 브라우저가 이미 가진 상태를 버린다.** 쿠키·Referer·UA 를 curl 쪽에서 손으로 재구성해야
    하고, Referer 를 안 붙이면 CDN 이 막는다. 로그인이 필요한 리소스면 세션까지 옮겨야 하는데,
    그것은 세션 격리(로그인이 세션에 산다)를 정면으로 무너뜨린다
 2. **서명 URL 이 휘발한다.** 수집 시점과 다운로드 시점 사이에 만료 레이스가 있다
@@ -429,17 +423,16 @@ FROM 열이 그 바이트의 출처다. `cache` 는 브라우저가 실제로 �
 가 전부 브라우저의 것이다.
 
 파일 이름은 URL 경로의 basename 이다 — 쿼리는 뗀다(만료 토큰이지 이름이 아니고, 파일
-시스템에 못 쓰는 문자가 들어 있다). 확장자가 없으면 mime 에서 채우고, 이름이 겹치면 번호를
-붙인다. **덮어쓰지 않는다** — 13장을 받으려던 명령이 1장을 남기는 것이 이 자리의 조용한
-실패 형태다.
+시스템에 못 쓰는 문자가 들어 있다). 확장자가 mime 과 맞지 않으면(없을 때 포함) mime 의 확장자를
+덧붙인다. 한 번의 호출 안에서 겹치는 이름에만 번호를 붙이고, `--out` 에 이미 있는 같은 이름의
+파일은 덮어쓴다.
 
 `--limit`(기본 200) 을 넘으면 **한 개도 쓰지 않고 멈춘다.** 패턴이 넓은 줄 모르고 부른 것과
 정말 그만큼 원한 것은 다르고, 그 차이는 디렉터리에 2000개가 쌓인 뒤에는 되돌리기 어렵다.
 
 #### @ref 는 한 스냅샷 안에서만 안전하다 — 세대
 
-`snapshot` 은 매번 **세대(generation)** 를 올리고 끝줄에 그것을 밝힌다. 번호가 어느
-스냅샷의 것인지가 사용자에게 안 보이는 것이 문제의 절반이었다.
+`snapshot` 은 매번 **세대(generation)** 를 올리고 끝줄에 그것을 밝힌다.
 
 ```
 @7      link "Learn more"
@@ -454,29 +447,25 @@ FROM 열이 그 바이트의 출처다. `cache` 는 브라우저가 실제로 �
 | 요소의 a11y 역할·이름 비교 | 같은 문서 안에서 DOM 이 갈아치워진 경우(SPA 라우팅) |
 
 **둘 다 필요하다.** SPA 라우팅은 loaderId 를 안 바꾸고, 반대로 `DOM.describeNode` 는
-**분리된 노드에도 성공한다** — 그래서 예전에는 클릭이 "성공" 하고 아무 일도 안 일어났다.
+**분리된 노드에도 성공한다** — loaderId 만 보면 분리된 노드 클릭이 성공으로 보고된다.
 a11y 쪽은 같은 상황에서 role 이 `none` 으로 무너지므로, 그것이 신호가 된다.
 
 ```
 $ tirno click @7
 ✗ Refusing @7: @7 was button "click me", and that node is now (nothing) — the page
-  changed under the snapshot. Run "tirno snapshot" and use the refs it prints.
+  changed under the snapshot. Run "tirno snapshot" and use the refs it prints. (--stale-ok proceeds anyway)
 ```
 
 `@v3:7` 로 세대를 못 박으면 CDP 를 붙이기도 전에 거부한다. `@7` 도 위 두 검사는 똑같이
 받는다 — 세대 표기는 검사를 **더** 하는 수단이지, 검사가 걸리는 유일한 조건이 아니다.
-문서와 스킬에 적힌 `@7` 이 갑자기 틀린 문법이 되지 않는 이유이기도 하다.
 
 라벨이 정상적으로 바뀌는 자리(카운터 버튼 등)에서는 `--stale-ok` 로 진행할 수 있다.
 거부 메시지가 "무엇이 무엇으로 바뀌었는지" 를 둘 다 적는 것은 그 판단을 바로 하라는 뜻이다.
 
-이 규율은 새로 만든 것이 아니다 — `drift` 는 선언한 chrome flag 와 실제가 다르면 exit 1
-이고, 소유권 판정은 셋이 안 맞으면 붙지도 죽이지도 않는다. 그 규율이 ref 에만 빠져 있었다.
-
 #### net export — HAR
 
-`network --show <id> --json` 은 건별로 헤더·상태·본문을 다 준다. 없던 것은 **세션 전체를
-하나로 넘길 형식**이었다. HAR 은 이 영역의 유일한 상호운용 포맷이라, 한 파일이 나오면
+`network --show <id> --json` 은 건별로 헤더·상태·본문을 다 준다. `net export` 는 **세션 전체를
+HAR 한 파일로** 넘긴다. HAR 은 이 영역의 유일한 상호운용 포맷이라, 한 파일이 나오면
 DevTools Network 패널에 그대로 끌어다 놓고, CI 아티팩트로 붙이고, 다른 도구에 먹인다.
 에이전트도 `--show 0` … `--show 49` 를 50번 부르는 대신 한 번에 읽는다.
 
@@ -513,7 +502,7 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 구조 변화에 더 민감해진다.
 
 ```
-@1  RootWebArea "Example Domain"      # 예전에는 link 가 @10 이었다
+@1  RootWebArea "Example Domain"
 @2    heading "Example Domain"
 ...
 @7      link "Learn more"
@@ -522,8 +511,6 @@ tirno net export --out api.har --filter '*/api/*' --no-bodies
 
 접었다는 사실은 끝줄에 적는다 — 안 그러면 "이 페이지에 이것뿐" 과 구별되지 않는다.
 `--verbose` 는 ignored 노드까지 포함해 전부 낸다.
-
-실측(2026-08-24): instagram.com 269→124 줄, github.com 2277→1134 줄.
 
 ### document-start 훅
 | 명령 | 설명 |
@@ -560,7 +547,7 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
 | `type <text>` / `press <key>` / `hover <selector\|@N\|"x,y">` | 키보드/마우스. `hover` 는 `click` 과 같이 좌표도 받는다 |
 | `press <modifier>+<key>` | `Meta+v` · `Ctrl+a` · `Shift+Tab`. 수식키는 Alt·Ctrl·Meta·Shift(별칭 cmd/command/option 도 받는다) |
 | `scroll up\|down\|<pixels>` | 스크롤 |
-| `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — 둘 이상 주면 거부한다 |
+| `wait <ms>` / `wait-for [selector] [--text <s>] [--network-idle]` | 대기. 셋은 **대안이지 병용이 아니다** — CSS 셀렉터·`--text`·`--network-idle` 중 둘 이상이면 거부한다. role+이름 대상에서는 `--text`/`--network-idle` 을 무시한다 |
 | `drag <from> <to>` | 드래그. 좌표(`"x,y"`)와 selector 를 자동 판별. `--steps` 로 중간 이동 수, `--hold` 로 누른 채 대기, `--native` 로 OS 레벨 드래그 이벤트 |
 | `upload <selector> <files...>` | 파일 업로드 |
 
@@ -583,8 +570,8 @@ tirno 자신의 스텁(beforeunload 무력화·레코더)이 먼저 들어간다
   code: ambiguous_target
 ```
 
-`--exact` 로 정확·대소문자 일치. 이름 없이 role 만 주면 그 role 이 페이지에 **하나일 때만** 맞는다
-— CSS 태그 `button` 이 첫 것을 조용히 고르던 것과 다르다. 그것이 원하는 거면 `css:button`.
+`--exact` 로 정확·대소문자 일치. 이름 없이 role 만 주면 그 role 이 페이지에 **하나일 때만** 맞는다.
+첫 것을 고르려면 `css:button`.
 role 낱말: `button link textbox searchbox checkbox radio combobox listbox option menuitem tab
 switch slider spinbutton heading image text cell row dialog alert navigation main banner form list
 listitem table article group …` (`text` = StaticText, `img` = image, `input` = textbox).
@@ -619,12 +606,13 @@ tirno ensure visible text "Welcome"            # 기다린다 (기본 10s, withi
 tirno ensure focused textbox "Search"
 ```
 출력은 셋 중 하나 — `already` / `ensured — <실측>` (+ delta) / `✗ … acted, but page says …`.
-`count` · `title` · `text` 는 만들 수 없으므로 `ensure` 가 거절한다 — `expect` 로.
+`count` · `title` 은 만들 수 없다 — 이미 맞으면 `already`, 아니면 `ensure` 가 거절하니 `expect` 로.
+`ensure text <v>` 는 `value text` 로 읽히므로, 보이는 글자는 `ensure visible text <v>`.
 
 ### 레시피 — 절차를 기억한다
 
-cache 는 요소를 기억하지만 "이 사이트에 로그인하는 법" 은 매번 다시 판단해야 했다. 레시피는
-그 절차다 — 두 번째 방문부터 판단 없이 돈다.
+cache 는 요소를, 레시피는 절차(이 사이트에 로그인하는 법)를 기억한다 — 두 번째 방문부터
+판단 없이 돈다.
 
 ```bash
 tirno recipe begin login --var EMAIL --var PASSWORD   # 이후 이 세션의 행동 명령이 기록된다
@@ -714,14 +702,14 @@ tirno apply checkout.json --from 3     # 고친 뒤 그 단계부터
  1 ensure url https://shop/cart          already at https://shop/cart
  2 expect count tr.item ge 1             holds now — 3
  3 click button "Checkout"               found on the page (a11y) · 1 candidate
- 4 ensure textbox "Card" = $CARD         unknown until step 3         ← 3 이 페이지를 바꾸는지는 모른다
+ 4 ensure textbox "Card" = $CARD         found on the page (a11y) · 1 candidate
  5 click button "Nope"                   NOT on the page now
  7 nav https://x                          will navigate (now: …)
  8 click link "Learn more"               in cache (a11y) · 1 candidate  ← 그 URL 의 캐시로 판정
 ```
 `nav`/`ensure url` 뒤의 단계는 그 URL 의 **캐시**로만 판정한다(없으면 `unknown until step N`).
 클릭이 페이지를 바꾸는지는 실행 전에 알 수 없으므로 클릭 뒤 단계는 지금 페이지로 판정한다 —
-그 가정을 출력 끝에 적는다. 모호(`ambiguous`)·없음(`missing`)·`@N` 을 쓴 단계(`ref` — 재생에서
+이 가정은 출력에 나오지 않는다(출력 끝에는 네비게이션 뒤 단계를 캐시로만 판정했다는 것만 적는다). 모호(`ambiguous`)·없음(`missing`)·`@N` 을 쓴 단계(`ref` — 재생에서
 뜻이 없다)는 "지금 틀린 단계" 로 센다.
 
 `apply --group` 은 `broadcast` 의 선언형이다 — 세션마다 첫 실패에서 멈추고 매트릭스로 낸다.
@@ -730,11 +718,11 @@ tirno apply checkout.json --from 3     # 고친 뒤 그 단계부터
 ### 저널 — `journal`
 
 명령마다 한 줄이 `~/.tirno/journal/<session>.jsonl` 에 남는다 — 무엇을 쳤고, 어떻게 끝났고
-(`code`), 무엇이 변했나(delta 요약). 세션의 이야기다.
+(`code`), 무엇이 변했나(delta 요약 — `TIRNO_JSON=1` 로 실행한 명령에만 남는다). 세션의 이야기다.
 
 ```bash
 tirno journal [-s x] [--since 10m] [--last 20] [--failed] [--json]
-22:52:37 ✓ click button click me      370ms  Clicked button "click me"      [focus moved · +1 −1]
+22:52:37 ✓ click button click me      370ms  Clicked button "click me"      [+1 −1 · focus moved]
 22:52:38 ✗ click button Nope           59ms  No button named "Nope" — …      code:target_not_found
 22:52:38 ✓ expect text clicked         59ms  expect text "clicked" — found "clicked"
 tirno journal --as-recipe login       # 성공한 행동 명령을 레시피로 (@N 이 있으면 경고 — role+이름으로 고쳐라)
@@ -822,10 +810,8 @@ a11y 트리·URL·포커스·console 을 대본 결과다:
   Dismiss it (or click it) first, then snapshot again. --synthetic forces a click() that ignores what is on top
 ```
 
-예전에는 `@ref` 클릭이 `HTMLElement.click()` 합성 클릭이었다. 그것은 가려진 요소도, 문서에서
-떨어져 나간 노드도, `display:none` 도 "누르고" `✓ Clicked` 를 찍었다(실측, #183). pointerdown ·
-mousedown 도 안 나가서 그 이벤트에 붙은 컴포넌트는 반응하지 않았고, 포커스도 안 옮겨서 손으로
-맞춰야 했다(#166). 실제 마우스는 이 전부를 브라우저가 한다.
+합성 `click()` 은 가려진 요소·떨어진 노드·`display:none` 도 누르고, pointerdown · mousedown ·
+포커스 이동이 없다. 그래서 기본은 실제 마우스다 — 그 전부를 브라우저가 한다.
 
 판정은 `elementFromPoint`(열린 shadow root 안까지) 로 한다. 그 자리가 대상 자신·대상 안쪽·
 대상의 조상(`pointer-events:none` 아이콘 — 진짜 클릭도 부모에게 간다)이면 누른다. 그 외는
@@ -838,20 +824,21 @@ mousedown 도 안 나가서 그 이벤트에 붙은 컴포넌트는 반응하지
 | `has no box` | `display:none` 또는 빈 인라인 | 보이게 만들거나 `--synthetic` |
 | `outside the viewport` | 스크롤해도 중심이 밖 (뷰포트보다 큰 요소) | `"x,y"` 로 안쪽 한 점 |
 
-**`--synthetic`** 은 옛 경로다 — `click()` 을 직접 부르고 가림·뷰포트를 무시한다. 포커스는
+**`--synthetic`** 은 `click()` 을 직접 부르고 가림·뷰포트를 무시한다. 포커스는
 블러 → 포커스 → 클릭 순서로 손으로 맞춘다(mousedown 이 없으므로). 뷰포트보다 큰 요소,
 보이지 않지만 핸들러는 있는 요소, 그리고 가려진 줄 알면서 뚫어야 할 때 쓴다.
 `(synthetic)` 이 성공 메시지에 붙는다.
 
 a11y 트리의 `StaticText` ref 는 텍스트 노드라 박스가 없다 — 그 부모 요소를 누른다.
 
-**셀렉터는 열린 shadow root 를 관통한다.** `click`·`fill`·`hover`·`wait-for` 는 light DOM 에서
-먼저 찾고, 없으면 열린 shadow root 를 순회해 다시 찾는다(puppeteer 의 `pierce/`). 웹 컴포넌트로
+**셀렉터는 열린 shadow root 를 관통한다.** `click`·`fill`·`hover` 는 light DOM 에서
+먼저 찾고, 없으면 열린 shadow root 를 순회해 다시 찾는다(puppeteer 의 `pierce/`). `wait-for` 는
+나타났는지만 보므로 처음부터 `pierce/` 로 한 번에 기다린다. 웹 컴포넌트로
 마운트되는 UI 를 좌표로 우회하지 않아도 된다.
 
 순서는 규약이다. `pierce/` 만 쓰면 같은 셀렉터가 양쪽에 있을 때 **shadow 쪽을 먼저 고르므로**
-지금까지 눌리던 요소가 조용히 바뀐다(실측). light DOM 을 먼저 보기 때문에 기존 동작은 그대로고,
-못 찾을 때만 범위가 넓어진다. 닫힌(`closed`) shadow root 는 대상이 아니다 — 페이지가 밖에서
+light DOM 에서 눌리던 요소가 조용히 바뀐다(실측). 그래서 light DOM 을 먼저 보고, 못 찾을 때만
+범위를 넓힌다. 닫힌(`closed`) shadow root 는 대상이 아니다 — 페이지가 밖에서
 못 보게 만든 것이라 브라우저도 길을 열어 주지 않는다.
 
 **좌표(`"x,y"`)는 `click`·`hover`·`drag` 가 받는다.** 정수·소수·음수를 다 받고 쉼표 뒤 공백도
@@ -859,8 +846,8 @@ a11y 트리의 `StaticText` ref 는 텍스트 노드라 박스가 없다 — 그
 shadow root 안이나 셀렉터가 없는 캔버스 위 요소에는 좌표가 유일한 길이라, 그 길은 포인터 계열
 명령에 고르게 있어야 한다.
 
-좌표를 받지 않는 명령(`fill`·`upload` 등)에 좌표꼴을 넣으면 그렇다고 알려 준다. 예전에는
-브라우저의 `querySelector` SyntaxError 가 그대로 올라와 원인을 한 번 더 짚어야 했다.
+`fill` 에 좌표꼴을 넣으면 좌표를 받지 않는다고 알려 준다(`fill takes an element, not coordinates`).
+`upload` 는 아직 셀렉터로 그대로 넘겨 브라우저의 `querySelector` SyntaxError 가 나온다.
 
 붙여넣기·복사·잘라내기·전체선택·실행취소는 **키 이벤트만으로 일어나지 않는다.** 브라우저가
 그 동작을 실제로 하려면 CDP 에 `commands` 를 함께 실어야 하고(실측: `commands` 없이 Meta+V 를
@@ -883,9 +870,9 @@ shadow root 안이나 셀렉터가 없는 캔버스 위 요소에는 좌표가 �
 ### 실행 / emulation
 | 명령 | 설명 |
 |---|---|
-| `eval [expression\|-] [--file <path>] [--timeout <ms>]` | 페이지에서 JS 실행. **입력은 인자·`--file`·stdin 셋 중 하나**(아래). **함수 리터럴은 호출한다**(아래). **함수 리터럴은 호출한다**(아래). 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
+| `eval [expression\|-] [--file <path>] [--timeout <ms>]` | 페이지에서 JS 실행. **입력은 인자·`--file`·stdin 셋 중 하나**(아래). **함수 리터럴은 호출한다**(아래). 기본 30초 — 페이지가 settle 하지 않는 promise 를 돌려주면 거기서 끊고 그렇게 말한다(`--timeout 0` 이면 CDP 연결이 허용하는 만큼, 약 3분). 페이지 쪽 실행을 멈추지는 않는다 |
 | `cdp [method] [params]` | **원시 CDP 호출.** `params` 는 JSON. `--browser` 면 페이지가 아닌 브라우저 타깃에, `--listen <event> [--listen-ms <n>]` 이면 호출 후 이벤트를 받아 출력. `--script [file]` 이면 `{method, params}` 배열을 **한 연결 위에서** 순서대로 보내고 뒤 단계가 앞 결과를 `$0.result.objectId` 로 참조한다(아래). tirno 가 감싸지 않은 도메인은 전부 이 문으로 들어간다 |
-| `emulate [--device <name>] [--dpr <n>] [--network <p>] [--cpu <n>] [--reset]` | 영속 emulation |
+| `emulate [--device <name>] [--viewport <wxh>] [--dpr <n>] [--user-agent <ua>] [--network <p>] [--cpu <n>] [--color-scheme <s>] [--geolocation <lat,lng>] [--geolocation-accuracy <m>] [--list-devices] [--reset]` | 영속 emulation |
 
 `eval` 은 평가 결과가 **인자 없는 함수면 호출하고 그 반환을 낸다.** 안 부르면 함수 객체가
 값이 되어 `{}` 로 직렬화되는데, 그것은 "함수를 안 불렀다" 가 아니라 "빈 결과" 로 읽힌다 —
@@ -1037,21 +1024,10 @@ CDP 의 권한 부여는 **프로필이 아니라 DevTools 연결에 묶인다.*
 
 ### 부트 URL 과 앵커
 
-`new <name> <url>` 은 URL 을 chrome 의 마지막 위치 인자로 넘긴다. 예전에는 DevTools 포트만
-확인하고 바로 돌아왔는데, **그 시점의 탭은 아직 `about:blank`** 이다. 그래서 바로 이어지는
-`eval` 이 에러 없이 0 을 냈다:
-
-```
-$ tirno new probe <4초 걸리는 URL>
-✓ Session 'probe' created (…)
-$ tirno eval -s probe "location.href"                      → "about:blank"
-$ tirno eval -s probe "document.querySelectorAll('p').length" → 0     에러 없음
-```
-
-앵커가 **틀린 탭**이어서가 아니다. 맞는 탭을 너무 일찍 읽은 것이라 기다리는 것 말고는
-답이 없다. 지금은 `new` 가 기다린다 — 커밋되고 `document.readyState` 가 `loading` 을
-벗어날 때까지다. 커밋만 보면 파싱 도중의 DOM 을 세게 되고, 그건 0 이 아닐 뿐 여전히
-틀린 값이라 알아보기 더 어렵다.
+`new <name> <url>` 은 URL 을 chrome 의 마지막 위치 인자로 넘기고, 탭이 커밋되고
+`document.readyState` 가 `loading` 을 벗어날 때까지 기다린다. DevTools 포트가 열린 시점의 탭은
+아직 `about:blank` 라 그때 읽은 `eval` 은 에러 없이 0 을 낸다. 커밋만 보면 파싱 도중의 DOM 을
+세게 되고, 그건 0 이 아닐 뿐 여전히 틀린 값이라 알아보기 더 어렵다.
 
 `--boot-timeout <ms>`(기본 15000) 안에 못 열리면 **세션은 그대로 두고** 그 사실을 말한다.
 느린 페이지 때문에 `new` 가 실패하는 쪽이 더 나쁘다.
@@ -1082,7 +1058,7 @@ npm link 는 `process.execPath` 가 런타임을 가리키므로 대상이 아�
 스킬은 파일을 직접 만지지 않는다. Claude Code 가 플러그인을 자기 상태로 관리하므로
 `claude plugin marketplace update tirno` → `claude plugin update tirno@tirno` 를 부른다 —
 마켓플레이스를 먼저 당기지 않으면 옛 매니페스트를 보고 "최신" 이라고 답한다.
-`claude` 가 PATH 에 없으면 그 두 줄을 안내하고 바이너리만 올린다.
+`claude` 가 PATH 에 없으면 `claude plugin marketplace update tirno && claude plugin update tirno` 를 안내하고 바이너리만 올린다(이 안내에는 `@tirno` 가 빠져 있어 그대로 치면 "not found" 로 끝난다 — `claude plugin update tirno@tirno` 로 친다).
 
 **바이너리와 플러그인은 따로 설치되고 따로 낡으므로 각각 판정한다.** 릴리즈 바이너리를 직접
 받아 쓰다가 `update` 로 갈아타면 바이너리만 최신이고 플러그인은 처음 설치 시점에 멈춰 있다.
@@ -1095,7 +1071,7 @@ fork 하면 달라진다. 설치된 키가 하나뿐인 출처다.
 ```
 $ tirno update --check
 binary  0.2.2    · latest 0.2.2 · up to date
-plugin  0.2.0    · latest 0.2.2 · behind
+plugin  0.2.0    · latest 0.2.2 · behind · tirno@tirno
 → Run "tirno update" to move both to 0.2.2.
 ```
 
@@ -1113,10 +1089,9 @@ Storage 에 그대로 남아 계속 서빙되고 있었다. control 응답은 �
 
 #### Served by — overlay · origin · unknown
 
-셋이다. 예전에는 둘이었고, 그래서 **navigateFallback 이 덮은 하위 경로 문서를 origin 으로
-오판했다.** 판정을 문서 URL 재fetch 의 `x-served-by` 로 했는데, 그 재fetch 는 non-navigate 라
-`request.mode === 'navigate'` 에만 응답하는 fallback 을 못 탄다. 로그인 리다이렉트가 하위
-경로로 착지하는 흐름에서 흔히 걸린다.
+셋이다. 문서 URL 을 다시 받아 `x-served-by` 를 보는 것만으로는 판정하지 않는다 — 그 재fetch 는
+non-navigate 라 `request.mode === 'navigate'` 에만 응답하는 navigateFallback 을 못 타서, fallback 이
+덮은 하위 경로 문서도 origin 처럼 보인다. 로그인 리다이렉트가 하위 경로로 착지하는 흐름에서 흔히 걸린다.
 
 근거를 센 것부터 쌓는다:
 
@@ -1130,15 +1105,14 @@ Storage 에 그대로 남아 계속 서빙되고 있었다. control 응답은 �
 | 밝혀진 `navigateFallback` 중 이 경로를 덮는 것이 없다 | origin |
 | 그 밖 (옛 sw-proxy 빌드 + 목록에 없는 경로) | **unknown** |
 
-`unknown` 은 실패가 아니라 정직이다 — 모르는 것을 origin 이라고 말하는 것이 오판의
-형태였다. 그 자리에서는 확인 방법과, 워커를 다시 생성하면 확정된다는 사실을 같이 낸다.
+`unknown` 은 실패가 아니라 정직이다 — 모르는 것을 origin 이라고 말하면 오판이 된다.
+그 자리에서는 확인 방법과, 워커를 다시 생성하면 확정된다는 사실을 같이 낸다.
 
 레이어 표의 **NAVIGATE** 열이 그 fallback 접두사다(`/app/*` = 목록에 없는 `/app` 하위
 navigate 도 이 레이어의 문서가 낸다).
 
-실측(2026-08-24, chromium 1234): SW 가 navigate 응답에 붙인 `Server-Timing` 이 그 문서의
-navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS 로 못 읽지만 이것은 읽힌다 —
-그래서 재fetch 로 navigate 를 흉내낼 필요 자체가 없어진다.
+SW 가 navigate 응답에 붙인 `Server-Timing` 은 그 문서의 navigation timing 엔트리에 실려 JS 로
+읽힌다(문서 응답 헤더는 못 읽는다). 그래서 재fetch 로 navigate 를 흉내내지 않는다.
 
 ### 성능
 | 명령 | 설명 |
@@ -1158,11 +1132,11 @@ navigation timing 엔트리에 그대로 실린다. 문서 응답 헤더는 JS �
 | `cache load <url> [--mode exact\|urlPath] [--viewport <wxh@dpr>] [-s <name>] [--no-compare] [--stale-threshold <bits>] [--allow-stale] [--no-resolve] [--require-all]` | 캐시된 항목을 출력하고, **세션이 그 URL 에 있으면** 지금 화면과 대보고(아래 "낡음") ref 를 되찾아 store 를 채운다(아래 "되찾기") — 그 뒤 바로 `click @N`. `STALE` 이면 exit 1 (`code: cache_stale`); 못 찾은 ref 는 `UNRESOLVED` 로 이름을 대고 `--require-all` 이면 exit 1 |
 | `cache prune (--older-than <days> \| --all) [--domain <d>]` | 정리. **나이나 `--all` 중 하나를 반드시 준다** — 무인자로 전량을 지우지 않는다 |
 
-저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
+저장 구조: `~/.tirno/visual-cache/<domain>/<sha1(urlPath) 앞 16자>/<wxh@dpr>.json`. 같은 URL이라도 viewport가 다르면(데스크톱 vs 모바일 emulate) 별개 entry로 공존. bbox는 viewport 종속이라 layout journaling엔 viewport 분리가 필수.
 
-**지금 담기는 채널은 `a11y`(role·name·backendId)와 `visual`(bbox) 둘뿐이다.** `backendId` 는
-페이지가 다시 뜨면 무효라, 세션을 넘겨 재사용할 수 있는 것은 bbox 하나다. `dom.selector` 는
-`record`/`trail` 경로에서만 저장된다.
+**`snapshot` 은 `a11y`(role·name·backendId)와 `visual`(bbox)을 늘 담고, 안정적인 속성(`id`·
+`data-testid`·`aria-label`·`name`)이 있으면 `dom.selector` 도 담는다.** `backendId` 는 페이지가
+다시 뜨면 무효라, 세션을 넘겨 재사용하는 것은 selector · role+name · bbox 다.
 
 #### 되찾기 — `cache load` 가 ref store 를 채운다
 
@@ -1202,11 +1176,10 @@ active) **지금 화면의 지문을 찍어 비트 거리를 낸다.** 머리글
 ```
 
 **비교를 못 했으면 못 했다고 적는다** — 세션이 없거나, 세션이 다른 URL 에 있거나,
-`--no-compare` 거나, 항목이 옛 지문 형식이거나. 조용히 fp 만 찍던 때와 다른 점이 그것이다.
+`--no-compare` 거나, 항목이 옛 지문 형식이거나.
 
-지문은 **16x16 면적 평균 aHash, 256 비트**다. 예전 9x8 dHash 는 최근접 표본이라 1080p 에서
-점이 여백에 떨어져 example.com 이 `0000000000000000` 이었다 — 정보 없는 지문 위의 낡음
-판정은 "fresh" 오탐이 된다. 실측(1920x1080): 같은 페이지 0 · 같은 레이아웃 다른 글(HN
+지문은 **16x16 면적 평균 aHash, 256 비트**다. 최근접 표본 해시는 1080p 에서 점이 여백에 떨어져
+정보 없는 지문이 되고, 그 위의 낡음 판정은 "fresh" 오탐이 되므로 면적 평균을 쓴다. 실측(1920x1080): 같은 페이지 0 · 같은 레이아웃 다른 글(HN
 front vs newest) 12 · 모달 얹힘 59 · 다른 사이트 85–130. 기본 임계 **32** 는 "레이아웃이
 같으면 fresh(ref 가 아직 맞는다), 위에 무언가 덮이면 stale" 자리다. 옛 16자 지문 항목은
 비교하지 않고 다시 찍으라고 한다.
@@ -1264,27 +1237,20 @@ front vs newest) 12 · 모달 얹힘 59 · 다른 사이트 85–130. 기본 임
 
 ```bash
 tirno schema | jq -r '.commands[] | select(.destructive) | .name'
-# cache prune / close-tab / gc / kill / record rm / restart / trail rm
+# cache prune / close-tab / gc / kill / plugin rm / recipe rm / record rm / restart / trail rm
 ```
 
 `--help` 를 파싱하지 말 것. 산문이라 하위 명령이 한 단 아래 숨고 여러 줄 설명이 명령 목록과
-뒤섞여서, 긁으면 **존재하지 않는 플래그가 나온다**(실제로 그렇게 만든 문서를 한 번 고쳤다).
+뒤섞여서, 긁으면 **존재하지 않는 플래그가 나온다**.
 
 ### 설치 크기
 
-런타임 의존 **6개**, **약 200MB, 네이티브 바이너리 0개.**
+런타임 의존 **4개**(chalk · commander · pixelmatch · pngjs). 릴리즈 바이너리는 하나에 약 90MB(darwin-arm64
+89,952,482 바이트)이고, 소스 설치의 `node_modules` 는 222MB 다 — 대부분 `audit` 이 쓰는 devDependency
+lighthouse(21MB)와 그것이 끌고 오는 @opentelemetry(49MB)다.
 
-무거운 것은 전부 들어냈다 — 실제로 안 쓰이는데 974MB 를 받게 했기 때문이다.
-
-- **OCR 없음.** `tirno vision` 과 `snapshot --vision*` 제거(2026-08-19). `onnxruntime-node`
-  259MB 를 끌고 오면서 한 번도 쓰이지 않았고, `florence` 백엔드는 자기 소스에 고장났다고
-  적혀 있었다.
-- **LLM 없음.** `tirno ask` / `tirno explore` / `tirno auth` 와 RAG 부속 제거(같은 날).
-  성공 경로가 검증된 적이 없다 — 남아 있던 `explore` 실행 기록 8건은 전부 스모크가 실패를
-  기대하고 부른 것이었다. **지능은 tirno 를 호출하는 쪽이 갖는다** — 이 도구는 결정론적인
-  관측과 조작만 한다.
-
-되살릴 때는 플러그인으로 붙인다.
+OCR · LLM 기능은 없다. **지능은 tirno 를 호출하는 쪽이 갖는다** — 이 도구는 결정론적인 관측과
+조작만 한다. 필요해지면 플러그인으로 붙인다.
 
 ### Multi-session
 | 명령 | 설명 |
@@ -1300,7 +1266,7 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 | `~/.tirno/profiles/<name>/DevToolsActivePort` | Chrome이 직접 쓴 실제 포트 + ws 경로. 세션 메타의 `wsEndpoint`보다 이쪽이 진실 |
 | `~/.tirno/anchors/<anchor>` | 프로필로의 심링크. 브라우저 MCP가 가리키는 곳 |
 | `~/.tirno/refs/<name>.json` | snapshot의 ref → backendDOMNodeId 매핑 |
-| `~/.tirno/visual-cache/<domain>/<sha1(urlPath)>/<wxh@dpr>.json` | snapshot 캐시. URL **과 viewport** 둘 다가 키다 |
+| `~/.tirno/visual-cache/<domain>/<sha1(urlPath) 앞 16자>/<wxh@dpr>.json` | snapshot 캐시. URL **과 viewport** 둘 다가 키다 |
 | `~/.tirno/recordings/` | `record --save` 산출물 |
 | `~/.tirno/trails/` · `~/.tirno/active-trail.json` | 사용자 시연 기록 · 캡처 중인 것 |
 | `~/.tirno/metrics.jsonl` | `stats` 가 읽는 이벤트 로그 |
@@ -1308,8 +1274,7 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 | `~/.tirno/active` | 현재 active 세션 |
 | `~/.tirno/config.json` | `chrome set` 이 적어둔 Chrome 실행 파일 경로 |
 
-`~/.tirno/models/` 가 있다면 지워도 된다 — 삭제된 OCR 백엔드가 받아둔 것으로, 지금 코드는
-참조하지 않는다(수백 MB 를 차지한다).
+`~/.tirno/models/` 가 있다면 지워도 된다 — 지금 코드는 참조하지 않는다.
 
 ### 환경변수
 
@@ -1317,7 +1282,7 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 |---|---|---|
 | `TIRNO_DIR` | `~/.tirno` | 데이터 루트 전체 |
 | `TIRNO_CHROME` | (없음) | Chrome 실행 파일. 설정 파일보다 우선 |
-| `TIRNO_JSON` | (없음) | `1` 이면 **모든** 명령이 stdout 에 JSON 한 줄이다 — 성공은 `{ok:true, cmd, data|output, delta?}`(명령의 `--json` 출력은 `data` 로, 산문은 `output` 으로), 실패는 `{ok:false, code, message, data?, output?}`. 스트림 명령(`watch`·`mcp`)은 예외. 아래 "실패의 종류" |
+| `TIRNO_JSON` | (없음) | `1` 이면 **모든** 명령이 stdout 에 JSON 한 줄이다 — 성공은 `{ok:true, cmd, data|output, delta?}`(명령의 `--json` 출력은 `data` 로, 산문은 `output` 으로), 실패는 `{ok:false, code, message, data?, output?}`. 봉투 없이 그대로 내는 명령(`watch`·`mcp`·`screencast start|stop`·`schema`)은 예외. 아래 "실패의 종류" |
 | `TIRNO_JOURNAL` | (없음) | `0` 이면 저널을 적지 않는다 |
 | `TIRNO_INVENTORY` | linux `proc` · 그 외 `lsof` | 리스너를 보는 백엔드. `proc` 은 `/proc` 직접 읽기(외부 바이너리 없음), `lsof` 는 `lsof -iTCP -sTCP:LISTEN` |
 | `CHROME_PATH` · `PUPPETEER_EXECUTABLE_PATH` | (없음) | 같은 용도. `TIRNO_CHROME` 다음 순서로 본다 |
@@ -1332,11 +1297,12 @@ tirno schema | jq -r '.commands[] | select(.destructive) | .name'
 싶을 때 쓴다.
 
 `test/paths.test.ts` 와 스모크의 격리 검사가 이 약속을 지킨다 — 저장소 하나라도 루트 밖으로
-새면 실패한다. 예전에는 새는 저장소가 있었고, 그래서 스모크의 `cache prune` 이 매 실행마다
-사용자의 실제 캐시를 비웠다.## 실패의 종류 (`code:`)
+새면 실패한다.
+
+## 실패의 종류 (`code:`)
 
 종료 코드는 둘뿐이다 — 0 과 1. 종류는 **stderr 마지막 줄** `code: <snake_case>` 로 가른다.
-산문은 그대로 위에 있고, 사람용 출력은 바뀌지 않았다:
+사람용 산문은 그 위에 그대로 있다:
 
 ```
 ✗ Refusing to connect to session 'bank' (port 9222): pid 68429 is gone; port 9222 now belongs to OtherApp (pid 812)

@@ -237,7 +237,7 @@ console.log(`생성 완료 — ${outDir}
 console.log(`
 다음 (host-resolver 를 세션 내내 켜 둔다 — restart 로 떼지 않는다):
 
-  node ${path.relative(process.cwd(), path.join(outDir, 'serve.mjs'))} &
+  node ${path.relative(process.cwd(), path.join(outDir, 'serve.mjs'))} > serve.log 2>&1 &
   tirno new <세션> ${cfg.origin}/<진입경로> -- \\
     --host-resolver-rules="MAP ${host} 127.0.0.1:${port}" --ignore-certificate-errors \\
     --disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessChecks
@@ -247,4 +247,4 @@ console.log(`
 --disable-features 도 빼지 않는다 — 자산 호스트만 MAP 하는 구성이면 크롬이 loopback 접근을
 막아 요청이 아예 나가지 않는다(serve.log 가 0건인데 서버는 멀쩡한 증상).
 
-관측은 serve.log 뿐: "200 <경로>" = 로컬, "→ <경로> (relay)" = origin.`);
+관측은 serve.log 뿐: "200 <경로>" = 로컬, "→ <메서드> <경로> (relay)" = origin.`);

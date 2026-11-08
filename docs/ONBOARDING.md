@@ -3,7 +3,7 @@
 이 문서의 숫자는 전부 `main` 을 **새로 클론해 실행한 값**이다. 설치·빌드·첫 세션·유닛·스모크를
 그대로 밟았다.
 
-명령 표면의 정본은 `tirno schema` 다 — `--help` 는 사람용 산문이라 옵션이 66개 엔드포인트에
+명령 표면의 정본은 `tirno schema` 다 — `--help` 는 사람용 산문이라 옵션이 116개 엔드포인트에
 흩어져 있다.
 
 ---
@@ -12,17 +12,49 @@
 
 | | |
 |---|---|
-| **Chrome** | 아래 **네 경로만** 자동으로 찾는다 |
+| **Chrome** | 아래 순서로 찾는다 |
+
+1. `--executable-path`
+2. 환경변수 `TIRNO_CHROME` → `CHROME_PATH` → `PUPPETEER_EXECUTABLE_PATH`
+3. `tirno chrome set` 로 적어 둔 경로(`~/.tirno/config.json`)
+4. 후보 목록 — 첫 후보는 `tirno setup` 이 받는 `~/.tirno/chrome/` 의 Chrome for Testing
+
+macOS:
 
 ```
+~/.tirno/chrome/chrome-*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+~/.agent-browser/browsers/chrome-*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+/Applications/Chromium.app/Contents/MacOS/Chromium
+~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+~/Library/Caches/ms-playwright/chromium-*/chrome-mac*/Chromium.app/Contents/MacOS/Chromium
+~/.cache/puppeteer/chrome/*/chrome-mac*/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing
+```
+
+Linux:
+
+```
+~/.tirno/chrome/*/chrome-linux*/chrome
 /usr/bin/google-chrome
 /usr/bin/google-chrome-stable
+/usr/bin/chromium
 /usr/bin/chromium-browser
+/snap/bin/chromium
+/usr/lib/chromium/chromium
+~/.cache/ms-playwright/chromium-*/chrome-linux*/chrome
+~/.cache/puppeteer/chrome/*/chrome-linux*/chrome
 ```
 
-없으면 기동이 `Chrome not found` 로 멈춘다. Brave·Edge·다른 경로에 깔린 Chrome 은
-`--executable-path` 로 직접 준다. 그 값은 세션 메타에 남아 `restart` 에서도 유지된다.
+어디서 찾았는지와 실패 이유는 `tirno chrome show` / `tirno setup --check` 가 보여 준다. 쓸
+브라우저가 없으면 `tirno setup` 이 `~/.tirno` 로 받아 온다(`-y` 는 묻지 않고, `--force` 는 있어도
+받는다). 못 찾으면 기동이 `Chrome not found` 로 멈춘다. Brave·Edge·다른 경로에 깔린 Chrome 은
+`--executable-path` 로 직접 주거나 `tirno chrome set` 으로 한 번 적어 둔다. `--executable-path`
+값은 세션 메타에 남아 `restart` 에서도 유지된다.
+
+Chrome 말고 `--browser firefox`(Firefox, `$TIRNO_FIREFOX`)와 `--browser safari`(Safari
+Technology Preview 의 safaridriver, `$TIRNO_SAFARI`)도 된다. 되는 명령은 nav · eval · screenshot ·
+snapshot · click · fill · type · press · wait-for · ls · restart · kill 이고, Safari 는 세션 하나에
+headless 가 없다. 세 엔진 모두 신뢰되지 않은 https 인증서를 받는다.
 
 Node 는 **바이너리로 받으면 필요 없다** — 런타임이 들어 있다. 소스에서 빌드할 때만
 Node 22+ 가 필요하다.
@@ -48,8 +80,7 @@ export PATH="$HOME/.local/bin:$PATH"     # 셸 설정에도 넣어둔다
 
 **sudo 를 쓰는 자리가 없다.** 도구는 `~/.local/bin`, 브라우저는 `tirno setup` 이 받아
 `~/.tirno/chrome/` 에 둔다. 시스템 경로가 편하면 `sudo mv ~/.local/bin/tirno /usr/local/bin/`
-로 옮기면 되지만, 그것은 선택이지 전제가 아니다 — 자동 탐색이 실패했을 때 사용자가
-시스템 경로에 손대는 쪽으로 몰리던 것이 고치려던 문제였다(#139).
+로 옮기면 되지만, 그것은 선택이지 전제가 아니다.
 
 타깃 넷 — `darwin-arm64` · `darwin-x64` · `linux-x64` · `linux-arm64`.
 자기 것으로 파일명만 바꾼다. **Windows 는 대상이 아니다**(소유권 판정이 `lsof`·`ps` 를 읽는다).
@@ -109,10 +140,10 @@ npm link
 
 ```bash
 $ tirno --version
-0.2.0
+0.11.0
 
 $ tirno schema | jq '.commands | length'
-66
+116
 ```
 
 `tirno schema` 는 **기계가 읽는 명령 목록**이다. 명령마다 `effects` 와 `destructive` 가 붙어
@@ -126,26 +157,26 @@ $ tirno schema | jq '.commands | length'
 
 ```
 $ tirno new demo https://example.com --headless
-✓ Session 'demo' created (port 50373, PID 81678, url: https://example.com)
+✓ Session 'demo' created (port 63481, PID 53892, url: https://example.com)
 
 $ tirno ls
-   │ NAME │ PORT  │ STATUS  │ OWNER │ EMULATION    │ LAST ACCESS
- * │ demo │ 50373 │ running │ ours  │ 1920x1080@1x │ 2026-08-20 04:21:44
+   │ NAME │ ENGINE │ PORT  │ STATUS  │ OWNER │ PROXY  │ EMULATION    │ POLICY │ LAST ACCESS
+───┼──────┼────────┼───────┼─────────┼───────┼────────┼──────────────┼────────┼─────────────────────
+ * │ demo │ chrome │ 63481 │ running │ ours  │ direct │ 1920x1080@1x │ -      │ 2026-11-08 11:35:31
 
 $ tirno snapshot
 @1  RootWebArea "Example Domain"
-@2    heading "Example Domain"
-@4    paragraph
-@5      StaticText "This domain is for use in documentation examples…"
+@2    paragraph
+@3      StaticText "This domain is for use in documentation examples without needing permission. …"
 
 $ tirno screenshot
-✓ ~/.tirno/tmp/screenshot-2026-08-20T04-21-45.png (1920x1080)
+✓ ~/.tirno/tmp/screenshot-<시각>.png (1920x1080)
 
 $ tirno kill demo --clean
-✓ Killed 'demo' (PID 81678, profile cleaned)
+✓ Killed 'demo' (PID 53892, profile cleaned)
 ```
 
-세션 하나 띄우는 데 **0.57초**. `--headless` 를 빼면 창이 실제로 뜬다.
+세션 하나 띄우는 데 **0.89초**. `--headless` 를 빼면 창이 실제로 뜬다.
 
 `-s <name>` 을 안 주면 **active 세션**(`ls` 의 `*`)에 붙는다. `-s` 는 **하위 명령 뒤에** 온다:
 
@@ -164,7 +195,7 @@ tirno -s demo eval "1+1"      # ✗ error: unknown option '-s'
 저장된다. **번호가 같아도 매핑은 세션마다 따로**고, 페이지가 바뀌면 무효가 된다.
 
 ```
-✗ Protocol error (DOM.resolveNode): No node with given id found
+✗ that element is no longer in the document — the page re-rendered and replaced it. Run "tirno snapshot" and use the new ref
 ```
 
 이 메시지가 뜨면 `snapshot` 을 다시 찍는다. 여러 세션이면 `tirno broadcast snapshot` 으로
@@ -176,8 +207,8 @@ pid 가 살아 있고 · 그 pid 가 그 포트를 듣고 있고 · 그 프로�
 `ours` 다. 셋 중 하나라도 어긋나면 `foreign`/`ambiguous` 로 보고 **붙지도, 죽이지도 않는다**.
 
 ```
-✗ Refusing to connect — pid 68429 is gone;
-  port 9222 now belongs to QueryPieMultiAgent (pid 1285)
+✗ Refusing to connect to session '<name>' (port <port>): pid <pid> is gone;
+  port <port> now belongs to <다른 프로세스> (pid <pid>)
 ```
 
 포트를 남이 물려받은 상황이다. 장부만 걷으려면 `tirno gc` — 브라우저를 죽이지 않고 프로필도
@@ -219,7 +250,7 @@ tirno broadcast nav https://example.com --group wall
 `gc --older-than` · ephemeral 세션의 자동 정리(`kill`/`restart`/`new --force`)뿐이다.
 `tirno schema` 의 `destructive` 표시를 보면 실행 전에 가려낼 수 있다.
 
-`~/.tirno/models/` 가 있다면 지워도 된다 — 삭제된 OCR 백엔드의 잔재로 수백 MB 를 차지한다.
+`~/.tirno/models/` 가 있다면 지워도 된다 — 지금 코드는 참조하지 않는다.
 
 ---
 
@@ -227,8 +258,8 @@ tirno broadcast nav https://example.com --group wall
 
 | 명령 | 무엇을 증명하나 | 실측 |
 |---|---|---|
-| `npm test` | 파서·판정 로직. **Chrome 을 안 띄운다** — 캡처한 문자열로 돈다 | 190건 · 0.56s |
-| `node scripts/smoke.mjs` | 명령이 **실제로 도는가**. 종료코드만이 아니라 출력·파일·페이지 상태까지 재독한다 | 190건 · 55s |
+| `npm test` | 파서·판정 로직. **Chrome 을 안 띄운다** — 캡처한 문자열로 돈다(Safari 실세션 테스트는 `TIRNO_TEST_SAFARI=1` 일 때만) | 582건(통과 581 · 건너뜀 1) · 9.4s |
+| `node scripts/smoke.mjs` | 명령이 **실제로 도는가**. 종료코드만이 아니라 출력·파일·페이지 상태까지 재독한다 | 449건 · 약 150s |
 | `npm run lint` | eslint | — |
 
 **둘 다 PR 게이트다** — `ci.yml` 이 유닛과 스모크를 같이 돌리고, 하나라도 깨지면 PR 이 빨간불이 된다.
@@ -255,8 +286,9 @@ tirno broadcast nav https://example.com --group wall
 ## 막혔을 때
 
 **`Chrome not found`**
-자동 탐색 네 경로에 없다. `tirno new s1 --executable-path /path/to/chrome` 으로 직접 준다.
-그 값은 메타에 남아 `restart` 가 물려받는다.
+자동 탐색에서 못 찾았다. 어디를 봤는지는 `tirno setup --check` 로 보고, `tirno setup` 으로
+받거나 `tirno chrome set /path/to/chrome` 으로 적어 두거나 `tirno new s1 --executable-path
+/path/to/chrome` 으로 직접 준다. `--executable-path` 값은 메타에 남아 `restart` 가 물려받는다.
 
 **`Refusing to connect` / `Refusing to kill`**
 소유권 판정이 `ours` 가 아니다. `tirno ls` 의 `OWNER` 열을 본다. `ghost`(pid 도 리스너도 없음)면
@@ -265,11 +297,12 @@ tirno broadcast nav https://example.com --group wall
 **`error: unknown option '-s'`**
 `-s` 는 하위 명령 뒤에 온다. `tirno eval "1+1" -s demo`
 
-**`No node with given id found`**
+**`that element is no longer in the document — … Run "tirno snapshot" and use the new ref`**
 `@ref` 가 만료됐다. 그 세션에서 `snapshot` 을 다시 찍는다. 여러 세션이면
 `broadcast snapshot --group <g>`.
 
 **명령이 실패했는데 스크립트가 성공으로 읽는다**
 실패는 전부 **exit 1** 이다 — 실패한 navigation, 없는 세션, 거부된 kill, `broadcast` 의 부분
-실패, `eval` 이 페이지에서 받은 예외까지. `drift` 는 선언한 플래그와 실행 중 프로세스가 다르면
+실패, `eval` 이 페이지에서 받은 예외까지. 실패의 종류는 stderr 마지막 줄 `code: <code>` 로 가른다
+(목록은 `tirno schema | jq .errors`). `drift` 는 선언한 플래그와 실행 중 프로세스가 다르면
 1 로 끝나므로 게이트로 쓸 수 있다.

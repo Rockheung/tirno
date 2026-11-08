@@ -13,12 +13,12 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 
 - tirno 는 multi-session — 먼저 `tirno new <name> [url]` 로 세션을 띄우고, 이후 모든 명령은 active 세션에 작용한다. 명시 세션은 `--session <name>` 또는 `-s <name>`.
 - **mcp 와 tirno 를 같이 쓸 거면 mcp 를 포트가 아니라 디렉토리에 물린다.** `npx chrome-devtools-mcp --auto-connect --user-data-dir=~/.tirno/anchors/main` 로 한 번 설정해 두면, tirno 가 Chrome 을 재기동해 포트가 바뀌어도 mcp 가 다음 tool 호출에서 알아서 따라온다(연결마다 `<dir>/DevToolsActivePort` 를 다시 읽는다). 앵커 조작은 `tirno anchor set/ls/rm`. 자세한 것은 `/tirno` skill 의 "앵커" 절.
-- **`--browser-url http://127.0.0.1:9222` 방식은 쓰지 않는다.** 9222+ 는 공용 대역이라 남의 앱이 점유하고 있어도 포트 번호만 맞으면 붙는다 — 프로덕션 DB 프록시 탭을 쥔 Electron 앱에 CDP 제어권을 넘긴 사고가 실제로 이 경로였다. 앵커 방식은 ws 경로의 browser UUID 가 인스턴스를 식별해 남의 브라우저에는 404 로 튕긴다.
+- **`--browser-url http://127.0.0.1:9222` 방식은 쓰지 않는다.** 9222+ 는 공용 대역이라 남의 앱이 점유하고 있어도 포트 번호만 맞으면 붙는다. 앵커 방식은 ws 경로의 browser UUID 가 인스턴스를 식별해 남의 브라우저에는 404 로 튕긴다.
 - snapshot 의 `@N` ref 가 mcp 의 `uid` 와 동등 — `tirno snapshot` 후 즉시 `tirno click @5` 처럼 사용 가능. snapshot 출력이 새로 갱신되면 이전 ref 는 stale.
 - chrome 를 띄우는 명령(`tirno new`, `tirno restart`)은 Bash 호출 시 timeout 10s 이상 명시.
 - 직접 매핑이 없으면 `tirno cdp <method> [params-json]` 로 raw CDP passthrough — 거의 모든 mcp tool 의 fallback 경로.
 - `tirno cdp --browser <method>` 로 browser-level CDP 도메인(`Target.*`, `Browser.*`, `Tracing.*`).
-- 이 문서의 매핑은 Chrome 세션 기준이다. `tirno new --browser firefox` · `--browser safari` 세션에서는 `navigate_page` · `evaluate_script` · `take_screenshot` · `take_snapshot` · `click` · `fill` · `press_key` · `wait_for` 만 대응하고 `cdp` 는 쓸 수 없다.
+- 이 문서의 매핑은 Chrome 세션 기준이다. `tirno new --browser firefox` · `--browser safari` 세션에서는 `navigate_page` · `evaluate_script` · `take_screenshot` · `take_snapshot` · `click` · `fill` · `type_text` · `press_key` · `wait_for` 만 대응하고 `cdp` 는 쓸 수 없다.
 
 ## 카테고리별 매핑 표
 
@@ -33,8 +33,8 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | `navigate_page type=url` | `tirno nav <url>` | — |
 | `navigate_page type=back` | `tirno back` | history 없으면 명확한 에러 |
 | `navigate_page type=forward` | `tirno forward` | — |
-| `navigate_page type=reload` | `tirno reload` | `--ignore-cache` 는 `tirno cdp Page.reload '{"ignoreCache":true}'` |
-| `navigate_page initScript` | **미구현 직접 옵션** — `tirno cdp Page.addScriptToEvaluateOnNewDocument '{"source":"..."}'` 후 `tirno nav` | — |
+| `navigate_page type=reload` | `tirno reload` | `--ignore-cache` 는 `tirno reload --hard` |
+| `navigate_page initScript` | `tirno inject add '<src>'`(또는 `--file <path>`) 후 `tirno reload` / `tirno nav` | — |
 | `wait_for` (selector) | `tirno wait-for <selector> --timeout <ms>` | — |
 | `wait_for` (text) | `tirno wait-for --text "<a,b,c>" --timeout <ms>` | comma 구분 any-of |
 | `wait_for` network idle | `tirno wait-for --network-idle` | — |
@@ -45,17 +45,17 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | mcp tool | tirno 명령 | 비고 |
 |---|---|---|
 | `click` (uid) | `tirno click @N` 또는 `tirno click <css>` | snapshot 후 ref 또는 selector |
-| `click` (dblClick) | **미구현 직접 옵션** — `tirno cdp Input.dispatchMouseEvent` 두 번 또는 `tirno eval "el.click(); el.click()"` | — |
-| `click_at` (x,y) | `tirno click "<x>,<y>" [--dbl]` | wave 4 — 좌표 형태면 자동으로 `Input.dispatchMouseEvent` trusted click 사용 |
+| `click` (dblClick) | `tirno click <target> --dbl` | — |
+| `click_at` (x,y) | `tirno click "<x>,<y>" [--dbl]` | 좌표 형태면 자동으로 `Input.dispatchMouseEvent` trusted click 사용 |
 | `hover` | `tirno hover <selector\|@N>` | — |
 | `fill` (input/textarea) | `tirno fill <target> <value>` | target = selector or @ref |
-| `fill` (checkbox/select 자동) | **부분 매핑** — selector 가 select 이면 `tirno eval "document.querySelector('#s').value='b'"`, checkbox 는 `tirno click` | mcp 의 자동 분기 동등 미구현 |
+| `fill` (checkbox/select 자동) | select 는 `tirno ensure combobox "<name>" = <option>`, checkbox 는 `tirno ensure checkbox "<name>" checked` | — |
 | `type_text` | `tirno type "<text>"` (+ `tirno press Enter` for submitKey) | — |
 | `drag` (uid → uid) | `tirno drag <from> <to>` | selector 또는 "x,y" 좌표 |
 | `fill_form` (배치) | `tirno fill --batch '[{"target":"#a","value":"x"},...]'` | 단일 호출 다중 필드 |
 | `upload_file` | `tirno upload <selector> <files...>` | DOM.setFileInputFiles |
 | `press_key` (chord) | `tirno press <key>` | 예: `Enter`, `Tab`, `Control+A` |
-| `handle_dialog` | (자동 dismiss) — 명시 accept/dismiss 는 `tirno cdp Page.handleJavaScriptDialog '{"accept":true,"promptText":"..."}'` | tirno 는 default 로 dialog 우회 |
+| `handle_dialog` | (자동 accept) — 명시 accept/dismiss 는 `tirno cdp Page.handleJavaScriptDialog '{"accept":true,"promptText":"..."}'` | tirno 는 default 로 dialog 우회 |
 
 ### Emulation
 
@@ -85,8 +85,8 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | mcp tool | tirno 명령 | 비고 |
 |---|---|---|
 | `performance_start_trace` (+ auto-stop) | `tirno trace --duration <s> --out <path>` | one-shot, fixed duration |
-| `performance_start_trace` (manual stop) | `tirno trace start [path]` | wave 4 — detached worker 가 trace 보유 |
-| `performance_stop_trace` | `tirno trace stop <path>` | wave 4 — SIGTERM 으로 finalize, 결과 파일 검증 후 `trace insight` 안내 |
+| `performance_start_trace` (manual stop) | `tirno trace start [path]` | detached worker 가 trace 보유 |
+| `performance_stop_trace` | `tirno trace stop <path>` | SIGTERM 으로 finalize, 결과 파일 검증 후 `trace insight` 안내 |
 | `performance_analyze_insight` | `tirno trace insight <path>` | LCP / FCP / DCL / load / CLS / long tasks. `--json` 가능 |
 
 ### Debugging
@@ -100,7 +100,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 | `screencast_start` | `tirno screencast start [--out <dir>] [--format png\|jpeg] [--every-nth <n>] [--max-width <px>]` | detached worker 가 frame 캡처. headless 는 frame 적게 잡힘 |
 | `screencast_stop` | `tirno screencast stop --out <dir>` | SIGTERM, index.json finalize. ffmpeg stitch 명령은 출력에 안내 |
 | `evaluate_script` (function + uid args) | `tirno eval "<expression>"` | 함수 + element handle args 형식은 미지원 — `(() => { const el = document.querySelector('...'); ... })()` 같은 expression 으로 inline |
-| `lighthouse_audit` | `tirno audit [url] [--mode navigation\|snapshot] [--device desktop\|mobile] [--categories <a,b,c>] [--out <html>] [--json <json>]` | 활성 세션의 chrome 재사용 — 세션 캐시/로그인 보존 |
+| `lighthouse_audit` | `tirno audit [url] [--mode navigation\|snapshot] [--device desktop\|mobile] [--categories <a,b,c>] [--out <html>] [--json <json>]` | 활성 세션의 chrome 재사용 — 세션 캐시/로그인 보존. 처음 한 번 `tirno plugin install audit` |
 | `lighthouse_audit timespan` | **미구현** — split start/stop daemon 필요 | navigation/snapshot 만 |
 
 ### Memory
@@ -116,9 +116,9 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 
 | mcp tool | tirno 명령 | 비고 |
 |---|---|---|
-| `install_extension` | **미구현 직접 명령** — `tirno cdp Extensions.loadUnpacked '{"path":"..."}'` | — |
-| `uninstall_extension` | **미구현 직접 명령** — `tirno cdp Extensions.uninstall '{"id":"..."}'` | — |
-| `list_extensions` | **미구현 직접 명령** — `tirno cdp Extensions.getStorageItems` 등 raw | — |
+| `install_extension` | **미구현 직접 명령** — `tirno cdp --browser Extensions.loadUnpacked '{"path":"..."}'` | — |
+| `uninstall_extension` | **미구현 직접 명령** — `tirno cdp --browser Extensions.uninstall '{"id":"..."}'` | — |
+| `list_extensions` | **미구현 직접 명령** — `tirno cdp --browser Extensions.getExtensions '{}'` | — |
 | `reload_extension` | **미구현 직접 명령** — raw CDP | — |
 | `trigger_extension_action` | **미구현 직접 명령** — raw CDP | — |
 
@@ -145,7 +145,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 
 다음은 mcp 에 매핑이 없지만 tirno 에서만 제공하는 고유 기능. 작업 흐름에 적극 활용:
 
-- `tirno new <name> [url]` / `tirno restart` / `tirno ls` / `tirno attach` / `tirno kill` — 다세션 관리. `tirno ls` 의 `OWNER` 는 장부가 아니라 관측(`ours|foreign|ambiguous|ghost`)이고, `kill` 은 `foreign`/`ambiguous` 를 거부한다
+- `tirno new <name> [url]` / `tirno restart` / `tirno ls` / `tirno attach` / `tirno kill` — 다세션 관리. `tirno ls` 의 `OWNER` 는 장부가 아니라 관측(`ours|foreign|ambiguous|ghost|unknown|external`)이고, `kill` 은 `foreign`/`ambiguous`/`unknown` 을 거부한다
 - `tirno anchor ls/set/rm` — 브라우저 MCP 가 물릴 디렉토리 앵커. `--evict` 로 이전 브라우저를 같이 정리해 붙어 있던 MCP 를 새 쪽으로 재연결시킨다
 - `tirno gc [--dry-run] [--older-than <days>]` — 낡은 장부·잔존 `DevToolsActivePort` 정리. 브라우저는 절대 죽이지 않고, 앵커·active·살아있는 프로필은 남긴다
 - `tirno drift [name] [-- <flags>]` — 선언한 chrome 플래그와 실행 중 프로세스 비교. `--host-resolver-rules` 처럼 기동 때 한 번만 읽는 플래그를 바꿨을 때 "이 세션 재기동 필요한가"에 답한다. 다르면 non-zero 로 끝나므로 스크립트에서 조건으로 쓸 수 있다
@@ -159,7 +159,7 @@ description: chrome-devtools-mcp 의 모든 tool 에 대응하는 tirno CLI 사�
 - `tirno trail capture/save/list/show/replay/rm` — goal 별 다단계 행동 시퀀스 (multi-channel fallback)
 - `tirno broadcast <cmd> [args...]` — 다세션 동시 실행
 - `tirno diff <s1> <s2>` — 두 세션 visual diff (pixelmatch)
-- `tirno stats` — `~/.tirno/metrics.jsonl` 집계 (cache hit, llm cost, trail success rate 등)
+- `tirno stats` — `~/.tirno/metrics.jsonl` 집계 (trail replay 횟수·성공률, 이벤트 종류별 합계)
 
 ---
 
@@ -204,9 +204,9 @@ ffmpeg -framerate 30 -i /tmp/cast/frame-%06d.png -pix_fmt yuv420p /tmp/cast/out.
 tirno kill cast --clean
 ```
 
-### 5. 자율 탐색 (mcp 에 없는 tirno 메인 가치)
+### 5. 저장된 trail 재생 (mcp 에 없음)
 ```bash
-# 성공하면 trail 자동 저장. 다음에 같은 goal 재실행하면 cache 로드.
+# trail 은 `tirno trail capture` → `tirno trail save` 로만 저장된다
 tirno trail list
 tirno trail replay "로그인 후 대시보드 이동"
 ```
@@ -218,14 +218,11 @@ tirno trail replay "로그인 후 대시보드 이동"
 이 영역은 tirno 직접 명령이 없다 — 사용자에게 명시:
 
 1. **`get_tab_id` (실험적)** — `tirno pages` 의 ID 또는 `tirno cdp Target.getTargets`
-2. **`navigate_page initScript`** — `tirno cdp Page.addScriptToEvaluateOnNewDocument` 후 nav
-3. **`fill` checkbox/select 자동 분기** — selector 가 select 이면 eval, checkbox 면 click 으로 우회
-4. **`evaluate_script` 의 uid args 형식** — 함수 + element handle 배열은 미지원. expression 으로 inline
-5. **`audit timespan` 모드** — split start/stop 이라 daemon 필요 (screencast/trace 와 같은 패턴으로 추후)
-6. **`get_nodes_by_class` (heap)** — class UID 별 instance 추적 미구현. `memory details` aggregate 만
-7. **Extensions 5종** (`install/uninstall/list/reload/trigger`) — `tirno cdp Extensions.*` raw passthrough만
-8. **Third-party / WebMCP 4종** (`list/execute_3p_developer_tools`, `list/execute_webmcp_tools`) — `tirno eval "window.__dtmcp.*"` 우회
-9. **단일 element 의 a11y/dom/bbox 조회** — `tirno inspect <selector>` 라는 명령은 **없다**(`src/commands/inspect.ts` 는 screenshot/snapshot/console/network 를 등록하는 모듈 파일이지 명령이 아니다). `tirno snapshot` 으로 트리 전체를 뜨고 `@N` 을 쓰거나, 이미 캐시된 페이지면 `tirno cache load <url>` 이 ref + selector + bbox 를 emit 한다
+2. **`evaluate_script` 의 uid args 형식** — 함수 + element handle 배열은 미지원. expression 으로 inline
+3. **`audit timespan` 모드** — 미구현
+4. **`get_nodes_by_class` (heap)** — class UID 별 instance 추적 미구현. `memory details` aggregate 만
+5. **Extensions 5종** (`install/uninstall/list/reload/trigger`) — `tirno cdp --browser Extensions.*` raw passthrough만
+6. **Third-party / WebMCP 4종** (`list/execute_3p_developer_tools`, `list/execute_webmcp_tools`) — `tirno eval "window.__dtmcp.*"` 우회
 
 > 위 모든 항목은 `tirno cdp <method> [params-json]` 로 raw CDP 호출 가능. 특정 영역만 자주 쓰면 별도 wrapper PR 검토.
 
@@ -236,9 +233,9 @@ tirno trail replay "로그인 후 대시보드 이동"
 목표 도달 우선순위 — 위에서 아래로 시도, 마지막은 사용자 부탁:
 
 1. **cache lookup** — 결정론, ms 단위 (`tirno cache load <url>`)
-2. **multi-channel fallback** (selector → a11y → bbox → ocr text) — 결정론, ms 단위
+2. **multi-channel fallback** (selector → a11y → bbox) — 결정론, ms 단위
 3. **CDP 직접 분석 + 자율 시도** — agent 가 페이지 구조 뜯어보며 행동경로 발견
-5. **사용자 시연 부탁** — `tirno trail capture` / `tirno record start`. 위 모두 실패 시 마지막 보루
+4. **사용자 시연 부탁** — `tirno trail capture` / `tirno record start`. 위 모두 실패 시 마지막 보루
 
 **tirno 안에 LLM 은 없다** — 지능이 필요한 판단은 이 도구를 부르는 쪽이 한다. 결정론 층이 막히면 마지막 보루로 사용자 시연을 부탁한다.
 

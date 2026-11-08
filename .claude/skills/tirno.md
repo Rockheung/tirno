@@ -65,9 +65,9 @@ tirno new mobile -- --window-size=375,812
 세션을 만들 때 프로필에 `translate.enabled = false` 를 심는다 — 번역 버블이 페이지 위에 겹쳐
 뜨면 좌표와 스크린샷이 흔들린다. `--disable-features=Translate` 만으로는 안 막혔다(실측).
 이미 값이 있으면 건드리지 않는다.
-확장은 기본으로 꺼져 있다. `--extensions` 없이는 **어떤 방법으로도 못 켠다** — puppeteer 의
-`--disable-extensions` 를 뒤에서 되돌릴 수 없고, `Extensions.loadUnpacked` 는 id 를 돌려주면서
-아무것도 활성화하지 않는다. `--load-extension` 은 Chrome 151 에서 죽었으므로 로드는 CDP 로 한다:
+확장은 기본으로 꺼져 있다. `--extensions` 없이는 **어떤 방법으로도 못 켠다** — tirno 는
+`--extensions` 없는 세션을 `--disable-extensions` 로 띄우고 그 플래그는 뒤에서 되돌릴 수 없으며, `Extensions.loadUnpacked` 는 id 를 돌려주면서
+아무것도 활성화하지 않는다. `--load-extension` 은 Chrome 152 에서 죽었으므로 로드는 CDP 로 한다:
 
 ```bash
 tirno new dev --extensions
@@ -201,7 +201,7 @@ tirno emulate --device "iPhone 14"
 tirno emulate --network slow-3g     # slow-3g, fast-3g, 4g, offline
 tirno emulate --cpu 4               # 4x CPU 감속
 tirno emulate --dpr 2               # device pixel ratio 단독 또는 device와 조합
-tirno emulate --reset               # emulation 해제
+tirno emulate --reset               # 기본값(viewport 1920x1080)으로 되돌린다
 tirno emulate --list-devices        # 프리셋 목록
 ```
 
@@ -237,8 +237,7 @@ tirno intercept ls · tirno intercept rm ic1 · tirno intercept rm --all
 ```
 
 `headers` 와 같은 확장(declarativeNetRequest)이라 `--extensions` 세션이 필요하고 `restart` 를
-넘긴다. 데몬(Fetch 인터셉트)이 아닌 이유: 서비스워커·OOPIF 를 못 보고 응답 못 하는 동안 요청이
-매달린다(#122). 5xx 가 필요하면 tirno-origin-relay 로.
+넘긴다. 5xx 가 필요하면 tirno-origin-relay 로.
 
 ### 고정 헤더
 
@@ -296,6 +295,7 @@ control 응답은 답하는 워커에 한해 레이어별 `enabled` · `fetched`
 ```bash
 tirno stall [--window <s>] [--json]           # 메인스레드가 포화됐나. 렌더러 밖에서 잰다
 tirno audit [url] [--categories <list>]       # Lighthouse. 세션의 chrome 을 재사용한다
+                                              # 처음 한 번 `tirno plugin install audit`(또는 $TIRNO_LIGHTHOUSE). PATH 의 Node 로 돈다
 
 tirno trace [--duration <s>] [--out <path>]   # 고정 시간 트레이스 후 저장
 tirno trace start [path]                      # 상주 워커로 시작 (stop 까지 계속)
@@ -304,7 +304,7 @@ tirno trace insight <path>                    # LCP / FCP / CLS / long task 추�
 
 tirno memory [--out <path>]                   # 힙 스냅샷
 tirno memory load <path>                      # 스냅샷 요약 통계
-tirno memory details <path>                   # 타입별 집계 — retained size 상위 클래스
+tirno memory details <path>                   # 타입별 집계 — self size 합 상위
 
 tirno screencast start [--out <dir>]          # 프레임 연속 캡처 (분리 프로세스)
 tirno screencast stop                         # 중단하고 index.json 확정
@@ -325,20 +325,19 @@ tirno broadcast [--group <g>] <cmd>   # 여러 세션에 같은 명령
 
 ### 자율 흐름 — cache · trail · 지능요청
 
-가치 흐름(CLAUDE.md) 1~5번을 그대로 명령으로 옮긴 것들이다. 위에서 아래로 갈수록
+가치 흐름(CLAUDE.md) 1~4번을 그대로 명령으로 옮긴 것들이다. 위에서 아래로 갈수록
 비결정론적이고 비싸다.
 
 ```bash
 tirno cache list|load|prune           # 1번. URL·viewport 키 스냅샷 저장소
 tirno cdp <method> [params]           # 3번. 모든 CDP 명령 raw passthrough
 tirno cdp --script <file>             #     여러 명령을 한 연결 위에서. objectId 가 산다
-tirno trail capture|ls|show           # 5번. 마지막 보루 — 사용자 시연을 받는다
+tirno trail capture|ls|show           # 4번. 마지막 보루 — 사용자 시연을 받는다
 tirno record start|stop               # 사용자 입력 캡처
 tirno replay <name>                   # 신뢰 이벤트로 재생. 채널 순서대로 폴백
 ```
 
-**OCR 채널은 없다.** 2026-08-19 에 들어냈다 — `onnxruntime` 259MB 를 끌고 오는데 이
-머신에서 한 번도 안 돌았다. 되살릴 때는 플러그인으로 붙인다.
+**OCR 채널은 없다.**
 
 
 ### 자기 기술 — 에이전트는 `--help` 를 긁지 말 것
@@ -347,13 +346,13 @@ tirno replay <name>                   # 신뢰 이벤트로 재생. 채널 순�
 tirno schema [--pretty]          # 명령 트리 전체를 JSON 으로 (The CLI Spec v0.3)
 ```
 
-`--help` 은 사람용 산문이라 서브커맨드 27개가 최상위에 안 보이고, 여러 줄 설명이
+`--help` 은 사람용 산문이라 서브커맨드 53개가 최상위에 안 보이고, 여러 줄 설명이
 명령 목록과 섞여 파싱하면 없는 플래그가 나온다. `schema` 는 commander 트리에서
 자동 생성되므로 CLI 와 어긋날 수 없다. 엔드포인트마다 다음을 선언한다:
 
 - `effects` — `read_only` / `idempotent` / `non_idempotent`
 - `destructive` — **되돌릴 수 없이 뭔가를 없앤다**: `kill` `gc` `restart` `close-tab`
-  `cache prune` `trail rm` `record rm`. 실행 전에 이걸 보면 된다
+  `cache prune` `trail rm` `record rm` `plugin rm` `recipe rm`. 실행 전에 이걸 보면 된다
 - `passthrough` — `-- <chrome flags>` 를 받는 명령(`new` `restart` `drift`)
 - `args` / `options` / `cardinality` / `output_kind`
 
@@ -375,7 +374,7 @@ tirno update [--check]           # 최신 릴리즈로 — 바이너리 + 스킬
 `~/.tirno/sessions/<name>.json`에 저장:
 - PID, port, wsEndpoint, userDataDir, chromeFlags, createdAt, lastAccessedAt
 - engine: Firefox 세션이면 `firefox`, Safari 세션이면 `safari`, Chrome 세션에는 없다
-- emulation: { device, viewport, network, cpu }
+- emulation: { device, viewport, network, cpu, userAgent, colorScheme, geolocation }
 - permissions: origin → 허용 목록. connect 마다 재적용한다
 - headerRules: 확장으로 나가는 고정 헤더. 재기동이 다시 읽힌다
 - extraHeaders: `headers set --once` 로 건 헤더. connect 마다 재적용한다
@@ -434,16 +433,21 @@ MCP 가 조용히 다른 브라우저로 옮겨가지 않는다.
 | `foreign(<앱이름>)` | 그 포트를 남이 쥐고 있다. 점유자 이름을 같이 보여준다 |
 | `ambiguous` | 한 포트에 리스너가 둘 이상(예: 옛 chrome 이 IPv4, 새 chrome 이 IPv6) |
 | `ghost` | 리스너가 없다. 장부만 남은 것 |
+| `unknown` | 리스너를 관측할 수 없다 — 손대지 않는다 |
+| `external` | tirno 가 안 띄운 브라우저 — 장부 항목만 관리한다 |
 
 셋이 다 맞아야 `ours` 다. 하나만으로는 안 되는 이유 — pid 는 재사용되고, 포트는 무관한
 프로세스가 물려받고, 커맨드 이름이 같다고 같은 프로필을 연 것은 아니다.
 
-`foreign`/`ambiguous` 는 **표시만 하고 절대 자동으로 손대지 않는다.** `tirno kill` 도
-거부한다(`gc` 로 장부 항목만 지울 수 있다 — 프로세스와 프로필은 그대로 둔다).
+`foreign`/`ambiguous`/`unknown` 은 **표시만 하고 절대 자동으로 손대지 않는다.** `tirno kill` 도
+거부한다. `gc` 는 `foreign` 의 장부 항목만 지우고(프로세스와 프로필은 그대로 둔다)
+`ambiguous`/`unknown` 은 건드리지 않는다.
 
 ## 주의사항
 
-- Chrome이 설치되어 있어야 함 (`/Applications/Google Chrome.app` 또는 `--executable-path`)
+- Chrome 은 `--executable-path` → `$TIRNO_CHROME`·`$CHROME_PATH`·`$PUPPETEER_EXECUTABLE_PATH` →
+  `tirno chrome set` 설정 → 검색 경로(`~/.tirno/chrome` 의 Chrome for Testing 포함) 순으로 찾는다.
+  결과는 `tirno chrome show`, 없으면 `tirno setup` 이 받아 온다.
 - `tirno kill`은 Chrome 프로세스만 종료. `--clean`으로 프로필 디렉토리도 삭제.
 - `tirno ls`의 `dead`(STATUS)와 `ghost`(OWNER)는 다른 말이다. `dead` 는 장부의 pid 가
   없다는 것이고, `ghost` 는 그 포트에 리스너가 아예 없다는 것. **`dead` 인데 OWNER 가

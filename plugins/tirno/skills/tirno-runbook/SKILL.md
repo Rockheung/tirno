@@ -10,22 +10,22 @@ description: tirno 로 실제 브라우저 작업을 끝까지 수행하는 절�
 `--help` 도, 이 문서도 선언이다. 신뢰 대상은 방금 그 브라우저가 보여준 값이다.
 
 무엇이 있는지는 **`tirno schema`** 에 물어라. `--help` 은 사람용 산문이라 서브커맨드
-26개가 최상위에 안 보이고, 긁으면 없는 플래그가 나온다. `schema` 는 commander 트리에서
+53개가 최상위에 안 보이고, 긁으면 없는 플래그가 나온다. `schema` 는 commander 트리에서
 자동 생성이라 CLI 와 어긋나지 않는다.
 
 ```bash
 tirno schema --pretty | jq '.commands[] | select(.destructive) | .name'
 ```
 
-**되돌릴 수 없는 명령을 실행 전에 가려내는 유일한 기계적 방법이다** — 지금은 8개다
-(`kill` `gc` `restart` `close-tab` `cache prune` `trail rm` `record rm`).
+**되돌릴 수 없는 명령을 실행 전에 가려내는 유일한 기계적 방법이다** — 지금은 9개다
+(`cache prune` `close-tab` `gc` `kill` `plugin rm` `recipe rm` `record rm` `restart` `trail rm`).
 
 ## 0. 가치 흐름 (CLAUDE.md, 불변)
 
 위에서부터 시도하고, 마지막은 자존심 굽혀 부탁한다.
 
 1. **cache lookup** — `tirno cache load <url>` (결정론, ms)
-2. **multi-channel fallback** — selector → a11y(`@ref`) → bbox → ocr (결정론, ms)
+2. **multi-channel fallback** — selector → a11y(`@ref`) → bbox (결정론, ms)
 3. **CDP 직접 분석 + 자율 시도** — `snapshot` / `eval` / `cdp` 로 구조를 뜯어본다
 4. **사용자 시연 부탁** — `tirno trail capture` / `record start`. **마지막 보루**
 
@@ -53,7 +53,8 @@ tirno new <name> <url> --browser safari          # Safari(Technology Preview)로
 
 ## 1.5 준비 대기 — `readyState` 를 믿지 말 것
 
-`tirno new` 는 chrome 이 살아나면 반환한다. 페이지가 쓸 수 있는 상태라는 뜻이 아니다.
+Chrome 세션의 `tirno new` 는 부트 URL 이 커밋될 때까지(`--boot-timeout`, 기본 15초) 기다렸다 반환한다.
+페이지를 쓸 수 있는 상태라는 뜻은 아니다.
 바로 뒤에 `document.readyState` 를 물으면 `complete` 가 나오는데도 노리던 요소는 없을 수 있다
 (실측: HN 첫 화면에서 `readyState=complete` · `input[name="q"]` 는 0개).
 
@@ -65,7 +66,7 @@ tirno wait-for --text "<보일 문구>" --timeout 10000
 tirno wait-for --network-idle
 ```
 
-**셋은 대안이지 병용이 아니다.** 둘 이상 주면 거부한다 — 예전엔 셀렉터가 조용히 무시됐다.
+**셋은 대안이지 병용이 아니다.** 둘 이상 주면 거부한다.
 
 **임의의 JS 조건**을 기다려야 하면 `eval` 이 promise 를 그대로 받는다. 폴링을 명령 여러
 번으로 나눌 필요가 없다:
@@ -156,13 +157,14 @@ tirno stall --window 10          # 10초 동안 밖에서 관측
 tirno stall --window 10 --json
 ```
 
-세 가지를 동시에 본다.
+네 가지를 동시에 본다.
 
 | 층 | 무엇 | 잡는 것 |
 |---|---|---|
 | ① renderer 왕복 | `Runtime.evaluate` 왕복시간 | **큐 대기시간.** 이 요청도 같은 줄에 서므로 앞에 밀린 양이 곧 지연 |
 | ② task/script/layout/style % | `Performance` 카운터 델타 | **범인 지목.** JS 인가 레이아웃인가 |
 | ③ browser 왕복 | 브라우저 타깃(별도 소켓) | **렌더러 탓이라는 증명.** 브라우저는 답하는데 렌더러만 안 답하면 확정 |
+| ④ renderer CPU | `SystemInfo.getProcessInfo`(브라우저 프로세스가 답함) | **포화인가 대기인가.** 왕복이 안 돌아올 때 렌더러가 CPU 를 태우는 중인지, 문서 응답 등을 기다리는 중인지(또는 크래시인지) 가른다 |
 
 ### 읽는 법
 
@@ -196,8 +198,7 @@ GC·래스터·파싱이고, 이 카운터로는 더 못 쪼갠다.
 ### 코드를 읽어서 결론내지 말 것
 
 **코드에 있다 ≠ 실행된다.** 병리로 지목한 코드가 `if (window.innerWidth > 767) return;` 가드
-하나 때문에 데스크톱 폭에서는 한 줄도 안 돌 수 있다 — 실제로 이 함정에 걸려 "재현 안 된다"는
-결론이 나올 뻔했다. 뷰포트를 맞추기 전까지 `script` 는 0.2% 였고, `tirno emulate --viewport
+하나 때문에 데스크톱 폭에서는 한 줄도 안 돌 수 있다. 실측에서 뷰포트를 맞추기 전까지 `script` 는 0.2% 였고, `tirno emulate --viewport
 390x844` 를 걸자 34.7% 가 됐다.
 
 그래서 **단일 변수 A/B 로 잰다** — 의심 코드만 켜고 끄고, 나머지는 고정한다. 대조군의
@@ -241,7 +242,7 @@ tirno kill lab --clean
 ```bash
 # ✗ 로그인 버튼을 누르고 그 자리에서 기다린다 — 흔한 실수
 tirno eval '(async () => { btn.click(); await new Promise(r => setTimeout(r, 1500)); return "ok" })()'
-✗ Execution context was destroyed, most likely because of a navigation.   exit 1
+✗ Protocol error (Runtime.evaluate): Inspected target navigated or closed   exit 1
 ```
 
 **둘로 나눈다.** 지시하고 즉시 반환한 뒤, 다음 명령에서 확인한다.
@@ -283,20 +284,21 @@ connect/disconnect 하므로, 연결에 매인 상태(인터셉트 등록·이�
 `eval` 의 인자는 **`ps` 에 그대로 보인다.** 실측:
 
 ```
-$ ps -A -o command= | grep 'bin/tirno.js eval'
-node bin/tirno.js eval (async()=>{...})() -s ps1
+$ ps -A -o command= | grep '[t]irno eval'
+tirno eval -s ps1 (async()=>{...})()
 ```
 
 명령이 도는 동안 같은 머신의 누구나 읽을 수 있고, 셸 히스토리에도 남는다.
 
-**클립보드로 우회하는 길은 막혀 있다.** 페이지에서 `navigator.clipboard.readText()` 를
-쓰려면 포커스와 권한이 둘 다 필요한데, `Page.bringToFront` 로 포커스는 잡히지만
-`Browser.grantPermissions` 로 `clipboardReadWrite` 를 줘도 권한이 안 열린다 —
-`navigator.permissions.query({name:'clipboard-read'})` 가 여전히 `prompt` 고
-`readText()` 는 `NotAllowedError` 다(2026-08-21 실측).
+**비밀번호는 stdin 으로 넣는다.** argv 에 값이 안 남는다.
 
-**그래서 지금의 답은 하나다 — 사람이 직접 입력한다.** headful 로 띄우고 로그인 화면에서
-멈춘 뒤, 사용자가 치기를 기다린다. 자격을 모르는 채로 이어가는 편이 옳기도 하다.
+```bash
+pbpaste | tirno fill <target> --value-stdin
+```
+
+페이지에서 클립보드를 읽어야 하면 `tirno permissions grant <origin> clipboard-read` 로
+`navigator.clipboard.readText()` 가 열린다. 쓰기(`writeText`)는 `clipboard-write` 가 아니라
+`clipboard-sanitized-write` 를 줘야 열린다 — `clipboard-write` 만 주면 `Write permission denied` 다.
 
 로그인 뒤 상태는 프로필에 남으므로 이후 명령은 그 세션에 계속 붙는다. 단
 **`restart` 는 세션 쿠키를 죽인다** — `Expires` 없는 쿠키가 브라우저 종료와 함께 사라져
@@ -341,14 +343,14 @@ tirno ls                      # 남은 게 없는지
   Safari 는 `safari-resource:/CertificateWarning…html`. `eval` 의 `location.replace` 로 가면 실패 없이 그
   화면에 머문다.
 - `audit --mode timespan` 은 미구현이다.
-- 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜬다.
-- **`cache load` 로 꺼낸 `@N` 으로는 바로 조작할 수 없다.** 출력만 하고 ref store 를 안 채워서
-  `click @7` 은 `Unknown ref` 로 실패한다 — 조작하려면 `snapshot` 을 다시 찍어야 한다.
-  캐시에 담기는 채널도 `a11y`(role·name)와 `bbox` 둘뿐이고 selector 는 없다(2026-08-20 실측).
+- 단일 element 조회는 `tirno explain <target>` — role · name · selector · box · 가려짐 여부까지 한 번에 나온다.
+- **`cache load` 는 캐시한 ref 를 지금 페이지에서 다시 찾아**(selector → a11y → bbox) ref store 를
+  채우므로 `click @N` 이 바로 된다. `--no-resolve` 로 끈다. 캐시에 담기는 채널은
+  `a11y`(role·name) · `dom`(selector) · `bbox` 셋이다.
 - **실패는 전부 exit 1** 이다 — 거부된 kill, `broadcast` 의 부분 실패, `eval` 이 페이지에서
-  받은 예외까지. 종류별 코드가 없으니 `$?` 하나만 본다.
-- **`cache prune` 은 `--older-than` 이나 `--all` 중 하나를 요구한다.** 예전엔 무인자가 전량
-  삭제였다.
+  받은 예외까지. 종류는 stderr 마지막 줄 `code: <code>`(`--json` 이면 `code` 필드)로 가른다 —
+  목록은 `tirno schema | jq .errors`.
+- **`cache prune` 은 `--older-than` 이나 `--all` 중 하나를 요구한다.**
 - **`eval` 은 promise 를 기다린다.** `fetch(...)`·`new Promise(...)` 를 그대로 쓸 수 있고,
   reject 는 exit 1 이다.
 - `tirno nav` 는 실패하면 **exit 1** 이다. `&&` / `||` 로 분기해도 된다. 단, 파이프 뒤에서
@@ -360,10 +362,11 @@ tirno ls                      # 남은 게 없는지
   실행 중 커맨드라인(`ps` 출력)에서 되읽을 수 없어서다 — 예: `--user-agent="tirno --probe"`.
   **이건 drift 가 아니다.** 재기동해도 같은 판정이 나오므로 고치려 들지 말 것.
 - `tirno --help` 을 긁어 명령 목록을 만들지 마라. 여러 줄 설명이 명령 목록과 섞여
-  **없는 플래그가 나온다**(실제로 `network show`·`auth get` 을 그렇게 만들어낸 적이 있다).
+  **없는 플래그가 나온다**.
   기계로 읽을 때는 `tirno schema` 를 쓴다.
-- `snapshot` 출력에서 조작 대상을 `grep textbox|button` 으로 찾으면 **`InlineTextBox` 가 대량으로
-  걸려 정작 `searchbox`·`button` 이 묻힌다.** `@ref` 가 붙은 줄만 걸러라 — `grep -E '^@[0-9]+'`.
+- `snapshot --verbose` 출력에서 조작 대상을 `grep textbox|button` 으로 찾으면 **`InlineTextBox` 가
+  대량으로 걸려 정작 `searchbox`·`button` 이 묻힌다**(기본 snapshot 은 InlineTextBox 를 접는다).
+  조작 대상만 보려면 `snapshot --interactive`.
 - **"요청이 없다"로 오독하기 쉬운 자리 둘.** `tirno network` 의 캡처 창은 `networkidle2` 에서
   닫히므로 그 뒤에 나가는 요청은 안 잡힌다. 그리고 페이지의
   `performance.getEntriesByType('resource')` 는 **기본 250개에서 끊긴다** — JS 를 수백 개
