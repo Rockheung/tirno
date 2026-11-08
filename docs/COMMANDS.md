@@ -297,7 +297,8 @@ tirno plugin rm audit
 TIRNO_LIGHTHOUSE=/dir-with-node_modules tirno audit   # 직접 가리키기. 틀리면 다음 후보로 안 간다
 ```
 찾는 순서: `$TIRNO_LIGHTHOUSE` → `~/.tirno/plugins/audit` → `npm root -g` → (개발) 레포의
-node_modules. 없으면 `audit` 이 설치 안내를 낸다.
+node_modules. 없으면 `audit` 이 설치 안내를 낸다. lighthouse 는 `node` 자식 프로세스에서
+돌기 때문에 `audit` 에는 PATH 의 Node.js 가 필요하다.
 
 ### MCP 서버 — `tirno mcp`
 

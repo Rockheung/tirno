@@ -6,7 +6,7 @@
 // requires a clean reload.
 
 import { Command } from 'commander';
-import { loadLighthouse } from '../core/plugin-lighthouse.js';
+import { runLighthouse } from '../core/plugin-lighthouse.js';
 import fs from 'node:fs';
 import * as store from '../core/session-store.js';
 import { success, info, fail } from '../output/formatter.js';
@@ -63,32 +63,16 @@ export function registerAuditCommand(program: Command): void {
         const htmlOut = opts.out ?? `/tmp/tirno-lh-${ts}.html`;
         const jsonOut = opts.json ?? `/tmp/tirno-lh-${ts}.json`;
 
-        // Lighthouse supports navigation | snapshot | timespan.
-        // Loose typing at the boundary — lighthouse's Flags type is huge and
-        // changes between minor versions; we only need a narrow subset.
-        const lhMod = await loadLighthouse();
-        const lighthouse = lhMod.default as any;
-        const desktopConfig = lhMod.desktopConfig as any;
-
-        const flags = {
-          port: meta.port,
-          output: ['html', 'json'] as ('html' | 'json')[],
-          onlyCategories: cats,
-        };
-        const config = opts.device === 'desktop' ? desktopConfig : undefined;
-
-        info(`Running Lighthouse (${opts.mode}, ${opts.device}) on ${url}…`);
-        let result: unknown;
-        if (opts.mode === 'snapshot') {
-          result = await (lhMod.snapshot as any)({ url, flags, config });
-        } else if (opts.mode === 'timespan') {
+        if (opts.mode === 'timespan') {
           throw new Error('timespan mode is split start/stop — not yet wired into tirno (use mode=navigation)');
-        } else {
-          result = await lighthouse(url, flags, config);
         }
-
-        if (!result) throw new Error('Lighthouse returned no result');
-        const lh = result as { lhr: LhrResult; report: string | string[] };
+        info(`Running Lighthouse (${opts.mode}, ${opts.device}) on ${url}…`);
+        const lh = await runLighthouse({
+          mode: opts.mode === 'snapshot' ? 'snapshot' : 'navigation',
+          url,
+          flags: { port: meta.port, output: ['html', 'json'], onlyCategories: cats },
+          desktop: opts.device === 'desktop',
+        });
         const reports = Array.isArray(lh.report) ? lh.report : [lh.report];
         const [htmlReport, jsonReport] = reports;
         if (htmlReport) fs.writeFileSync(htmlOut, htmlReport);
@@ -111,8 +95,4 @@ export function registerAuditCommand(program: Command): void {
         fail(e);
       }
     });
-}
-
-interface LhrResult {
-  categories?: Record<string, { title?: string; score: number | null }>;
 }

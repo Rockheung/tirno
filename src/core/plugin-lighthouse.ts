@@ -6,12 +6,17 @@
  * 그래서 번들에서 뺀다 — import 를 **계산된 경로**로 해서 번들러가 따라오지 못하게 하고,
  * 실행 시점에 찾는다. CLAUDE.md 의 "덜어낸 것" 절이 OCR·임베딩에 쓴 규율과 같다.
  *
+ * 실행은 Node 자식 프로세스에서 한다. 컴파일된 bun 바이너리는 바깥 node_modules 의
+ * 패키지 이름(`lodash-es` 등)을 해석하지 못한다. 플러그인 설치가 npm 을 쓰므로
+ * 플러그인이 있는 곳에는 Node 도 있다.
+ *
  * 찾는 순서(구체적인 것이 이긴다): `$TIRNO_LIGHTHOUSE` → `~/.tirno/plugins/audit` →
  * 전역 npm(`npm root -g`) → 이 레포의 node_modules(개발·스모크용).
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import os from 'node:os';
+import { execFile, execFileSync } from 'node:child_process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { underRoot } from './paths.js';
 
@@ -69,11 +74,49 @@ export const INSTALL_HINT = [
   'or point at one:  TIRNO_LIGHTHOUSE=/path/to/dir-with-node_modules  ·  npm i -g lighthouse',
 ].join('\n');
 
-/** 계산된 경로로 import — 번들러가 따라오지 못한다 */
-export async function loadLighthouse(): Promise<Record<string, unknown>> {
+export interface LighthouseRun {
+  mode: 'navigation' | 'snapshot';
+  url: string;
+  flags: Record<string, unknown>;
+  desktop: boolean;
+}
+
+export interface LighthouseResult {
+  lhr: { categories?: Record<string, { title?: string; score: number | null }> };
+  report: string | string[];
+}
+
+const RUNNER = `
+import fs from 'node:fs';
+const [entry, input, out] = process.argv.slice(1);
+const m = await import(entry);
+const { mode, url, flags, desktop } = JSON.parse(input);
+const config = desktop ? m.desktopConfig : undefined;
+const r = mode === 'snapshot' ? await m.snapshot({ url, flags, config }) : await m.default(url, flags, config);
+if (!r) throw new Error('Lighthouse returned no result');
+fs.writeFileSync(out, JSON.stringify({ lhr: { categories: r.lhr.categories }, report: r.report }));
+`;
+
+export async function runLighthouse(run: LighthouseRun): Promise<LighthouseResult> {
   const found = locateLighthouse();
   if (!found) throw new Error(INSTALL_HINT);
-  return await import(pathToFileURL(found.entry).href) as Record<string, unknown>;
+  const node = process.versions.bun ? 'node' : process.execPath;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tirno-lh-'));
+  const out = path.join(dir, 'result.json');
+  try {
+    await new Promise<void>((resolve, reject) => {
+      execFile(node, ['--input-type=module', '-e', RUNNER, pathToFileURL(found.entry).href, JSON.stringify(run), out],
+        { maxBuffer: 64 * 1024 * 1024 },
+        (err, _stdout, stderr) => {
+          if ((err as NodeJS.ErrnoException | null)?.code === 'ENOENT') reject(new Error('tirno audit runs lighthouse with Node.js — `node` is not on PATH'));
+          else if (err) reject(new Error(stderr.trim().split('\n').filter(Boolean).at(-1) ?? err.message));
+          else resolve();
+        });
+    });
+    return JSON.parse(fs.readFileSync(out, 'utf8')) as LighthouseResult;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 /** `npm install --prefix ~/.tirno/plugins/audit lighthouse` */
