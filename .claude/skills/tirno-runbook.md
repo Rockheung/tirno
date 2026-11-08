@@ -320,6 +320,7 @@ tirno ls                      # 남은 게 없는지
 | 요소를 못 찾는다 | 먼저 `wait-for <selector>` — `readyState=complete` 여도 아직 없을 수 있다. 그다음 `snapshot` 을 다시 뜬다(`@ref` 는 stale 이 된다) |
 | **명령이 안 끝난다(30s+)** | `tirno stall --window 10` — 렌더러만 느리고 browser 가 정상이면 페이지 탓, 둘 다 정상이면 내 코드 탓이다 |
 | 클릭이 먹지 않는다 | `tirno eval` 로 해당 요소가 실제로 있는지·가려져 있지 않은지 확인. 그다음 `click "x,y"` 좌표로 우회 |
+| 페이지가 결과를 안 내고 시간 초과만 난다 | `tirno eval 'location.href + " | " + document.title'` 로 지금 떠 있는 문서를 본다. 인증서 경고 화면이면 아래 "인증서 경고" 제약대로 **이동 주소를 고친다** — 경고를 넘기는 클릭으로 우회하지 않는다 |
 | 스크린샷 크기가 다르다 | `emulate --reset` 은 tirno 기본값(1920x1080)으로 되돌린다. 브라우저 원상태가 아니다 |
 | `back` 이 실패한다 | 같은 URL 로 `nav` 하면 히스토리가 안 늘어난다. 돌아갈 데가 없는 게 맞다 |
 | 탭을 잘못 닫았다 | `tirno pages` 의 ID 는 위치가 아니라 **안정 핸들**이다(4자 이상 접두사 가능). 그 ID 를 쓴다 |
@@ -327,6 +328,18 @@ tirno ls                      # 남은 게 없는지
 ## 사실로 확인해 둔 제약
 
 - `tirno audit` 은 lighthouse 를 부르므로 **http(s) 만** 된다. `file://` 은 `INVALID_URL`.
+- **인증서 경고 화면은 엔진마다 다르게 보인다**(2026-11-08 실측, 신뢰되지 않은 CA 의 https).
+  Chrome: `nav` 가 `net::ERR_CERT_AUTHORITY_INVALID` 로 실패하고 `location.href` 는
+  `chrome-error://chromewebdata/`. Firefox: `nav` 가 `SEC_ERROR_UNKNOWN_ISSUER` 로 실패하는데
+  `location.href` 는 **원래 주소 그대로**이고 제목만 "경고: 보안 위험" 이다 — 주소만 보면 놓친다.
+  Safari: `location.href` 가 `safari-resource:/CertificateWarning…html`, 제목 "This Connection Is Not Private".
+  `nav` 를 거치지 않고 `eval` 의 `location.replace` 로 이동하면 어느 엔진이든 실패 없이 경고 화면에 머문다.
+- **Safari 세션에는 프록시도 인증서 예외도 없다.** Firefox 하네스처럼 프로필의 프록시 설정과
+  `cert_override.txt` 로 https 를 로컬 서버에 돌리는 방법이 Safari 에는 없다. 그래서 로컬 하네스를
+  Safari 로 돌릴 때는 하네스가 직접 띄운 `http://<host>:<포트>/` 를 **첫 이동과 이후의 모든 이동
+  (`nav` · `location.replace`)에 같은 값으로** 쓴다. 엔진별로 주소를 고르는 코드에서 첫 이동만 바꾸고
+  이후 이동이 https 상수를 그대로 쓰면, 같은 호스트의 443 포트에 떠 있는 다른 서버(예: 다른 머신의
+  mkcert 인증서를 내주는 ssh 포워딩)로 가서 경고 화면에 막힌다.
 - `audit --mode timespan` 은 미구현이다.
 - 단일 element 만 조회하는 명령(`tirno inspect` 같은 것)은 **없다.** `snapshot` 으로 트리를 뜬다.
 - **`cache load` 로 꺼낸 `@N` 으로는 바로 조작할 수 없다.** 출력만 하고 ref store 를 안 채워서
