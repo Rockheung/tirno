@@ -183,7 +183,7 @@ class Bidi {
       this.ws.send(JSON.stringify({ id, method, params }));
     });
     this.waiting.delete(id);
-    if (reply.type === 'error') throw new TirnoError(`${method}: ${reply.message ?? reply.error}`, 'firefox_error', { bidiError: reply.error });
+    if (reply.type === 'error') throw new TirnoError(`${method}: ${reply.message ?? reply.error}`, 'firefox_error');
     return reply.result as T;
   }
 
@@ -196,28 +196,11 @@ interface BidiReply { id?: number; type: string; result?: unknown; error?: strin
 interface EvalResult {
   type: 'success' | 'exception';
   result?: { value?: string };
-  exceptionDetails?: { text?: string };
+  exceptionDetails?: { text?: string; exception?: { value?: { message?: string } } };
 }
-
-/** BiDi 가 페이지 값을 돌려주는 모양. 노드는 `sharedId` 로 다시 넘길 수 있다 */
-export interface RemoteValue { type: string; value?: unknown; sharedId?: string }
 
 export class FirefoxPage {
   constructor(private readonly bidi: Bidi, private readonly context: string, private currentUrl: string) {}
-
-  /** 함수 선언을 페이지에서 부른다. 노드는 `{ sharedId }` 로 주고받는다 */
-  async call(functionDeclaration: string, args: unknown[] = [], thisArg?: unknown): Promise<RemoteValue> {
-    const r = await this.bidi.send<{ type: string; result?: RemoteValue; exceptionDetails?: { text?: string } }>('script.callFunction', {
-      functionDeclaration,
-      arguments: args,
-      ...(thisArg === undefined ? {} : { this: thisArg }),
-      target: { context: this.context },
-      awaitPromise: true,
-      serializationOptions: { maxObjectDepth: 3, maxDomDepth: 0 },
-    });
-    if (r.type === 'exception') throw new TirnoError(r.exceptionDetails?.text ?? 'Expression threw', 'page_threw');
-    return r.result ?? { type: 'undefined' };
-  }
 
   /** 실제 입력 장치 동작. 끝나면 눌린 키·버튼을 놓는다 */
   async perform(actions: unknown[]): Promise<void> {
@@ -246,7 +229,7 @@ export class FirefoxPage {
       target: { context: this.context },
       awaitPromise: true,
     });
-    if (r.type === 'exception') throw new TirnoError(r.exceptionDetails?.text ?? 'Expression threw', 'page_threw');
+    if (r.type === 'exception') throw new TirnoError(r.exceptionDetails?.text ?? r.exceptionDetails?.exception?.value?.message ?? 'Expression threw', 'page_threw');
     return r.result?.value === undefined ? undefined : JSON.parse(r.result.value);
   }
 
