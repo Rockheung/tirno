@@ -33,6 +33,8 @@ export const BASELINE_ARGS: readonly string[] = [
   '--disable-renderer-backgrounding',
   // 멈춘 렌더러를 크롬이 스스로 죽이면 perf 진단이 대상을 잃는다
   '--disable-hang-monitor',
+  // 로컬 하네스는 대개 mkcert 같은 자체 인증서다 — 경고 화면에 막히지 않게 세 엔진 모두 받는다
+  '--ignore-certificate-errors',
   // CDP 는 IPC 를 많이 친다 — 홍수 방지가 명령을 떨어뜨린다
   '--disable-ipc-flooding-protection',
   // 크래시 리포터·breakpad 는 컨테이너에서 쓰기 실패로 경고를 낸다
