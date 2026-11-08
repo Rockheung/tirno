@@ -49,7 +49,7 @@ const program = new Command();
 program
   .name('tirno')
   .description('Multi-session browser automation CLI on raw CDP')
-  .version('0.10.0');
+  .version('0.11.0');
 
 program
   .command('__firefox-holder <port> <out>', { hidden: true })
