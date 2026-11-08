@@ -10,6 +10,7 @@ import { launch } from '../core/chrome-launcher.js';
 import { loadHeaderExt } from '../core/header-ext.js';
 import { connect, connectWithoutPageSetup } from '../core/chrome-connector.js';
 import { launchFirefox } from '../core/firefox.js';
+import { launchSafari, endSafariSession } from '../core/safari.js';
 import { getActivePage, waitForBootPage } from '../cdp/page-resolver.js';
 import type { Cookie } from '../cdp/browser.js';
 import { isAlive, killAndWait } from '../core/process-guard.js';
@@ -100,6 +101,7 @@ async function killIfOurs(meta: store.SessionMetadata, verb: string): Promise<bo
     info(`${verb} continues with a fresh browser; the old entry was a stale label.`);
     return false;
   }
+  await endSafariSession(meta);
   try { await killAndWait(meta.pid); } catch { /* already dead */ }
   return true;
 }
@@ -117,10 +119,13 @@ function policyFromOpts(opts: { allow?: string; readOnly?: boolean; confirm?: st
   return Object.keys(p).length ? p : undefined;
 }
 
-function refuseFirefoxOptions(opts: { port?: number; extensions?: boolean; allow?: string; readOnly?: boolean; confirm?: string; destructivePattern?: string }): void {
+function refuseEngineOptions(engine: 'firefox' | 'safari', opts: { port?: number; extensions?: boolean; allow?: string; readOnly?: boolean; confirm?: string; destructivePattern?: string; headless?: boolean }, browserFlags: string[]): void {
+  const title = engine === 'safari' ? 'Safari' : 'Firefox';
   if (opts.port !== undefined || opts.extensions || policyFromOpts(opts)) {
-    throw new TirnoError('Firefox sessions do not support --port, --extensions or policies yet', 'capability_unsupported', { engine: 'firefox' });
+    throw new TirnoError(`${title} sessions do not support --port, --extensions or policies yet`, 'capability_unsupported', { engine });
   }
+  if (engine === 'safari' && opts.headless) throw new TirnoError('Safari has no headless mode — its automation window is always shown', 'capability_unsupported', { engine });
+  if (engine === 'safari' && browserFlags.length) throw new TirnoError('Safari takes no browser flags after --', 'capability_unsupported', { engine });
 }
 
 export function registerSessionCommands(program: Command): void {
@@ -136,7 +141,7 @@ export function registerSessionCommands(program: Command): void {
     .option('-p, --port <port>', 'Pin a fixed DevTools port. Omit to let the OS assign one — required for browser-MCP anchoring', intArg)
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable')
-    .option('--browser <engine>', 'chrome or firefox. A firefox session supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, ls, restart and kill so far', 'chrome')
+    .option('--browser <engine>', 'chrome, firefox or safari (Safari Technology Preview). A firefox or safari session supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, ls, restart and kill so far', 'chrome')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
     .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')
@@ -158,11 +163,12 @@ export function registerSessionCommands(program: Command): void {
   newCmd.action(async (name: string, urlArg: string | undefined, opts) => {
     try {
       const firefox = opts.browser === 'firefox';
-      if (!firefox && opts.browser !== 'chrome') throw new Error(`--browser takes chrome or firefox, not ${opts.browser}`);
-      if (firefox) refuseFirefoxOptions(opts);
+      const safari = opts.browser === 'safari';
+      if (!firefox && !safari && opts.browser !== 'chrome') throw new Error(`--browser takes chrome, firefox or safari, not ${opts.browser}`);
       const rawArgs = process.argv;
       const dashDashIdx = rawArgs.indexOf('--');
       const chromeFlags = dashDashIdx >= 0 ? rawArgs.slice(dashDashIdx + 1) : [];
+      if (firefox || safari) refuseEngineOptions(safari ? 'safari' : 'firefox', opts, chromeFlags);
       // positional [url] takes precedence; --url stays as backward-compat alias.
       const bootUrl: string | undefined = positionalUrl(rawArgs, dashDashIdx, urlArg) ?? opts.url;
 
@@ -204,7 +210,11 @@ export function registerSessionCommands(program: Command): void {
       // dNR 은 WebRTC 를 못 본다 — 허용 목록이 있으면 UDP 로 새는 길을 플래그로 막는다
       if (policy?.allowDomains?.length) chromeFlags.push(...WEBRTC_CONTAINMENT_FLAGS.filter(f => !chromeFlags.includes(f)));
 
-      const meta = firefox ? await launchFirefox({
+      const meta = safari ? await launchSafari({
+        name,
+        ...(opts.executablePath ? { executablePath: opts.executablePath } : {}),
+        ...(bootUrl ? { bootUrl } : {}),
+      }) : firefox ? await launchFirefox({
         name,
         headless: !!opts.headless,
         extraArgs: chromeFlags,
@@ -244,7 +254,7 @@ export function registerSessionCommands(program: Command): void {
       // `eval` 이 아직 about:blank 인 탭을 읽어 **에러 없이 0** 을 낸다 — 값이 0 이면
       // 사람은 빌드·프록시·서버를 먼저 뒤지고, 앵커는 그 셋을 지나온 다음에 의심한다 (#173).
       let bootWarning: string | null = null;
-      if (bootUrl && !firefox) {
+      if (bootUrl && !firefox && !safari) {
         try {
           const { browser } = await connectWithoutPageSetup(name);
           try {
@@ -313,7 +323,8 @@ export function registerSessionCommands(program: Command): void {
           throw new TirnoError(`'${name}' is an external endpoint (${existing.wsEndpoint}) — tirno did not launch it and cannot restart it. \`tirno kill ${name}\` drops the entry; \`tirno connect\` registers again.`, 'session_not_owned', { session: name, ownership: 'external' });
         }
         const firefox = existing?.engine === 'firefox';
-        if (firefox) refuseFirefoxOptions(opts);
+        const safari = existing?.engine === 'safari';
+        if (existing?.engine) refuseEngineOptions(existing.engine, opts, chromeFlags);
 
         // 재기동은 브라우저를 죽인다. `Expires` 없는 쿠키는 거기서 같이 죽으므로
         // 프로필은 남아도 로그인은 안 남는다 — 로그인 뒤의 화면을 보러 재기동하는
@@ -354,7 +365,11 @@ export function registerSessionCommands(program: Command): void {
         if (restartPolicy?.allowDomains?.length) chromeFlags.push(...WEBRTC_CONTAINMENT_FLAGS.filter(f => !chromeFlags.includes(f)));
 
         const executablePath: string | undefined = opts.executablePath ?? existing?.executablePath;
-        const meta = firefox ? await launchFirefox({
+        const meta = safari ? await launchSafari({
+          name,
+          ...(executablePath ? { executablePath } : {}),
+          ...(bootUrl ? { bootUrl } : {}),
+        }) : firefox ? await launchFirefox({
           name,
           headless: !!opts.headless,
           extraArgs: chromeFlags,
@@ -616,6 +631,7 @@ export function registerSessionCommands(program: Command): void {
               continue;
             }
 
+            await endSafariSession(meta);
             await killAndWait(meta.pid);
             // Chrome leaves DevToolsActivePort behind on every exit path, and a
             // leftover makes the next MCP attach fail with an opaque

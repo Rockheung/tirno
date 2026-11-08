@@ -34,8 +34,13 @@ export interface SessionMetadata {
    * 없으면(기본) tirno 가 띄운 로컬 크롬이다. core/external 참조.
    */
   kind?: 'external';
-  /** 없으면 Chromium 이다. Firefox 세션의 `port` 는 Marionette, `wsEndpoint` 는 BiDi 다. */
-  engine?: 'firefox';
+  /**
+   * 없으면 Chromium 이다. Firefox 세션의 `port` 는 Marionette, `wsEndpoint` 는 BiDi 다.
+   * Safari 세션의 `pid`·`port` 는 safaridriver 의 것이고, `userDataDir` 은 로그만 담는다.
+   */
+  engine?: 'firefox' | 'safari';
+  /** Safari 세션 — safaridriver 의 WebDriver 세션 id. kill 이 이것으로 세션을 닫는다 */
+  webdriverSessionId?: string;
   pid: number;
   /** Observed at launch. With `--remote-debugging-port=0` the OS picks it. */
   port: number;
