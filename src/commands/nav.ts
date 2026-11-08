@@ -221,6 +221,10 @@ export function registerNavCommands(program: Command): void {
         const tab = await getTabByHandle(browser, pageId);
         const url = tab.url();
         await browser.connection.send('Target.closeTarget', { targetId: tab.targetId });
+        // closeTarget 은 탭이 목록에서 빠지기 전에 답한다 — 바로 이어지는 pages 가 닫은 탭을 센다
+        for (let i = 0; i < 50 && (await browser.targets()).some(t => t.targetId === tab.targetId); i++) {
+          await new Promise(r => setTimeout(r, 100));
+        }
         if (meta.selectedTarget === tab.targetId) store.update(meta.name, { selectedTarget: undefined });
         browser.disconnect();
         success(`Closed tab ${pageId}: ${url}`);
