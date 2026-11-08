@@ -103,3 +103,27 @@ test('steps 만큼 나눠 움직이고 마지막이 목적지다', async () => {
   await mouse.move(100, 0, { steps: 4 });
   assert.deepEqual(sent.map(s => s.params.x), [25, 50, 75, 100]);
 });
+
+test('type 은 대문자·Shift 기호를 Shift 를 누른 채로 보낸다 — 스캔코드 소비자에게 shiftKey 가 실린다 (#245)', async () => {
+  const { session, sent } = fakeSession();
+  const kb = new Keyboard(session);
+  await kb.type('Ab!');
+  const downs = sent.filter(s => s.params.type !== 'keyUp').map(s => [s.params.key, s.params.code, s.params.modifiers, s.params.text]);
+  assert.deepEqual(downs, [
+    ['Shift', 'ShiftLeft', 8, ''],
+    ['A', 'KeyA', 8, 'A'],
+    ['b', 'KeyB', 0, 'b'],
+    ['Shift', 'ShiftLeft', 8, ''],
+    ['!', 'Digit1', 8, '!'],
+  ]);
+  assert.equal(kb.modifiers, 0, 'Shift 를 놓고 끝난다');
+});
+
+test('이미 Shift 를 눌러 두었으면 type 이 Shift 를 놓지 않는다', async () => {
+  const { session, sent } = fakeSession();
+  const kb = new Keyboard(session);
+  await kb.down('Shift');
+  await kb.type('A');
+  assert.equal(sent.filter(s => s.params.key === 'Shift').length, 1);
+  assert.equal(kb.modifiers, 8);
+});
