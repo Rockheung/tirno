@@ -1,6 +1,6 @@
 {
   "name": "tirno",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "Multi-session browser automation CLI on raw CDP — agent self-journaling",
   "keywords": [
     "cdp",
