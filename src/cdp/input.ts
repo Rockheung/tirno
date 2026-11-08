@@ -14,6 +14,8 @@ export type { KeyInput };
 
 const MODIFIER_BIT: Record<string, number> = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
 
+const SHIFTED = new Set('ABCDEFGHIJKLMNOPQRSTUVWXYZ~!@#$%^&*()_+{}|:"<>?');
+
 interface KeyDescription {
   key: string;
   keyCode: number;
@@ -97,7 +99,10 @@ export class Keyboard {
   async type(text: string, opts: { delay?: number } = {}): Promise<void> {
     for (const char of text) {
       if (char in KEY_DEFINITIONS) {
+        const holdShift = SHIFTED.has(char) && !(this.modifiers & 8);
+        if (holdShift) await this.down('Shift');
         await this.press(char, { delay: opts.delay });
+        if (holdShift) await this.up('Shift');
       } else {
         if (opts.delay) await sleep(opts.delay);
         await this.sendCharacter(char);
