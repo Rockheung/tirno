@@ -39,6 +39,7 @@ tirno schema --pretty | jq '.commands[] | select(.destructive) | .name'
 tirno new <name> <url> --headless --ephemeral    # 일회성 작업
 tirno new <name> <url>                           # 로그인이 남아야 하면 프로필 유지(=--ephemeral 없이)
 tirno new <name> <url> --browser firefox         # Firefox 로 확인할 때
+tirno new <name> <url> --browser safari          # Safari(Technology Preview)로 확인할 때 — 한 번에 하나
 ```
 
 - `tirno new` 는 **즉시 반환하고 chrome 은 계속 산다.** 백그라운드로 돌리거나 기다릴 필요 없다.
@@ -46,7 +47,7 @@ tirno new <name> <url> --browser firefox         # Firefox 로 확인할 때
   ```bash
   tirno new work https://example.com -- --no-proxy-server --host-resolver-rules="MAP *.x.dev 127.0.0.1"
   ```
-- Firefox 세션도 `snapshot` → `@ref` 로 `click` · `fill` · `type` · `press` · `wait-for` 를 한다. 역할과 이름은 페이지 안에서 계산하므로 Chrome 과 다를 수 있다. 맞는 것이 안 나오면 CSS 셀렉터로 집거나 `eval` 로 확인한다.
+- Firefox · Safari 세션도 `snapshot` → `@ref` 로 `click` · `fill` · `type` · `press` · `wait-for` 를 한다. 역할과 이름은 페이지 안에서 계산하므로 Chrome 과 다를 수 있다. 맞는 것이 안 나오면 CSS 셀렉터로 집거나 `eval` 로 확인한다.
 - 포트는 OS 가 준다. `--port` 는 레거시이고 그 세션은 MCP 앵커 대상이 못 된다.
 - 브라우저 MCP 를 같이 쓸 거면 `tirno anchor set <anchor> <name>` — 자세한 건 `/tirno`.
 

@@ -28,6 +28,7 @@ npm link   # 또는 PATH에 bin/ 추가
 tirno new <name> [url] [-- chrome-flags...]  # Chrome 세션 생성
 tirno new <name> --extensions                # 확장이 돌게 한다 (기본은 꺼짐)
 tirno new <name> --browser firefox           # Firefox 세션 생성 (기본은 chrome)
+tirno new <name> <url> --browser safari      # Safari Technology Preview 세션 (한 번에 하나, headless 없음)
 tirno restart <name> [url] [-- flags...]     # 죽이고 새 플래그로 재생성
 tirno restart <name> --keep-cookies          # 세션 쿠키까지 넘긴다 — 로그인이 살아남는다
 tirno ls [--json] [--flags]                  # 세션 목록 (ENGINE + STATUS + OWNER 컬럼)
@@ -47,6 +48,7 @@ tirno drift [name] [-- <flags>]              # 선언한 플래그 vs 실행 중
 되고, 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는
 `capability_unsupported` 로 거절한다. 실행 파일은 `--executable-path` 나 `$TIRNO_FIREFOX` 로 지정한다.
 `snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다.
+Safari 세션도 같은 명령이 된다. safaridriver 는 세션을 하나만 열고, `--headless` 와 `--` 뒤 플래그는 거절한다. 드라이버는 `--executable-path` 나 `$TIRNO_SAFARI` 로 지정한다.
 
 `--` 뒤에 Chrome 플래그를 전달:
 
@@ -371,7 +373,7 @@ tirno update [--check]           # 최신 릴리즈로 — 바이너리 + 스킬
 
 `~/.tirno/sessions/<name>.json`에 저장:
 - PID, port, wsEndpoint, userDataDir, chromeFlags, createdAt, lastAccessedAt
-- engine: Firefox 세션이면 `firefox`, Chrome 세션에는 없다
+- engine: Firefox 세션이면 `firefox`, Safari 세션이면 `safari`, Chrome 세션에는 없다
 - emulation: { device, viewport, network, cpu }
 - permissions: origin → 허용 목록. connect 마다 재적용한다
 - headerRules: 확장으로 나가는 고정 헤더. 재기동이 다시 읽힌다

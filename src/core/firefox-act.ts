@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as store from './session-store.js';
-import { openFirefoxPage, type FirefoxPage } from './firefox.js';
+import { openBidiPage, type FirefoxPage } from './firefox.js';
 import { underRoot } from './paths.js';
 import { TirnoError } from '../util/errors.js';
 import { axRole, isRoleWord } from '../cdp/target.js';
@@ -29,7 +29,7 @@ export function firefoxSession(session?: string): store.SessionMetadata | null {
   if (!name) return null;
   try {
     const meta = store.get(name);
-    return meta.engine === 'firefox' ? meta : null;
+    return meta.engine ? meta : null;
   } catch {
     return null;
   }
@@ -122,7 +122,7 @@ function refFile(session: string): string {
 }
 
 async function withPage<T>(meta: store.SessionMetadata, fn: (page: FirefoxPage) => Promise<T>): Promise<T> {
-  const { page, browser } = await openFirefoxPage(meta);
+  const { page, browser } = await openBidiPage(meta);
   try {
     return await fn(page);
   } finally {
@@ -184,12 +184,31 @@ function pointerClick(x: number, y: number, dbl: boolean): unknown[] {
 
 const DETACHED = `{ x: 0, y: 0, relation: 'detached', hit: null }`;
 
+const ELEMENT = 'element-6066-11e4-a52e-4f735466cecf';
+
+async function clickAt(page: FirefoxPage, x: number, y: number, dbl: boolean): Promise<void> {
+  if (!page.webdriver) return page.perform(pointerClick(x, y, dbl));
+  await page.classic('POST', '/actions', { actions: pointerClick(x, y, dbl) });
+  await page.classic('DELETE', '/actions');
+}
+
+/** Safari — 포커스된 요소의 classic 요소 참조. 요소 키 보내기는 OS 입력기를 타지 않는다(실측) */
+async function focusedElement(page: FirefoxPage): Promise<string> {
+  const ref = await page.classic<Record<string, string>>('POST', '/execute/sync', { script: 'return document.activeElement || document.body', args: [] });
+  return ref[ELEMENT];
+}
+
+async function sendText(page: FirefoxPage, text: string): Promise<void> {
+  if (!page.webdriver) return page.perform(keyActions(typingSteps(text)));
+  await page.classic('POST', `/element/${await focusedElement(page)}/value`, { text });
+}
+
 export async function firefoxClick(meta: store.SessionMetadata, target: string, name: string | undefined,
   opts: { exact?: boolean; dbl?: boolean; synthetic?: boolean }): Promise<string> {
   return withPage(meta, async page => {
     const t = await resolve(page, meta, target, name, !!opts.exact);
     if (t.kind === 'coords') {
-      await page.perform(pointerClick(t.x, t.y, !!opts.dbl));
+      await clickAt(page, t.x, t.y, !!opts.dbl);
       return `Clicked at (${t.x}, ${t.y})`;
     }
     if (opts.synthetic) {
@@ -204,7 +223,7 @@ export async function firefoxClick(meta: store.SessionMetadata, target: string, 
     const h = await inPage<HitTest>(page, `const el = target(a0); return el ? (${HIT_TEST}).call(el) : ${DETACHED};`, t.loc);
     const refusal = refuseClick(t.label, h);
     if (refusal) throw new TirnoError(refusal, h.relation === 'detached' ? 'stale_ref' : 'error', { relation: h.relation });
-    await page.perform(pointerClick(h.x, h.y, !!opts.dbl));
+    await clickAt(page, h.x, h.y, !!opts.dbl);
     return `Clicked ${t.label}`;
   });
 }
@@ -238,7 +257,7 @@ function typingSteps(text: string): KeyStep[] {
 }
 
 export async function firefoxType(meta: store.SessionMetadata, text: string): Promise<void> {
-  await withPage(meta, page => page.perform(keyActions(typingSteps(text))));
+  await withPage(meta, page => sendText(page, text));
 }
 
 export async function firefoxPress(meta: store.SessionMetadata, key: string): Promise<void> {
@@ -246,11 +265,22 @@ export async function firefoxPress(meta: store.SessionMetadata, key: string): Pr
   const value = [...combo.key].length === 1 ? combo.key : KEYS[combo.key];
   if (!value) throw new TirnoError(`Unknown key "${combo.key}"`, 'error');
   const mods = combo.modifiers.map(m => KEYS[m]);
-  await withPage(meta, page => page.perform(keyActions([
+  const steps: KeyStep[] = [
     ...mods.map(v => ({ type: 'keyDown' as const, value: v })),
     { type: 'keyDown', value }, { type: 'keyUp', value },
-    ...mods.reverse().map(v => ({ type: 'keyUp' as const, value: v })),
-  ])));
+    ...[...mods].reverse().map(v => ({ type: 'keyUp' as const, value: v })),
+  ];
+  await withPage(meta, async page => {
+    if (!page.webdriver) return page.perform(keyActions(steps));
+    // 수식키 조합과 특수 키는 키 동작으로 — 요소 키 보내기로는 편집 명령(전체 선택)과 포커스
+    // 이동(Tab)이 안 돈다(실측). 글자 하나만 입력기를 피해 요소 키 보내기로 간다.
+    if (mods.length || value !== combo.key) {
+      await page.classic('POST', '/actions', { actions: keyActions(steps) });
+      await page.classic('DELETE', '/actions');
+    } else {
+      await sendText(page, value);
+    }
+  });
 }
 
 export async function firefoxFill(meta: store.SessionMetadata, target: string, name: string | undefined, value: string,
@@ -270,7 +300,14 @@ export async function firefoxFill(meta: store.SessionMetadata, target: string, n
       }
       return true;`, t.loc);
     if (!focused) throw new TirnoError(refuseClick(t.label, { x: 0, y: 0, relation: 'detached', hit: null })!, 'stale_ref', { ref: t.label });
-    await page.perform(keyActions(value === '' ? [{ type: 'keyDown', value: KEYS['Backspace'] }, { type: 'keyUp', value: KEYS['Backspace'] }] : typingSteps(value)));
+    if (page.webdriver) {
+      // 요소 키 보내기는 선택을 덮어쓰지 않고 끝에 붙인다 — 비우고 보낸다
+      const el = await focusedElement(page);
+      await page.classic('POST', `/element/${el}/clear`, {});
+      if (value !== '') await page.classic('POST', `/element/${el}/value`, { text: value });
+    } else {
+      await page.perform(keyActions(value === '' ? [{ type: 'keyDown', value: KEYS['Backspace'] }, { type: 'keyUp', value: KEYS['Backspace'] }] : typingSteps(value)));
+    }
     if (opts.verify === false) return t.label;
     const now = await inPage<unknown>(page, `const el = target(a0); return el ? ('value' in el ? el.value : el.textContent) : null;`, t.loc);
     if (now !== value) {

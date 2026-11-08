@@ -151,7 +151,7 @@ export async function launchFirefox(opts: FirefoxLaunch): Promise<store.SessionM
   store.create(meta);
   store.setActive(opts.name);
   if (opts.bootUrl) {
-    const { page, browser } = await openFirefoxPage(meta);
+    const { page, browser } = await openBidiPage(meta);
     await page.goto(opts.bootUrl);
     browser.disconnect();
   }
@@ -200,7 +200,19 @@ interface EvalResult {
 }
 
 export class FirefoxPage {
-  constructor(private readonly bidi: Bidi, private readonly context: string, private currentUrl: string) {}
+  constructor(private readonly bidi: Bidi, private readonly context: string, private currentUrl: string,
+    /** Safari 세션 — 입력은 classic WebDriver 로 보낸다(BiDi 는 포인터를 못 받고, 키는 OS 입력기를 탄다) */
+    readonly webdriver?: { port: number; session: string }) {}
+
+  async classic<T>(method: 'POST' | 'DELETE', route: string, body?: unknown): Promise<T> {
+    if (!this.webdriver) throw new TirnoError('classic WebDriver is only for Safari sessions', 'error');
+    const res = await fetch(`http://127.0.0.1:${this.webdriver.port}/session/${this.webdriver.session}${route}`, {
+      method, ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(30000),
+    });
+    const { value } = await res.json() as { value: T & { error?: string; message?: string } };
+    if (value && typeof value === 'object' && 'error' in value && value.error) throw new TirnoError(`safaridriver: ${value.message ?? value.error}`, 'safari_error');
+    return value;
+  }
 
   /** 실제 입력 장치 동작. 끝나면 눌린 키·버튼을 놓는다 */
   async perform(actions: unknown[]): Promise<void> {
@@ -245,9 +257,11 @@ export class FirefoxPage {
   }
 }
 
-export async function openFirefoxPage(meta: store.SessionMetadata): Promise<{ page: FirefoxPage; browser: { disconnect(): void } }> {
-  if (!isAlive(meta.pid)) throw new TirnoError(`Firefox of session '${meta.name}' is gone`, 'session_ghost', { session: meta.name });
-  const bidi = await Bidi.open(meta.wsEndpoint).catch(async () => {
+/** Firefox · Safari 세션의 첫 탭. Firefox 만 BiDi 연결을 붙잡는 상주 프로세스를 다시 띄운다 */
+export async function openBidiPage(meta: store.SessionMetadata): Promise<{ page: FirefoxPage; browser: { disconnect(): void } }> {
+  if (!isAlive(meta.pid)) throw new TirnoError(`${meta.engine === 'safari' ? 'safaridriver' : 'Firefox'} of session '${meta.name}' is gone`, 'session_ghost', { session: meta.name });
+  const bidi = await Bidi.open(meta.wsEndpoint).catch(async (e: unknown) => {
+    if (meta.engine !== 'firefox') throw e;
     const wsEndpoint = await startHolder(meta.userDataDir, meta.port);
     store.update(meta.name, { wsEndpoint });
     return Bidi.open(wsEndpoint);
@@ -256,5 +270,6 @@ export async function openFirefoxPage(meta: store.SessionMetadata): Promise<{ pa
   const top = contexts[0];
   if (!top) throw new TirnoError(`Session '${meta.name}' has no open tab`, 'firefox_error');
   store.update(meta.name, { lastAccessedAt: new Date().toISOString() });
-  return { page: new FirefoxPage(bidi, top.context, top.url), browser: { disconnect: () => bidi.close() } };
+  const webdriver = meta.engine === 'safari' && meta.webdriverSessionId ? { port: meta.port, session: meta.webdriverSessionId } : undefined;
+  return { page: new FirefoxPage(bidi, top.context, top.url, webdriver), browser: { disconnect: () => bidi.close() } };
 }

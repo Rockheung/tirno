@@ -8,6 +8,7 @@ import { readActivePort } from './devtools-port.js';
 import { scanProcListeners, cmdlineFromProc } from './proc-net.js';
 import { httpBaseOf, isExternal, probeDevTools } from './external.js';
 import { parseFirefoxProfile } from './firefox.js';
+import { isSafariDriverFor } from './safari.js';
 
 const exec = promisify(execFile);
 
@@ -375,16 +376,28 @@ export async function inspectSession(
     };
   }
   const firefox = meta.engine === 'firefox';
-  const active = firefox ? null : readActivePort(meta.userDataDir);
+  const active = meta.engine ? null : readActivePort(meta.userDataDir);
   const resolvedPort = active?.port ?? meta.port ?? null;
   // 배열을 넘기는 옛 호출은 "스캔이 됐다" 로 본다 — 실패를 알릴 수 있는 것은 ListenerScan 뿐
   const resolved: ListenerScan = scan === undefined
     ? await scanListeners()
     : Array.isArray(scan) ? { listeners: scan, backend: pickBackend() } : scan;
-  const listeners = resolved.listeners.filter(l => l.port === resolvedPort);
+  let listeners = resolved.listeners.filter(l => l.port === resolvedPort);
   const pidAlive = isAlive(meta.pid);
   const cmdline = pidAlive ? await readCmdline(meta.pid) : null;
-  const runningUserDataDir = cmdline ? (firefox ? parseFirefoxProfile(cmdline) : parseUserDataDir(cmdline)) : null;
+  // safaridriver 는 포트를 직접 듣지 않는다 — launchd 가 띄운 WebDriver HTTP 서비스(XPC)가 듣는다
+  if (meta.engine === 'safari' && cmdline && isSafariDriverFor(cmdline, meta.port)) {
+    const mapped: Listener[] = [];
+    for (const l of listeners) {
+      const c = await readCmdline(l.pid);
+      mapped.push(c?.includes('WebDriver.framework') && c.includes('com.apple.WebDriver.HTTPService') ? { ...l, pid: meta.pid } : l);
+    }
+    listeners = mapped;
+  }
+  // Safari 에는 프로필이 없다 — 이 세션의 포트로 뜬 safaridriver 면 우리 것이다
+  const runningUserDataDir = !cmdline ? null
+    : meta.engine === 'safari' ? (isSafariDriverFor(cmdline, meta.port) ? meta.userDataDir : '')
+    : firefox ? parseFirefoxProfile(cmdline) : parseUserDataDir(cmdline);
 
   const verdict = classify({
     resolvedPort,
