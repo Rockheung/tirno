@@ -120,7 +120,7 @@ program.hook('preAction', (_thisCommand, actionCommand) => {
   const session = opts.session ?? (SESSION_FREE_FOR_JOURNAL.has(cmdName.split(' ')[0]) ? null : store.getActive());
   beginCommand({ session, cmd: cmdName, argv: process.argv.slice(2), jsonEnvelope: !!process.env['TIRNO_JSON'] });
   // 세션 정책 — 명령 진입 전에 argv 만 보고 거절한다 (#214). 세션이 없으면 볼 정책도 없다.
-  const denial = guardPolicy(actionCommand.name(), process.argv.slice(2), opts);
+  const denial = guardPolicy(cmdName, process.argv.slice(2), opts);
   if (denial) fail(new TirnoError(denial.message, 'policy_denied', { policy: denial.policy }));
 });
 

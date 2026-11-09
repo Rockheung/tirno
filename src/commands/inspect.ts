@@ -8,7 +8,7 @@ import { formatTable, success, info, warn, error, fail } from '../output/formatt
 import { emitPageLines, resolveMaxOutput, boundariesEnabled } from '../output/page-content.js';
 import { captureRequests, type CapturedRequest } from '../cdp/network-capture.js';
 import * as refStore from '../core/ref-store.js';
-import { bootUrlOf } from '../core/session-store.js';
+import { anchorUrlOf } from '../core/session-store.js';
 import type { RefStore } from '../core/ref-store.js';
 import * as visualCache from '../core/visual-cache.js';
 import { pageFingerprint } from '../cdp/screenshot-hash.js';
@@ -80,7 +80,7 @@ export function registerInspectCommands(program: Command): void {
         const page = await getActivePage(browser);
         // 앵커가 아직 안 열렸으면 그렇다고 말한다 — 빈 트리는 페이지가 비었다는
         // 뜻처럼 보이지, 너무 일찍 읽었다는 뜻으로는 안 보인다 (#173).
-        const blank = blankAnchorHint(page.url(), bootUrlOf(meta));
+        const blank = blankAnchorHint(page.url(), anchorUrlOf(meta));
         if (blank) warn(blank);
         const cdp = await page.createCDPSession();
 

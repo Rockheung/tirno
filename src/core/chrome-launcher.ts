@@ -173,6 +173,7 @@ export async function launch(opts: LaunchOptions): Promise<store.SessionMetadata
     wsEndpoint,
     userDataDir,
     chromeFlags: args,
+    ...(opts.bootUrl ? { bootUrl: opts.bootUrl } : {}),
     ...(opts.executablePath ? { executablePath: opts.executablePath } : {}),
     ...(opts.extensions ? { extensions: true } : {}),
     ...(headless ? { headless: true } : {}),

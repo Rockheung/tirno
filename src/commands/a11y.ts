@@ -6,7 +6,7 @@ import chalk from 'chalk';
 import { intArg } from '../util/parsers.js';
 import { connect } from '../core/chrome-connector.js';
 import { getActivePage, getInteractivePage, blankAnchorHint } from '../cdp/page-resolver.js';
-import { bootUrlOf } from '../core/session-store.js';
+import { anchorUrlOf } from '../core/session-store.js';
 import { success, info, warn, fail } from '../output/formatter.js';
 import { TirnoError } from '../util/errors.js';
 import { renderAXTree, type AXNode } from '../cdp/ax-render.js';
@@ -109,7 +109,7 @@ export function registerA11yCommands(program: Command): void {
         }
 
         const page = await getActivePage(browser);
-        const blank = blankAnchorHint(page.url(), bootUrlOf(meta));
+        const blank = blankAnchorHint(page.url(), anchorUrlOf(meta));
         if (blank) warn(blank);
         const rules = opts.rules ? String(opts.rules).split(',').map((s: string) => s.trim()).filter(Boolean) : undefined;
         const result = await runAudit(page, meta.name, { rules, selector: opts.selector });
