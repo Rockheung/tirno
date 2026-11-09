@@ -53,7 +53,7 @@ Linux:
 
 Chrome 말고 `--browser firefox`(Firefox, `$TIRNO_FIREFOX`)와 `--browser safari`(Safari
 Technology Preview 의 safaridriver, `$TIRNO_SAFARI`)도 된다. 되는 명령은 nav · eval · screenshot ·
-snapshot · click · fill · type · press · wait-for · ls · restart · kill 이고, Safari 는 세션 하나에
+snapshot · click · fill · type · press · wait-for · pages · new-tab · select · close-tab · ls · restart · kill 이고, Safari 는 세션 하나에
 headless 가 없다. 세 엔진 모두 신뢰되지 않은 https 인증서를 받는다.
 
 Node 는 **바이너리로 받으면 필요 없다** — 런타임이 들어 있다. 소스에서 빌드할 때만

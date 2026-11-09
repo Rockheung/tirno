@@ -1,9 +1,10 @@
 import { Browser } from '../cdp/browser.js';
 import type { Page } from '../cdp/page.js';
 import * as store from './session-store.js';
+import { requestedTab } from './tab-request.js';
 import { inspectSession } from './inventory.js';
 import { ChromeNotRunning, NoActiveSession, SessionNotOwned, TirnoError } from '../util/errors.js';
-import { getActivePage } from '../cdp/page-resolver.js';
+import { getActivePage, getTabByHandle } from '../cdp/page-resolver.js';
 import { applyEmulation } from '../cdp/emulation.js';
 import { applyPermissions } from '../cdp/permissions.js';
 import { badgeInstallScript } from '../cdp/badge.js';
@@ -61,7 +62,7 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
 
   const meta = store.get(name);
   if (meta.engine) {
-    throw new TirnoError(`Session '${name}' is ${meta.engine === 'safari' ? 'Safari' : 'Firefox'}. It supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, ls, restart and kill so far.`, 'capability_unsupported', { session: name, engine: meta.engine });
+    throw new TirnoError(`Session '${name}' is ${meta.engine === 'safari' ? 'Safari' : 'Firefox'}. It supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, pages, new-tab, select, close-tab, ls, restart and kill so far.`, 'capability_unsupported', { session: name, engine: meta.engine });
   }
 
   // `isAlive(pid)` alone is not enough here: pids are recycled and ports are
@@ -79,7 +80,8 @@ async function connectSession(sessionName: string | undefined, prepare: boolean)
   // meta.wsEndpoint (a launch-time snapshot that goes stale on restart);
   // legacy fixed-port sessions write no such file and fall back to meta.
   const browser = await Browser.connect(inv.wsEndpoint);
-  browser.preferredTargetId = meta.selectedTarget;
+  const tab = requestedTab();
+  browser.preferredTargetId = tab ? (await getTabByHandle(browser, tab)).targetId : meta.selectedTarget;
 
   // Auto-dismiss any JS dialog (alert/confirm/prompt) and neutralize
   // beforeunload handlers on every page so navigation/clicks don't silently

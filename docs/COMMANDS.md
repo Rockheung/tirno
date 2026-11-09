@@ -9,7 +9,7 @@
 | 명령 | 설명 |
 |---|---|
 | `new <name> [url] [-- <chrome-flags>]` | 새 Chrome 세션 생성. `--`로 임의 flag 전달 (`--proxy-server`, `--host-resolver-rules` 등). 포트는 OS가 할당(`--port`로 고정 가능하나 그러면 MCP 앵커 대상이 못 됨). `[url]` 을 주면 **그 페이지가 커밋될 때까지 기다렸다가** 돌아온다(`--boot-timeout <ms>`, 기본 15000; 못 기다리면 세션은 그대로 두고 그 사실을 말한다) |
-| `new <name> --browser firefox` | Firefox 세션 생성. 엔진은 세션 메타데이터에 남고 이후 명령과 `restart` 가 따른다. `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `ls` · `restart` · `kill` 이 되고(`snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다. `@ref` 는 페이지 전역의 `Symbol.for('tirno.refs')` 에 심은 WeakRef 로 가리키므로 페이지 스크립트가 볼 수 있고, 이동하면 사라진다), 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는 `capability_unsupported` 로 거절한다 |
+| `new <name> --browser firefox` | Firefox 세션 생성. 엔진은 세션 메타데이터에 남고 이후 명령과 `restart` 가 따른다. `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `pages` · `new-tab` · `select` · `close-tab` · `ls` · `restart` · `kill` 이 되고(`snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다. `@ref` 는 페이지 전역의 `Symbol.for('tirno.refs')` 에 심은 WeakRef 로 가리키므로 페이지 스크립트가 볼 수 있고, 이동하면 사라진다), 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는 `capability_unsupported` 로 거절한다 |
 | `new <name> <url> --browser safari` | Safari Technology Preview 세션. 되는 명령과 계산 방식은 Firefox 와 같다. safaridriver 는 세션을 하나만 연다. `--headless` · `--` 뒤 플래그 · `--port` · `--extensions` · 정책은 `capability_unsupported`. 입력은 classic WebDriver 로 보낸다(STP 의 BiDi 는 포인터를 못 받고, 키 입력은 OS 입력기를 탄다). 세션은 `acceptInsecureCerts` 로 열려 신뢰되지 않은 https 인증서도 받는다(Chrome 은 기준 인자 `--ignore-certificate-errors`, Firefox 도 `acceptInsecureCerts`). 드라이버는 `--executable-path` 나 `$TIRNO_SAFARI` |
 | `ls` | 세션 목록 (engine, port, status, **owner**, proxy, emulation, policy, last access). group 이 있는 세션이 있으면 GROUP 열, `--flags` 를 주면 FLAGS 열이 붙는다 |
 | `attach <name>` | active 세션 변경 |
@@ -366,7 +366,8 @@ MCP 엔트리를 하나 더 쓰면 worktree 병렬 작업이 된다.
 |---|---|
 | `nav <url> [--strict]` | URL로 이동. 문서가 커밋되면 `✓ url (status, ms)`. **4xx/5xx 는 exit 0 이되 `⚠ non-2xx` 한 줄을 더 낸다** — 다음에 찍을 것이 에러 페이지라는 뜻이다. `--strict` 면 exit 1. http(s) 인데 응답이 없거나(status 0) `chrome-error://` 로 끝나면 항상 exit 1 |
 | `reload [--hard]` / `back` / `forward` | 페이지 이력 제어. `--hard` 는 캐시를 우회해 다시 받는다 |
-| `pages` / `select <id>` / `new-tab [url]` / `close-tab <id>` | 탭 제어. ID 는 CDP targetId 앞 8자리로, 탭이 열리고 닫혀도 안 바뀐다(위치 인덱스가 아니다). 4자 이상이면 접두사로도 된다 |
+| `pages` / `select <id>` / `new-tab [url] [--same-window]` / `close-tab <id>` | 탭 제어(세 엔진 모두). ID 는 엔진 식별자(Chrome targetId · Firefox · Safari 의 BiDi 컨텍스트) 앞 8자리로, 탭이 열리고 닫혀도 안 바뀐다(위치 인덱스가 아니다). 4자 이상이면 접두사로도 된다. `new-tab` 은 **새 창**을 열고 그 ID 를 찍는다 — 같은 창의 탭은 뒤쪽이 `hidden` 이 되고 서로 포커스를 빼앗아, 탭들에 동시에 입력하면 멈춘다(실측). `--same-window` 는 지금 창의 탭으로 연다 |
+| `--tab <id>` | 세션을 받는 명령 전부에 붙는다. **이번 명령만** 그 탭에서 하고 `select` 한 탭은 바꾸지 않는다 — 한 세션의 창들을 여러 작업자가 하나씩 맡아 동시에 돌릴 때 쓴다(`new-tab` 으로 창을 만들고 그 ID 를 작업자마다 넘긴다). Safari 의 `click`·`fill`·`type`·`press` 는 classic WebDriver 가 세션에 창 하나만 두므로, 세션 잠금 아래에서 그 창으로 바꾼 뒤 보낸다(동시에 보내도 순서대로 처리된다). 다른 앱에 가려진 Safari 창은 `hidden` 이 된다 — 타이머와 키 입력(`fill`)은 그대로 됐지만, **포인터 클릭(좌표·요소 클릭 모두)은 `✓` 를 찍고도 들어가지 않는다**(실측). 가려진 창을 누르려면 STP 를 앞에 두거나 `click --synthetic` 을 쓴다. 화면 관련 동작(`requestAnimationFrame` 등)은 재지 않았다 |
 | `focus` | 세션 창을 앞으로. 클립보드 등 포커스가 필요한 API 가 통과하게 한다. 크롬 안에서 탭을 올리고(대개 이걸로 충분하다), **그것으로 부족할 때만** OS 창까지 올린다(macOS). `eval` 은 일부러 창을 안 올리므로 이 명령이 따로 있다 |
 
 ### 검사

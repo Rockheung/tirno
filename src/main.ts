@@ -43,6 +43,7 @@ import { registerUpdateCommand } from './commands/update.js';
 import { holdSession } from './core/firefox.js';
 import { intArg } from './util/parsers.js';
 import { fail, setJsonOutput } from './output/formatter.js';
+import { addTabOption, setRequestedTab } from './core/tab-request.js';
 
 const program = new Command();
 
@@ -110,11 +111,14 @@ registerPluginCommands(program);
 registerJournalCommand(program);
 registerUpdateCommand(program);
 
+addTabOption(program);
+
 // 명령이 자기 --json 을 받았으면 실패도 JSON 으로 — 성공은 JSON 인데 실패만 산문이면
 // 파서가 두 벌 필요하다 (#185)
 program.hook('preAction', (_thisCommand, actionCommand) => {
   const opts = actionCommand.opts() as { json?: boolean; session?: string; confirm?: boolean; allowEval?: boolean };
   setJsonOutput(opts.json);
+  setRequestedTab((actionCommand.opts() as { tab?: string }).tab);
   // 명령 문맥 — 저널 한 줄과 TIRNO_JSON=1 의 성공 봉투 (#217). 세션은 -s 또는 active.
   const cmdName = fullCommandName(actionCommand);
   const session = opts.session ?? (SESSION_FREE_FOR_JOURNAL.has(cmdName.split(' ')[0]) ? null : store.getActive());

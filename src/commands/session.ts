@@ -141,7 +141,7 @@ export function registerSessionCommands(program: Command): void {
     .option('-p, --port <port>', 'Pin a fixed DevTools port. Omit to let the OS assign one — required for browser-MCP anchoring', intArg)
     .option('--headless', 'Run in headless mode')
     .option('--executable-path <path>', 'Path to Chrome executable')
-    .option('--browser <engine>', 'chrome, firefox or safari (Safari Technology Preview). A firefox or safari session supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, ls, restart and kill so far', 'chrome')
+    .option('--browser <engine>', 'chrome, firefox or safari (Safari Technology Preview). A firefox or safari session supports nav, eval, screenshot, snapshot, click, fill, type, press, wait-for, pages, new-tab, select, close-tab, ls, restart and kill so far', 'chrome')
     .option('-f, --force', 'If a session with this name exists, kill it first and re-create')
     .option('--ephemeral', 'Use a temporary user-data-dir; cleaned on kill')
     .option('--extensions', 'Let extensions run (off by default). Required by `headers set` — a persistent header is an extension. Load your own with `cdp Extensions.loadUnpacked --browser`')

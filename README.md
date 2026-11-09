@@ -50,7 +50,7 @@ Node 22+ 가 필요하다. npm 레지스트리에는 올라가 있지 않다.
 ---
 
 **Firefox** — `tirno new x --browser firefox` 는 geckodriver 없이 Marionette 와 WebDriver BiDi 를 직접 말한다.
-지금은 `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `ls` · `restart` · `kill` 이 되고, 다른 명령은 `capability_unsupported` 로 거절한다.
+지금은 `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `pages` · `new-tab` · `select` · `close-tab` · `ls` · `restart` · `kill` 이 되고, 다른 명령은 `capability_unsupported` 로 거절한다.
 `snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다. `--port` · `--extensions` · 정책도 아직 쓸 수 없다.
 
 **Safari** — `tirno new x <url> --browser safari` 는 Safari Technology Preview 의 safaridriver 를 띄우고 그 WebDriver BiDi 를 직접 말한다. 사용자가 쓰는 Safari 와 따로 떠서, Safari 가 열려 있어도 된다. 되는 명령은 Firefox 와 같다. safaridriver 는 세션을 하나만 열고, headless 모드와 `--` 뒤의 브라우저 플래그가 없다. 입력은 classic WebDriver 로 보낸다 — STP 의 BiDi 는 포인터 입력을 받지 않고, 키 입력은 OS 입력기를 타서 한글 입력 소스에서 `a` 가 `ㅁ` 이 된다. Web Inspector 프로토콜은 Apple 비공개 권한이 있는 프로그램만 붙을 수 있어 쓰지 않는다. STP 가 없으면 `--executable-path /usr/bin/safaridriver`(Safari 를 닫아야 한다) 또는 `$TIRNO_SAFARI`.

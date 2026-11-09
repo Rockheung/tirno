@@ -38,6 +38,7 @@ async function realProgram(): Promise<Command> {
     const mod = await import(`../src/commands/${file}.js`) as Record<string, (p: Command, root: () => Command) => void>;
     mod[fn](program, () => program);
   }
+  (await import('../src/core/tab-request.js')).addTabOption(program);
   return program;
 }
 
