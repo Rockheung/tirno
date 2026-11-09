@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import * as store from './session-store.js';
-import { openBidiPage, type FirefoxPage } from './firefox.js';
+import { openBidiPage, type ClassicCall, type FirefoxPage } from './firefox.js';
 import { underRoot } from './paths.js';
 import { TirnoError } from '../util/errors.js';
 import { axRole, isRoleWord } from '../cdp/target.js';
@@ -188,19 +188,21 @@ const ELEMENT = 'element-6066-11e4-a52e-4f735466cecf';
 
 async function clickAt(page: FirefoxPage, x: number, y: number, dbl: boolean): Promise<void> {
   if (!page.webdriver) return page.perform(pointerClick(x, y, dbl));
-  await page.classic('POST', '/actions', { actions: pointerClick(x, y, dbl) });
-  await page.classic('DELETE', '/actions');
+  await page.withClassic(async call => {
+    await call('POST', '/actions', { actions: pointerClick(x, y, dbl) });
+    await call('DELETE', '/actions');
+  });
 }
 
 /** Safari — 포커스된 요소의 classic 요소 참조. 요소 키 보내기는 OS 입력기를 타지 않는다(실측) */
-async function focusedElement(page: FirefoxPage): Promise<string> {
-  const ref = await page.classic<Record<string, string>>('POST', '/execute/sync', { script: 'return document.activeElement || document.body', args: [] });
+async function focusedElement(call: ClassicCall): Promise<string> {
+  const ref = await call<Record<string, string>>('POST', '/execute/sync', { script: 'return document.activeElement || document.body', args: [] });
   return ref[ELEMENT];
 }
 
 async function sendText(page: FirefoxPage, text: string): Promise<void> {
   if (!page.webdriver) return page.perform(keyActions(typingSteps(text)));
-  await page.classic('POST', `/element/${await focusedElement(page)}/value`, { text });
+  await page.withClassic(async call => call('POST', `/element/${await focusedElement(call)}/value`, { text }));
 }
 
 export async function firefoxClick(meta: store.SessionMetadata, target: string, name: string | undefined,
@@ -275,8 +277,10 @@ export async function firefoxPress(meta: store.SessionMetadata, key: string): Pr
     // 수식키 조합과 특수 키는 키 동작으로 — 요소 키 보내기로는 편집 명령(전체 선택)과 포커스
     // 이동(Tab)이 안 돈다(실측). 글자 하나만 입력기를 피해 요소 키 보내기로 간다.
     if (mods.length || value !== combo.key) {
-      await page.classic('POST', '/actions', { actions: keyActions(steps) });
-      await page.classic('DELETE', '/actions');
+      await page.withClassic(async call => {
+        await call('POST', '/actions', { actions: keyActions(steps) });
+        await call('DELETE', '/actions');
+      });
     } else {
       await sendText(page, value);
     }
@@ -302,9 +306,11 @@ export async function firefoxFill(meta: store.SessionMetadata, target: string, n
     if (!focused) throw new TirnoError(refuseClick(t.label, { x: 0, y: 0, relation: 'detached', hit: null })!, 'stale_ref', { ref: t.label });
     if (page.webdriver) {
       // 요소 키 보내기는 선택을 덮어쓰지 않고 끝에 붙인다 — 비우고 보낸다
-      const el = await focusedElement(page);
-      await page.classic('POST', `/element/${el}/clear`, {});
-      if (value !== '') await page.classic('POST', `/element/${el}/value`, { text: value });
+      await page.withClassic(async call => {
+        const el = await focusedElement(call);
+        await call('POST', `/element/${el}/clear`, {});
+        if (value !== '') await call('POST', `/element/${el}/value`, { text: value });
+      });
     } else {
       await page.perform(keyActions(value === '' ? [{ type: 'keyDown', value: KEYS['Backspace'] }, { type: 'keyUp', value: KEYS['Backspace'] }] : typingSteps(value)));
     }

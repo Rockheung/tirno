@@ -1,5 +1,6 @@
 import type { Page } from './page.js';
 import type { Browser, Target } from './browser.js';
+import { tabHandle } from '../core/tab-request.js';
 
 export async function getActivePage(browser: Browser): Promise<Page> {
   const pages = await browser.pages();
@@ -100,9 +101,7 @@ export function blankAnchorHint(pageUrl: string, bootUrl: string | undefined): s
  * not a corner: it closed the wrong tab during a smoke run. targetId does not
  * move for the life of the tab.
  */
-export function tabHandle(targetId: string): string {
-  return targetId.slice(0, 8).toLowerCase();
-}
+export { tabHandle } from '../core/tab-request.js';
 
 export interface PageEntry {
   /** stable handle — see tabHandle */

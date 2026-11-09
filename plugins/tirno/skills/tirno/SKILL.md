@@ -44,11 +44,11 @@ tirno drift [name] [-- <flags>]              # 선언한 플래그 vs 실행 중
 세션 = 독립된 브라우저 프로세스. 각각 고유한 포트, user-data-dir, 브라우저 플래그를 가짐.
 
 엔진은 `new --browser` 로 한 번만 고른다. 값은 세션 메타데이터의 `engine` 에 남고, 이후 명령과
-`restart` 는 세션의 엔진을 따른다. Firefox 세션은 `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `ls` · `restart` · `kill` 이
+`restart` 는 세션의 엔진을 따른다. Firefox 세션은 `nav` · `eval` · `screenshot` · `snapshot` · `click` · `fill` · `type` · `press` · `wait-for` · `pages` · `new-tab` · `select` · `close-tab` · `ls` · `restart` · `kill` 이
 되고, 다른 명령과 `--port` · `--extensions` · 정책 · `--keep-cookies` 는
 `capability_unsupported` 로 거절한다. 실행 파일은 `--executable-path` 나 `$TIRNO_FIREFOX` 로 지정한다.
 `snapshot` 의 역할과 이름은 페이지 안에서 HTML 암묵 역할과 ARIA 속성으로 계산한다 — 브라우저의 접근성 트리가 아니라 Chrome 과 다르게 나올 수 있다. `snapshot` 의 옵션, `fill --batch`, `wait-for --network-idle` 은 아직 Chrome 전용이다.
-Safari 세션도 같은 명령이 된다. safaridriver 는 세션을 하나만 열고, `--headless` 와 `--` 뒤 플래그는 거절한다. 드라이버는 `--executable-path` 나 `$TIRNO_SAFARI` 로 지정한다.
+Safari 세션도 같은 명령이 된다. safaridriver 는 세션을 하나만 열고, `--headless` 와 `--` 뒤 플래그는 거절한다. STP 창이 다른 앱에 가려지면 포인터 클릭은 `✓` 를 찍고도 들어가지 않는다 — STP 를 앞에 두거나 `click --synthetic`. 드라이버는 `--executable-path` 나 `$TIRNO_SAFARI` 로 지정한다.
 세 엔진 모두 신뢰되지 않은 https 인증서를 받는다(Chrome `--ignore-certificate-errors`, Firefox · Safari `acceptInsecureCerts`) — 경고 화면이 없는 대신, 이동 주소가 틀리면 경고 없이 다른 서버의 응답을 받는다(tirno-runbook 의 "인증서" 제약).
 
 `--` 뒤에 Chrome 플래그를 전달:
@@ -103,8 +103,9 @@ tirno reload [--hard]              # 새로고침
 tirno back / forward               # 히스토리
 tirno pages [--json]               # 탭 목록 (ID 는 안정 핸들)
 tirno select <id>                  # 탭 선택
-tirno new-tab [url]                # 새 탭
+tirno new-tab [url]                # 새 창(그 ID 를 찍는다). --same-window 면 지금 창의 탭
 tirno close-tab <id>               # 탭 닫기
+tirno <명령> … --tab <id>          # 이번 명령만 그 탭에서 (select 한 탭은 그대로) — 창마다 작업자를 두고 동시에 돌릴 때
 ```
 
 탭 ID 는 **위치 인덱스가 아니다.** CDP targetId 앞 8자리라 탭이 열리고 닫혀도 그 탭을

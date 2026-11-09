@@ -109,8 +109,9 @@ export class Browser {
     return pages;
   }
 
-  async newPage(url = 'about:blank'): Promise<Page> {
-    const { targetId } = await this.connection.send('Target.createTarget', { url });
+  /** `newWindow` — 창마다 포커스와 가시성이 따로라, 탭들에 동시에 입력해도 서로 뒤로 밀지 않는다 */
+  async newPage(url = 'about:blank', opts: { newWindow?: boolean } = {}): Promise<Page> {
+    const { targetId } = await this.connection.send('Target.createTarget', { url, ...(opts.newWindow ? { newWindow: true } : {}) });
     const page = await Page.attach(this, targetId, url);
     this.pageCache.set(targetId, page);
     return page;

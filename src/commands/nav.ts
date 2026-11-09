@@ -7,6 +7,9 @@ import { activateWindow } from '../core/os-focus.js';
 import { getActivePage, listPages, getPageByHandle, getTabByHandle } from '../cdp/page-resolver.js';
 import { formatTable, success, warn, error, fail } from '../output/formatter.js';
 import { judgeNavigation } from '../cdp/nav-verdict.js';
+import { firefoxSession } from '../core/firefox-act.js';
+import { bidiTabs, bidiNewTab, bidiTabByHandle, bidiCloseTab, bidiActivate } from '../core/firefox.js';
+import { tabHandle } from '../core/tab-request.js';
 
 export function registerNavCommands(program: Command): void {
   program
@@ -111,9 +114,10 @@ export function registerNavCommands(program: Command): void {
     .option('--json', 'Output as JSON')
     .action(async (opts) => {
       try {
-        const { browser } = await connect(opts.session);
-        const pages = await listPages(browser);
-        browser.disconnect();
+        const ff = firefoxSession(opts.session);
+        const pages = ff
+          ? (await bidiTabs(ff)).map(({ id, url, title }) => ({ id, url, title }))
+          : await (async () => { const { browser } = await connect(opts.session); try { return await listPages(browser); } finally { browser.disconnect(); } })();
 
         if (opts.json) {
           console.log(JSON.stringify(pages, null, 2));
@@ -178,6 +182,14 @@ export function registerNavCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .action(async (pageId: string, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          const tab = await bidiTabByHandle(ff, pageId);
+          await bidiActivate(ff, tab.context);
+          store.update(ff.name, { selectedTarget: tab.context });
+          success(`Selected page ${pageId}: ${tab.url}`);
+          return;
+        }
         const { browser, meta } = await connect(opts.session);
         const page = await getPageByHandle(browser, pageId);
         await page.bringToFront();
@@ -191,20 +203,28 @@ export function registerNavCommands(program: Command): void {
 
   program
     .command('new-tab')
-    .description('Open a new tab')
+    .description('Open a new tab — in a new window by default (--same-window for a tab in the current one). Prints its id for --tab')
     .argument('[url]', 'URL to open', 'about:blank')
     .option('-s, --session <name>', 'Session name')
+    .option('--same-window', 'Open a tab in the current window instead of a new window. Tabs share one window: the ones behind are hidden and steal focus from each other, so commands run on them concurrently can stall')
     .action(async (url: string, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          const tab = await bidiNewTab(ff, url === 'about:blank' ? undefined : url, opts.sameWindow ? 'tab' : 'window');
+          store.update(ff.name, { selectedTarget: tab.context });
+          success(`New tab ${tab.id}: ${url}`);
+          return;
+        }
         const { browser, meta } = await connect(opts.session);
-        const page = await browser.newPage();
+        const page = await browser.newPage('about:blank', { newWindow: !opts.sameWindow });
         // 방금 연 탭이 곧 다음 명령의 대상이다 — select 이전의 "마지막에 연 탭" 규칙과 같다
         store.update(meta.name, { selectedTarget: page.targetId });
         if (url !== 'about:blank') {
           await page.goto(url, { waitUntil: 'domcontentloaded' });
         }
         browser.disconnect();
-        success(`New tab: ${url}`);
+        success(`New tab ${tabHandle(page.targetId)}: ${url}`);
       } catch (e) {
         fail(e);
       }
@@ -217,6 +237,14 @@ export function registerNavCommands(program: Command): void {
     .option('-s, --session <name>', 'Session name')
     .action(async (pageId: string, opts) => {
       try {
+        const ff = firefoxSession(opts.session);
+        if (ff) {
+          const tab = await bidiTabByHandle(ff, pageId);
+          await bidiCloseTab(ff, tab.context);
+          if (ff.selectedTarget === tab.context) store.update(ff.name, { selectedTarget: undefined });
+          success(`Closed tab ${pageId}: ${tab.url}`);
+          return;
+        }
         const { browser, meta } = await connect(opts.session);
         const tab = await getTabByHandle(browser, pageId);
         const url = tab.url();
